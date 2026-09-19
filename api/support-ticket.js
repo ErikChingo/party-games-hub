@@ -1,23 +1,3 @@
-
-Legend, Connected
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Support ticket · JS
 // Serverless proxy for the Хатсит (Hatsit) support widget.
 //
 // Why this file exists: index.html is a static, single-file client app —
@@ -39,13 +19,13 @@ Support ticket · JS
 // path in the GitHub repo (same repo as index.html) — Vercel automatically
 // turns any file under /api into a serverless function, no extra config
 // needed for this project.
- 
-export default async function handler(req, res) {
+
+module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "method not allowed" });
     return;
   }
- 
+
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   if (!webhookUrl) {
     // Env var not set yet in the Vercel dashboard — fail loudly so this
@@ -54,7 +34,7 @@ export default async function handler(req, res) {
     res.status(500).json({ error: "support channel is not configured" });
     return;
   }
- 
+
   let body = req.body;
   if (typeof body === "string") {
     try {
@@ -64,16 +44,16 @@ export default async function handler(req, res) {
     }
   }
   body = body || {};
- 
+
   const problem = String(body.problem || "").trim().slice(0, 1000);
   const contact = String(body.contact || "").trim().slice(0, 200);
   const userAgent = String(body.userAgent || "").trim().slice(0, 500);
- 
+
   if (!problem) {
     res.status(400).json({ error: "problem is required" });
     return;
   }
- 
+
   // Best-effort throttle against casual spam/double-clicks: at most 10
   // tickets/minute per warm function instance. This resets whenever
   // Vercel spins up a fresh instance (cold start), so it's a deterrent,
@@ -88,7 +68,7 @@ export default async function handler(req, res) {
     return;
   }
   global.__hatsitTicketLog.push(now);
- 
+
   const payload = {
     embeds: [
       {
@@ -103,7 +83,7 @@ export default async function handler(req, res) {
       },
     ],
   };
- 
+
   try {
     const discordRes = await fetch(webhookUrl, {
       method: "POST",
@@ -118,8 +98,4 @@ export default async function handler(req, res) {
   } catch (e) {
     res.status(502).json({ error: "failed to reach discord" });
   }
-}
- 
-
-This file type cannot be opened.
-
+};
