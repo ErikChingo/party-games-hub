@@ -1,0 +1,42 @@
+// Tiny diagnostic endpoint: "are the secrets this app depends on actually
+// visible to the serverless functions right now?"
+//
+// This exists because of two real incidents in this project where a fix
+// was delivered and even confirmed correct locally, but the *deployed*
+// function still failed — once because the corrected file was never
+// actually re-uploaded to GitHub, and once because something else had
+// silently replaced api/ai-chat.js with a different implementation. Both
+// times, the only way to notice was to poke the live endpoint directly
+// from a browser console. This turns that into a one-click check:
+// opening /api/health in a browser (no request body, no POST, nothing to
+// configure) immediately shows whether DISCORD_WEBHOOK_URL and
+// GEMINI_API_KEY are set in the *current* deployment's environment.
+//
+// It intentionally never returns the actual secret values — only whether
+// each one is present and (for a rough sanity check) how long it is —
+// so this is safe to leave public.
+module.exports = async function handler(req, res) {
+  if (req.method !== "GET") {
+    res.status(405).json({ error: "method not allowed" });
+    return;
+  }
+
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL || "";
+  const geminiKey = process.env.GEMINI_API_KEY || "";
+  const geminiModel = process.env.GEMINI_MODEL || "";
+
+  const checks = {
+    discordWebhookConfigured: webhookUrl.length > 0,
+    discordWebhookLooksValid: /^https:\/\/discord(app)?\.com\/api\/webhooks\//.test(webhookUrl),
+    geminiApiKeyConfigured: geminiKey.length > 0,
+    geminiModelOverride: geminiModel || null,
+  };
+
+  const ok = checks.discordWebhookConfigured && checks.discordWebhookLooksValid && checks.geminiApiKeyConfigured;
+
+  res.status(ok ? 200 : 503).json({
+    ok,
+    checks,
+    timestamp: new Date().toISOString(),
+  });
+};
