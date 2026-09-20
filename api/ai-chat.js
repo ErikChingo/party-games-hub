@@ -28,7 +28,16 @@ const SYSTEM_PROMPT = `Ты — бот-помощник платформы «Х�
 - Установка на телефон: кнопка «Установить приложение» на главном экране (если браузер её предлагает), либо вручную через меню браузера — «Добавить на главный экран» в Chrome (Android), «Поделиться» → «На экран «Домой»» в Safari (iPhone).
 - Полные правила каждой игры показаны прямо в приложении — на экране настройки игры (в Бункере и Суде — в лобби комнаты).
 
-Правила общения: отвечай кратко (обычно 2–4 предложения), дружелюбно, по-русски, только по темам этого приложения. Если вопрос не по теме, или ты не уверен в ответе, или речь о технической проблеме/баге — честно скажи, что не знаешь или не можешь помочь, и предложи нажать «Позвать человека / Сообщить о баге» в этом же окне. Никогда не выдумывай функции или правила, которых нет в списке выше.`;
+Правила общения: отвечай кратко (обычно 2–4 предложения), дружелюбно, только по темам этого приложения. Если вопрос не по теме, или ты не уверен в ответе, или речь о технической проблеме/баге — честно скажи, что не знаешь или не можешь помочь, и предложи нажать «Позвать человека / Сообщить о баге» в этом же окне. Никогда не выдумывай функции или правила, которых нет в списке выше.`;
+
+// Appended to the system prompt so the bot answers in whichever UI
+// language the visitor currently has selected, instead of always
+// replying in Russian regardless of what they see on screen.
+const LANG_INSTRUCTIONS = {
+  ru: "Отвечай по-русски.",
+  en: "Reply in English, even though the facts above are written in Russian.",
+  hy: "Պատասխանիր հայերեն, նույնիսկ եթե վերևի փաստերը գրված են ռուսերեն։",
+};
 
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
@@ -67,6 +76,9 @@ module.exports = async function handler(req, res) {
     return;
   }
 
+  const lang = Object.prototype.hasOwnProperty.call(LANG_INSTRUCTIONS, body.lang) ? body.lang : "ru";
+  const systemPrompt = SYSTEM_PROMPT + "\n\n" + LANG_INSTRUCTIONS[lang];
+
   // Best-effort throttle, same pattern and same caveats as
   // support-ticket.js: resets on cold start, deterrent rather than a
   // hard guarantee.
@@ -84,7 +96,7 @@ module.exports = async function handler(req, res) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents,
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        systemInstruction: { parts: [{ text: systemPrompt }] },
         generationConfig: { maxOutputTokens: 400, temperature: 0.4 },
       }),
     });
