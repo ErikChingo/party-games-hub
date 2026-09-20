@@ -1,5 +1,11 @@
 {
   "name": "hatsit",
   "private": true,
-  "type": "commonjs"
+  "type": "commonjs",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
 }
