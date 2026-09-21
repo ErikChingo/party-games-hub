@@ -8,7 +8,14 @@
 //
 // GET /api/discord-verify?code=482913&userId=123456789012345678
 // Called only by the Discord bot (see its DISCORD_BOT_API_SECRET), never
-// the browser — so the response is a bare { success, channelId }.
+// the browser.
+//
+// NOTE on the response shape: this returns a table NAME, not a channel ID.
+// The bot creates a fresh voice channel per code on demand (named after
+// this tableName) instead of granting access to a pre-made fixed channel —
+// that's what lets it coexist cleanly with VoiceMaster's own "create on
+// demand, delete when empty" channels, just in a separate category. This
+// endpoint doesn't need to know about Discord channel IDs at all.
 //
 // ⚠️ Mock data below — two things to fix before this is real:
 //
@@ -27,9 +34,9 @@
 //    header below (must match the bot's DISCORD_BOT_API_SECRET) — otherwise
 //    it's brute-forceable by anyone who finds the URL.
 const MOCK_TABLES_DB = {
-  "482913": { channelId: "1111111111111111111", tableName: "Бункер — стол 1" },
-  "119284": { channelId: "2222222222222222222", tableName: "Мафия — стол 2" },
-  "700501": { channelId: "3333333333333333333", tableName: "Алиас — стол 3" },
+  "482913": { tableName: "Бункер — стол 1" },
+  "119284": { tableName: "Мафия — стол 2" },
+  "700501": { tableName: "Алиас — стол 3" },
 };
 
 module.exports = async function handler(req, res) {
@@ -63,5 +70,5 @@ module.exports = async function handler(req, res) {
   // single-use. Also worth stamping an expiry (e.g. 10 minutes) when the
   // site first issues the code.
 
-  res.status(200).json({ success: true, channelId: table.channelId });
+  res.status(200).json({ success: true, tableName: table.tableName });
 };
