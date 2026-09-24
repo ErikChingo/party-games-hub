@@ -1415,6 +1415,9 @@ const I18N = {
   // === Game names ===
   "game.spy": { ru: "Шпион", en: "Spy", hy: "Լրտես" },
   "game.alias": { ru: "Алиас", en: "Alias", hy: "Ալիաս" },
+  "game.croc": { ru: "Крокодил", en: "Charades", hy: "Կրոկոդիլ" },
+  "game.wordless": { ru: "Без слов", en: "Wordless", hy: "Առանց խոսքերի" },
+  "game.countdown": { ru: "Обратный отсчёт", en: "Countdown", hy: "Հետհաշվարկ" },
   "game.mafia": { ru: "Мафия", en: "Mafia", hy: "Մաֆիա" },
   "game.bunker": { ru: "Бункер", en: "Bunker", hy: "Բունկեր" },
   "game.court": { ru: "Суд", en: "Court", hy: "Դատարան" },
@@ -1467,7 +1470,64 @@ const I18N = {
   "alias.roundEnded": { ru: "Раунд завершён", en: "Round over", hy: "Ռաունդն ավարտվեց" },
   "alias.totalScore": { ru: "Общий счёт", en: "Total score", hy: "Ընդհանուր հաշիվ" },
   "alias.nextTeam": { ru: "Передать ход следующей команде", en: "Pass the turn to the next team", hy: "Հերթը փոխանցել հաջորդ թիմին" },
+
+  // === Charades ("Крокодил") — same word banks/mechanics as Alias, but the
+  // performer acts the word out instead of describing it in words. ===
+  "croc.title": { ru: "КРОКОДИЛ", en: "CHARADES", hy: "ԿՐՈԿՈԴԻԼ" },
+  "croc.rulesTitle": { ru: "Правила Крокодила", en: "Charades rules", hy: "Կրոկոդիլի կանոնները" },
+  "croc.categoriesLabel": { ru: "Категории слов", en: "Word categories", hy: "Բառերի կատեգորիաներ" },
+  "croc.wordsLabel": { ru: "слов", en: "words", hy: "բառ" },
+  "croc.noneSelected": { ru: "Ничего не выбрано — в игру попадут слова из всех категорий.", en: "Nothing selected — words from all categories will be used.", hy: "Ոչինչ ընտրված չէ — խաղի մեջ կընդգրկվեն բոլոր կատեգորիաների բառերը։" },
+  "croc.teamsCount": { ru: "Количество команд", en: "Number of teams", hy: "Թիմերի քանակ" },
+  "croc.roundTime": { ru: "Время раунда", en: "Round time", hy: "Ռաունդի տևողություն" },
+  "croc.seconds": { ru: "сек", en: "sec", hy: "վրկ" },
+  "croc.teamsLabel": { ru: "Команды", en: "Teams", hy: "Թիմեր" },
+  "croc.teamPlaceholder": { ru: "Команда", en: "Team", hy: "Թիմ" },
+  "croc.explainHint": { ru: "Один игрок из команды показывает слово жестами и мимикой — без слов и звуков, остальные угадывают. Угадали — плюс балл, пропуск — минус балл.", en: "One player from the team acts the word out using gestures and expressions only — no words or sounds — the rest guess. A correct guess is plus a point, a skip is minus a point.", hy: "Թիմից մեկ խաղացող ցույց է տալիս բառը ժեստերով ու դիմախաղով՝ առանց խոսքի ու ձայների, մնացածները գուշակում են։ Ճիշտ գուշակությունը՝ գումարած միավոր, բացթողումը՝ մինուս միավոր։" },
+  "croc.teamTurn": { ru: "Ход команды", en: "Team's turn", hy: "Թիմի հերթը" },
+  "croc.passHint": { ru: "Передайте телефон тому, кто будет показывать. Раунд идёт {n} секунд.", en: "Pass the phone to the player who will act. The round lasts {n} seconds.", hy: "Հեռախոսը փոխանցեք ցուցադրողին։ Ռաունդը տևում է {n} վայրկյան։" },
+  "croc.startRound": { ru: "Начать раунд", en: "Start round", hy: "Սկսել ռաունդը" },
+  "croc.skip": { ru: "Пропуск", en: "Skip", hy: "Բաց թողնել" },
+  "croc.correct": { ru: "Угадали", en: "Correct", hy: "Ճիշտ է" },
+  "croc.roundEnded": { ru: "Раунд завершён", en: "Round over", hy: "Ռաունդն ավարտվեց" },
+  "croc.totalScore": { ru: "Общий счёт", en: "Total score", hy: "Ընդհանուր հաշիվ" },
+  "croc.nextTeam": { ru: "Передать ход следующей команде", en: "Pass the turn to the next team", hy: "Հերթը փոխանցել հաջորդ թիմին" },
   "common.team": { ru: "Команда", en: "Team", hy: "Թիմ" },
+
+  // === "Без слов" ("The Mind"-style co-op) ===
+  "wordless.title": { ru: "БЕЗ СЛОВ", en: "WORDLESS", hy: "ԱՌԱՆՑ ԽՈՍՔԵՐԻ" },
+  "wordless.rulesTitle": { ru: "Правила «Без слов»", en: "Wordless rules", hy: "«Առանց խոսքերի» կանոնները" },
+  "wordless.playersCount": { ru: "Количество игроков", en: "Number of players", hy: "Խաղացողների քանակ" },
+  "wordless.lives": { ru: "Жизни", en: "Lives", hy: "Կյանքեր" },
+  "wordless.yourNumbers": { ru: "Твои числа", en: "Your numbers", hy: "Քո թվերը" },
+  "wordless.continueStart": { ru: "Скрыть и начать игру", en: "Hide and start", hy: "Թաքցնել և սկսել" },
+  "wordless.level": { ru: "Уровень", en: "Level", hy: "Մակարդակ" },
+  "wordless.cardsLeft": { ru: "карт осталось", en: "cards left", hy: "քարտ մնաց" },
+  "wordless.played": { ru: "Сыграно по порядку", en: "Played in order", hy: "Խաղացված է հերթականությամբ" },
+  "wordless.mistake": { ru: "Не по порядку! {name} сыграл(а) {value}", en: "Out of order! {name} played {value}", hy: "Ոչ հերթականությամբ! {name}-ը խաղաց {value}" },
+  "wordless.playHint": { ru: "Никаких слов и звуков — только интуиция. Кто чувствует, что у него самое маленькое число, нажимает своё имя.", en: "No words, no sounds — intuition only. Whoever feels they hold the smallest number taps their own name.", hy: "Ոչ մի խոսք ու ձայն — միայն ինտուիցիա։ Ով զգում է, որ իր մոտ ամենափոքր թիվն է, սեղմում է իր անունը։" },
+  "wordless.gameOver": { ru: "Жизни закончились", en: "Out of lives", hy: "Կյանքերն ավարտվեցին" },
+  "wordless.reachedLevel": { ru: "Вы дошли до уровня {n}", en: "You reached level {n}", hy: "Դուք հասել եք {n}-րդ մակարդակին" },
+  "wordless.explainHint": { ru: "Каждый видит только свои числа. Не разговаривайте и не показывайте экран — играйте по очереди, полагаясь только на интуицию.", en: "Everyone only sees their own numbers. Don't talk or show your screen — play in turn, relying only on intuition.", hy: "Յուրաքանչյուրը տեսնում է միայն իր թվերը։ Մի խոսեք և մի ցույց տվեք էկրանը — խաղացեք հերթով՝ ապավինելով միայն ինտուիցիային։" },
+
+  // === "Обратный отсчёт" (Countdown) ===
+  "countdown.title": { ru: "ОБРАТНЫЙ ОТСЧЁТ", en: "COUNTDOWN", hy: "ՀԵՏՀԱՇՎԱՐԿ" },
+  "countdown.rulesTitle": { ru: "Правила «Обратного отсчёта»", en: "Countdown rules", hy: "«Հետհաշվարկի» կանոնները" },
+  "countdown.lives": { ru: "Жизни", en: "Lives", hy: "Կյանքեր" },
+  "countdown.seconds": { ru: "Время на задание", en: "Time per task", hy: "Ժամանակ առաջադրանքի համար" },
+  "countdown.secondsUnit": { ru: "сек", en: "sec", hy: "վրկ" },
+  "countdown.explainHint": { ru: "Телефон по очереди выдаёт всей компании живые задания на время. Ограничения, которые появляются по ходу игры, остаются в силе до конца — и накапливаются.", en: "The phone hands the whole group live physical tasks against the clock. Restrictions that appear along the way stay in effect for the rest of the game — and they stack.", hy: "Հեռախոսը հերթով խաղին տալիս է կենդանի առաջադրանքներ ժամանակի դեմ։ Խաղի ընթացքում հայտնված սահմանափակումները մնում են ուժի մեջ մինչև վերջ — և կուտակվում են։" },
+  "countdown.round": { ru: "Раунд", en: "Round", hy: "Ռաունդ" },
+  "countdown.newRule": { ru: "Новое правило до конца игры!", en: "New rule for the rest of the game!", hy: "Նոր կանոն մինչև խաղի ավարտը!" },
+  "countdown.activeRules": { ru: "Действующие правила", en: "Active rules", hy: "Գործող կանոններ" },
+  "countdown.ready": { ru: "Готовы?", en: "Ready?", hy: "Պատրա՞ստ եք" },
+  "countdown.go": { ru: "Начали!", en: "Go!", hy: "Սկսե՛նք!" },
+  "countdown.success": { ru: "Успех", en: "Success", hy: "Հաջողվեց" },
+  "countdown.fail": { ru: "Провал", en: "Fail", hy: "Ձախողվեց" },
+  "countdown.gameOver": { ru: "Жизни закончились", en: "Out of lives", hy: "Կյանքերն ավարտվեցին" },
+  "countdown.survivedRounds": { ru: "Вы продержались {n} раундов", en: "You survived {n} rounds", hy: "Դուք դիմացաք {n} ռաունդ" },
+  "countdown.finalRules": { ru: "Правила к концу игры", en: "Rules by the end", hy: "Կանոնները խաղի վերջում" },
+
   "mafia.rulesTitle": { ru: "Правила Мафии", en: "Mafia rules", hy: "Մաֆիայի կանոնները" },
   "mafia.title": { ru: "МАФИЯ", en: "MAFIA", hy: "ՄԱՖԻԱ" },
   "mafia.playersCount": { ru: "Количество игроков", en: "Number of players", hy: "Խաղացողների քանակ" },
@@ -1714,6 +1774,9 @@ const I18N = {
   "hub.subtitle": { ru: "Выберите игру и передавайте телефон по кругу", en: "Pick a game and pass the phone around", hy: "Ընտրեք խաղը և հեռախոսը փոխանցեք շրջանով" },
   "hub.spySubtitle": { ru: "3–8 игроков · вычислите шпиона", en: "3–8 players · spot the spy", hy: "3–8 խաղացող · գտեք լրտեսին" },
   "hub.aliasSubtitle": { ru: "2–4 команды · объясните слова", en: "2–4 teams · explain the words", hy: "2–4 թիմ · բացատրեք բառերը" },
+  "hub.crocSubtitle": { ru: "2–4 команды · покажите слово жестами", en: "2–4 teams · act the word out", hy: "2–4 թիմ · ցույց տվեք բառը ժեստերով" },
+  "hub.wordlessSubtitle": { ru: "2–8 игроков · сыграйте по интуиции, молча", en: "2–8 players · play by intuition, in silence", hy: "2–8 խաղացող · խաղացեք ինտուիցիայով, լուռ" },
+  "hub.countdownSubtitle": { ru: "Компания · живые задания на время", en: "The whole group · live tasks against the clock", hy: "Ամբողջ ընկերությունը · կենդանի առաջադրանքներ ժամանակի դեմ" },
   "hub.mafiaSubtitle": { ru: "5–20 игроков · панель ведущего", en: "5–20 players · host panel", hy: "5–20 խաղացող · վարողի վահանակ" },
   "hub.bunkerSubtitle": { ru: "Сетевая игра · катастрофа и досье", en: "Online game · catastrophe & dossiers", hy: "Ցանցային խաղ · աղետ և դոսյե" },
   "hub.courtSubtitle": { ru: "Сетевой процесс · роли и вердикт", en: "Online trial · roles & verdict", hy: "Ցանցային դատավարություն · դերեր և վճիռ" },
@@ -2318,6 +2381,48 @@ const ALIAS_CATEGORY_META = {
   holidays: { title: { ru: "Праздники и мода", en: "Holidays & Fashion", hy: "Տոներ և նորաձևություն" }, Icon: IconBalloon },
 };
 
+// Content for "Обратный отсчёт" (Countdown) — see its game section further
+// down for the rules of how these two banks get used together. Both are
+// flat {ru,en,hy}-shaped lists (pickLang() per item), same content shape
+// as e.g. SPY_LOCATION_CATEGORIES entries.
+const COUNTDOWN_CHALLENGES = [
+  { ru: "Пусть все одновременно коснутся чего-то жёлтого.", en: "Everyone touch something yellow at the same time.", hy: "Թող բոլորը միաժամանակ դիպչեն դեղին գույնի որևէ բանի։" },
+  { ru: "Встаньте в шеренгу по росту — молча, без единого слова.", en: "Line up by height — in complete silence, no talking.", hy: "Կանգնեք շարքով՝ ըստ հասակի — լուռ, առանց մեկ բառի։" },
+  { ru: "Пусть каждый одновременно покажет ровно три пальца — без сговора.", en: "Everyone show exactly three fingers at the same time — no planning ahead.", hy: "Թող յուրաքանչյուրը միաժամանակ ցույց տա ուղիղ երեք մատ — առանց նախապես համաձայնվելու։" },
+  { ru: "Все должны хлопнуть в ладоши один раз одновременно — точно вместе.", en: "Everyone clap once at exactly the same moment.", hy: "Բոլորը պետք է մեկ անգամ ծափ տան հենց նույն պահին։" },
+  { ru: "Пусть все коснутся пола одной рукой.", en: "Everyone touch the floor with one hand.", hy: "Թող բոլորը մեկ ձեռքով դիպչեն հատակին։" },
+  { ru: "Встаньте в круг и возьмитесь за руки за 5 секунд.", en: "Form a circle and hold hands within 5 seconds.", hy: "Կազմեք շրջան և բռնեք ձեռքերը 5 վայրկյանում։" },
+  { ru: "Пусть все закроют один глаз одновременно.", en: "Everyone close one eye at the same time.", hy: "Թող բոլորը միաժամանակ փակեն մեկ աչքը։" },
+  { ru: "Все должны найти что-то металлическое в кармане или сумке и поднять его вверх.", en: "Everyone find something metal in a pocket or bag and hold it up.", hy: "Բոլորը պետք է գտնեն մետաղյա իր գրպանում կամ պայուսակում և բարձրացնեն այն։" },
+  { ru: "Постройтесь по алфавиту имён — молча.", en: "Line up alphabetically by first name — in silence.", hy: "Շարվեք ըստ անունների այբբենական կարգի — լուռ։" },
+  { ru: "Пусть все, без сговора вслух, одновременно покажут пальцами одно и то же число от 1 до 5.", en: "Without agreeing out loud, everyone hold up fingers for the same number from 1 to 5 at once.", hy: "Առանց նախապես բարձրաձայն համաձայնվելու՝ բոլորը միաժամանակ մատներով ցույց տվեք նույն թիվը 1-ից 5-ը։" },
+  { ru: "Все должны по кругу коснуться друг друга локтями.", en: "Everyone touch elbows with the next person around the circle.", hy: "Բոլորը շրջանով դիպչեն միմյանց արմունկներով։" },
+  { ru: "Пусть каждый молча покажет пальцем на того, кто, по его мнению, встанет последним.", en: "Everyone silently point at the person they think will finish last.", hy: "Թող յուրաքանչյուրը լուռ մատնացույց անի նրան, ում կարծում է, որ վերջինը կկանգնի։" },
+  { ru: "Встаньте на одну ногу все одновременно.", en: "Everyone stand on one leg at the same time.", hy: "Բոլորը միաժամանակ կանգնեք մեկ ոտքի վրա։" },
+  { ru: "Все должны одновременно поднять телефон экраном вверх.", en: "Everyone hold up their phone, screen facing up, at the same time.", hy: "Բոլորը միաժամանակ բարձրացրեք հեռախոսը՝ էկրանը վերև։" },
+  { ru: "Пусть все одним пальцем коснутся своего носа.", en: "Everyone touch their nose with one finger.", hy: "Թող բոլորը մեկ մատով դիպչեն իրենց քթին։" },
+  { ru: "Все должны поменяться местами так, чтобы никто не остался на своём стуле.", en: "Everyone swap seats so nobody stays in their own chair.", hy: "Բոլորը պետք է փոխեն տեղերը, որպեսզի ոչ ոք չմնա իր աթոռին։" },
+  { ru: "Пусть все одновременно скрестят руки на груди.", en: "Everyone cross their arms at the same time.", hy: "Թող բոլորը միաժամանակ խաչեն ձեռքերը կրծքին։" },
+  { ru: "Встаньте в шеренгу от самого раннего дня рождения к самому позднему — молча.", en: "Line up from earliest to latest birthday — in silence.", hy: "Շարվեք ամենավաղ ծննդյան օրից մինչև ամենաուշը — լուռ։" },
+  { ru: "Пусть все одновременно подмигнут.", en: "Everyone wink at the same time.", hy: "Թող բոլորը միաժամանակ աչքով անեն։" },
+  { ru: "Все должны молча договориться и поднять одинаковое количество пальцев.", en: "Without speaking, everyone must agree and hold up the same number of fingers.", hy: "Առանց խոսելու՝ բոլորը պետք է համաձայնվեն և ցույց տան մատների նույն քանակը։" },
+];
+// Persistent handicaps: once triggered, each stays in effect (shown in the
+// "active rules" list) for the rest of the game, stacking with earlier
+// ones — these accumulating restrictions are the game's real opponent.
+const COUNTDOWN_HANDICAPS = [
+  { ru: "С этого момента нельзя вставать со своего места.", en: "From now on, no one may stand up.", hy: "Այսուհետ ոչ ոք չի կարող կանգնել իր տեղից։" },
+  { ru: "С этого момента у всех одна рука спрятана за спиной.", en: "From now on, everyone keeps one hand behind their back.", hy: "Այսուհետ բոլորի մեկ ձեռքը թաքնված է մեջքի հետևում։" },
+  { ru: "С этого момента говорить можно только шёпотом.", en: "From now on, everyone may only speak in a whisper.", hy: "Այսուհետ կարելի է խոսել միայն շշուկով։" },
+  { ru: "С этого момента нельзя смеяться — ни звука, ни улыбки.", en: "From now on, no laughing — not a sound, not a smile.", hy: "Այսուհետ չի կարելի ծիծաղել — ոչ ձայն, ոչ ժպիտ։" },
+  { ru: "С этого момента все держатся одной рукой за соседа.", en: "From now on, everyone keeps one hand on the person next to them.", hy: "Այսուհետ բոլորը մեկ ձեռքով բռնում են կողքի կանգնածին։" },
+  { ru: "С этого момента нельзя касаться руками своего лица.", en: "From now on, no touching your own face with your hands.", hy: "Այսուհետ չի կարելի ձեռքերով դիպչել սեփական դեմքին։" },
+  { ru: "С этого момента все задания выполняются сидя на корточках.", en: "From now on, every task is done squatting.", hy: "Այսուհետ բոլոր առաջադրանքները կատարվում են կքանստած։" },
+  { ru: "С этого момента нельзя открывать рот — только жесты.", en: "From now on, no opening your mouth — gestures only.", hy: "Այսուհետ բերանը բացել չի կարելի — միայն ժեստեր։" },
+  { ru: "С этого момента у всех закрыт один глаз до конца игры.", en: "From now on, everyone keeps one eye closed until the game ends.", hy: "Այսուհետ բոլորի մեկ աչքը փակ է մինչև խաղի ավարտը։" },
+  { ru: "С этого момента одна нога всё время оторвана от пола.", en: "From now on, one foot must always stay off the floor.", hy: "Այսուհետ մեկ ոտքը մշտապես գետնից վեր է։" },
+];
+
 
 const MAFIA_ROLES = {
   mafia: { id: "mafia", name: "Мафия", short: "Мафия", desc: "Каждую ночь вместе с сообщниками выбирайте жертву. Днём притворяйтесь мирным жителем.", Icon: IconSkull, color: "var(--spy)", bg: "rgba(226,88,90,.14)" },
@@ -2337,6 +2442,17 @@ const MIN_ALIAS_SECONDS = 30, MAX_ALIAS_SECONDS = 120, ALIAS_SECONDS_STEP = 15;
 const MIN_MAFIA_PLAYERS = 5, MAX_MAFIA_PLAYERS = 20;
 const MIN_MAFIA_COUNT = 1;
 const MIN_MAFIA_DISCUSSION_MIN = 1, MAX_MAFIA_DISCUSSION_MIN = 50;
+const MIN_WORDLESS_PLAYERS = 2, MAX_WORDLESS_PLAYERS = 8;
+const MIN_WORDLESS_LIVES = 1, MAX_WORDLESS_LIVES = 5;
+const MIN_COUNTDOWN_LIVES = 1, MAX_COUNTDOWN_LIVES = 5;
+const MIN_COUNTDOWN_SECONDS = 8, MAX_COUNTDOWN_SECONDS = 20, COUNTDOWN_SECONDS_STEP = 2;
+// Base per-round seconds ratchets down as rounds pass (see countdownSecondsForRound
+// below) so the game gets objectively harder even before new rules stack up —
+// never below this floor, so it always stays humanly possible to react.
+const COUNTDOWN_SECONDS_FLOOR = 5;
+// Every Nth round introduces a new persistent handicap instead of a regular
+// task — see advanceCountdownRound() below.
+const COUNTDOWN_RULE_INTERVAL = 3;
 
 const defaultNames = (n) => Array.from({ length: n }, (_, i) => `Игрок ${i + 1}`);
 const defaultTeamNames = (n) => Array.from({ length: n }, (_, i) => `Команда ${i + 1}`);
@@ -2369,11 +2485,18 @@ const initialMafiaState = {
 };
 
 const initialState = {
-  screen: "hub", // hub | spy-setup | spy-reveal | spy-playing | spy-end | alias-setup | alias-team-intro | alias-playing | alias-round-end | mafia-setup | mafia-reveal | mafia-roster | mafia-game | mafia-end | bunker
+  screen: "hub", // hub | spy-setup | spy-reveal | spy-playing | spy-end | alias-setup | alias-team-intro | alias-playing | alias-round-end | croc-setup | croc-team-intro | croc-playing | croc-round-end | wordless-setup | wordless-reveal | wordless-playing | wordless-end | countdown-setup | countdown-round-intro | countdown-playing | countdown-end | mafia-setup | mafia-reveal | mafia-roster | mafia-game | mafia-end | bunker
   config: {
     count: 4, minutes: 8, names: defaultNames(4), spyCount: 1, spyCategories: { normal: true, extreme: true, funny: true },
     aliasTeams: defaultTeamNames(2), aliasSeconds: 60, aliasCategories: defaultAliasCategories(),
+    // Charades ("Крокодил") reuses Alias's word bank (ALIAS_CATEGORIES) and
+    // constants (MIN/MAX_TEAMS, MIN/MAX_ALIAS_SECONDS) — same mechanic, only
+    // the on-screen instructions differ — but keeps its own team names,
+    // round length and category selection so the two games don't share state.
+    crocTeams: defaultTeamNames(2), crocSeconds: 60, crocCategories: defaultAliasCategories(),
     mafiaPlayerCount: 8, mafiaNames: defaultNames(8), mafiaCount: 2, mafiaDoctor: true, mafiaSheriff: true, mafiaDon: false, mafiaManiac: false, mafiaPutana: false, mafiaDiscussionMinutes: 3,
+    wordlessNames: defaultNames(4), wordlessLives: 3,
+    countdownLives: 3, countdownBaseSeconds: 12,
   },
   game: { location: null, spyIndexes: [] },
   revealIndex: 0,
@@ -2388,6 +2511,35 @@ const initialState = {
     currentWord: "",
     roundScore: 0,
     timer: { remaining: 0, running: false },
+  },
+  croc: {
+    scores: [0, 0],
+    currentTeam: 0,
+    pool: [],
+    wordOrder: [],
+    wordPointer: 0,
+    currentWord: "",
+    roundScore: 0,
+    timer: { remaining: 0, running: false },
+  },
+  wordless: {
+    level: 1,
+    lives: 3,
+    hands: [], // hands[playerIndex] = that player's remaining numbers this level, sorted ascending
+    played: [], // numbers played so far this level, in the order they were played
+    revealIndex: 0, // which player's private reveal (BlindScreen) is showing
+    lastMistake: null, // { name, value } for a brief "out of order" flash, or null
+  },
+  countdown: {
+    round: 1,
+    lives: 3,
+    seconds: 0,
+    timer: { remaining: 0, running: false },
+    activeRuleIndexes: [], // indexes into COUNTDOWN_HANDICAPS, in the order they were triggered
+    challengeOrder: [], challengePointer: -1, // shuffled indexes into COUNTDOWN_CHALLENGES
+    ruleOrder: [], rulePointer: -1, // shuffled indexes into COUNTDOWN_HANDICAPS
+    currentChallengeIndex: null, // index into COUNTDOWN_CHALLENGES for this round, or null on a rule round
+    isRuleRound: false,
   },
   mafia: initialMafiaState,
   // Which game to ask "how was it?" about, set when GO_HUB fires from a
@@ -2531,6 +2683,61 @@ function nextAliasWord(alias) {
   return { wordOrder, wordPointer: pointer, currentWord: pool[wordOrder[pointer]] };
 }
 
+// "Без слов" ("The Mind"-style cooperative game): deals `level` unique
+// numbers to each of `count` players for the current level, each hand
+// sorted ascending. Numbers are re-drawn fresh every level — unlike a
+// physical deck they never need to persist across levels, since nothing in
+// the rules depends on which numbers were seen in an earlier, already-
+// resolved level. The pool is normally 1..100, but widens past that for a
+// level deep enough to need more unique numbers than that (e.g. level 13
+// with all 8 players needs 104) — with MAX_WORDLESS_PLAYERS at 8, a long
+// enough winning streak genuinely gets there, so this can't stay a fixed 100.
+function dealWordlessHands(count, level) {
+  const POOL_SIZE = Math.max(100, count * level);
+  const order = shuffledIndices(POOL_SIZE);
+  const drawn = order.slice(0, count * level).map((i) => i + 1);
+  const hands = [];
+  for (let p = 0; p < count; p++) {
+    hands.push(drawn.slice(p * level, (p + 1) * level).sort((a, b) => a - b));
+  }
+  return hands;
+}
+
+// "Обратный отсчёт" (Countdown): decides what the upcoming round is — a
+// fresh COUNTDOWN_HANDICAPS entry (every COUNTDOWN_RULE_INTERVAL-th round,
+// while any remain unused) or the next COUNTDOWN_CHALLENGES entry — plus
+// that round's timer length, which ratchets down every 4 rounds regardless
+// (never below COUNTDOWN_SECONDS_FLOOR). Only stores indexes into the two
+// content banks, never resolved text, so a language switch mid-game still
+// renders correctly.
+function advanceCountdownRound(countdown, round, baseSeconds) {
+  let { challengeOrder, challengePointer, ruleOrder, rulePointer, activeRuleIndexes } = countdown;
+  const isRuleRound = round % COUNTDOWN_RULE_INTERVAL === 0 && rulePointer + 1 < ruleOrder.length;
+  let currentChallengeIndex = null;
+  if (isRuleRound) {
+    rulePointer += 1;
+    activeRuleIndexes = [...activeRuleIndexes, ruleOrder[rulePointer]];
+  } else {
+    challengePointer += 1;
+    if (challengePointer >= challengeOrder.length) {
+      challengeOrder = shuffledIndices(COUNTDOWN_CHALLENGES.length);
+      challengePointer = 0;
+    }
+    currentChallengeIndex = challengeOrder[challengePointer];
+  }
+  const seconds = Math.max(COUNTDOWN_SECONDS_FLOOR, baseSeconds - Math.floor((round - 1) / 4));
+  return { challengeOrder, challengePointer, ruleOrder, rulePointer, activeRuleIndexes, currentChallengeIndex, isRuleRound, seconds };
+}
+
+// Resolves the current round's prompt text in the active language — a rule
+// round shows the handicap that was just added (the last entry of
+// activeRuleIndexes), otherwise the current challenge.
+function countdownPromptText(countdown, lang) {
+  return countdown.isRuleRound
+    ? pickLang(COUNTDOWN_HANDICAPS[countdown.activeRuleIndexes[countdown.activeRuleIndexes.length - 1]], lang)
+    : pickLang(COUNTDOWN_CHALLENGES[countdown.currentChallengeIndex], lang);
+}
+
 function clampMafiaCount(playerCount, mafiaCount) {
   const max = Math.max(MIN_MAFIA_COUNT, Math.floor((playerCount - 1) / 2));
   return Math.min(max, Math.max(MIN_MAFIA_COUNT, mafiaCount));
@@ -2651,6 +2858,9 @@ function reducer(state, action) {
         ? null
         : leftScreen.startsWith("spy") ? "spy"
         : leftScreen.startsWith("alias") ? "alias"
+        : leftScreen.startsWith("croc") ? "croc"
+        : leftScreen.startsWith("wordless") ? "wordless"
+        : leftScreen.startsWith("countdown") ? "countdown"
         : leftScreen.startsWith("mafia") ? "mafia"
         : leftScreen === "bunker" ? "bunker"
         : leftScreen === "court" ? "court"
@@ -2792,6 +3002,213 @@ function reducer(state, action) {
     case "ALIAS_NEXT_TEAM": {
       const currentTeam = (state.alias.currentTeam + 1) % state.config.aliasTeams.length;
       return { ...state, screen: "alias-team-intro", alias: { ...state.alias, currentTeam, roundScore: 0 } };
+    }
+
+    // Charades ("Крокодил") — mirrors the Alias cases above exactly (same
+    // shuffled-word-pool mechanic via nextAliasWord, which is generic
+    // despite the name), just against state.croc / state.config.croc* so
+    // the two games never share teams, timer or category selection.
+    case "OPEN_CROC_SETUP":
+      return { ...state, screen: "croc-setup" };
+    case "CROC_SET_TEAM_COUNT": {
+      const n = Math.min(MAX_TEAMS, Math.max(MIN_TEAMS, action.value));
+      const crocTeams = resizeTeams(state.config.crocTeams, n);
+      const scores = Array.from({ length: n }, (_, i) => state.croc.scores[i] || 0);
+      return { ...state, config: { ...state.config, crocTeams }, croc: { ...state.croc, scores } };
+    }
+    case "CROC_SET_TEAM_NAME": {
+      const crocTeams = state.config.crocTeams.slice();
+      crocTeams[action.index] = action.value;
+      return { ...state, config: { ...state.config, crocTeams } };
+    }
+    case "CROC_SET_SECONDS": {
+      const crocSeconds = Math.min(MAX_ALIAS_SECONDS, Math.max(MIN_ALIAS_SECONDS, action.value));
+      return { ...state, config: { ...state.config, crocSeconds } };
+    }
+    case "CROC_LAUNCH": {
+      const pool = getActiveAliasWords(state.config.crocCategories);
+      const wordOrder = shuffledIndices(pool.length);
+      return {
+        ...state,
+        screen: "croc-team-intro",
+        croc: {
+          scores: state.config.crocTeams.map(() => 0),
+          currentTeam: 0,
+          pool,
+          wordOrder,
+          wordPointer: 0,
+          currentWord: pool[wordOrder[0]],
+          roundScore: 0,
+          timer: { remaining: state.config.crocSeconds, running: false },
+        },
+      };
+    }
+    case "CROC_TOGGLE_CATEGORY": {
+      const crocCategories = { ...state.config.crocCategories, [action.key]: !state.config.crocCategories[action.key] };
+      return { ...state, config: { ...state.config, crocCategories } };
+    }
+    case "CROC_START_ROUND":
+      return {
+        ...state,
+        screen: "croc-playing",
+        croc: { ...state.croc, roundScore: 0, timer: { remaining: state.config.crocSeconds, running: true } },
+      };
+    case "CROC_CORRECT": {
+      const { wordOrder, wordPointer, currentWord } = nextAliasWord(state.croc);
+      return { ...state, croc: { ...state.croc, roundScore: state.croc.roundScore + 1, wordOrder, wordPointer, currentWord } };
+    }
+    case "CROC_SKIP": {
+      const { wordOrder, wordPointer, currentWord } = nextAliasWord(state.croc);
+      return { ...state, croc: { ...state.croc, roundScore: state.croc.roundScore - 1, wordOrder, wordPointer, currentWord } };
+    }
+    case "CROC_TICK": {
+      if (!state.croc.timer.running) return state;
+      const remaining = state.croc.timer.remaining - 1;
+      if (remaining <= 0) {
+        const scores = state.croc.scores.slice();
+        scores[state.croc.currentTeam] += state.croc.roundScore;
+        return { ...state, screen: "croc-round-end", croc: { ...state.croc, scores, timer: { remaining: 0, running: false } } };
+      }
+      return { ...state, croc: { ...state.croc, timer: { ...state.croc.timer, remaining } } };
+    }
+    case "CROC_END_ROUND_MANUAL": {
+      const scores = state.croc.scores.slice();
+      scores[state.croc.currentTeam] += state.croc.roundScore;
+      return { ...state, screen: "croc-round-end", croc: { ...state.croc, scores, timer: { ...state.croc.timer, running: false } } };
+    }
+    case "CROC_NEXT_TEAM": {
+      const currentTeam = (state.croc.currentTeam + 1) % state.config.crocTeams.length;
+      return { ...state, screen: "croc-team-intro", croc: { ...state.croc, currentTeam, roundScore: 0 } };
+    }
+
+    // "Без слов" ("The Mind"-style cooperative game). See dealWordlessHands()
+    // for the deal and the game's own components for the full flow: a
+    // private per-player reveal (BlindScreen, like Spy) of that level's
+    // hand, then real, silent, in-person play — the app's only job during
+    // play is to let whoever believes it's their turn tap their own name,
+    // which reveals their next card to the group and objectively checks it
+    // against every card already played (no self-judging needed).
+    case "OPEN_WORDLESS_SETUP":
+      return { ...state, screen: "wordless-setup" };
+    case "WORDLESS_SET_COUNT": {
+      const n = Math.min(MAX_WORDLESS_PLAYERS, Math.max(MIN_WORDLESS_PLAYERS, action.value));
+      return { ...state, config: { ...state.config, wordlessNames: resizeNames(state.config.wordlessNames, n) } };
+    }
+    case "WORDLESS_SET_NAME": {
+      const wordlessNames = state.config.wordlessNames.slice();
+      wordlessNames[action.index] = action.value;
+      return { ...state, config: { ...state.config, wordlessNames } };
+    }
+    case "WORDLESS_SET_LIVES": {
+      const wordlessLives = Math.min(MAX_WORDLESS_LIVES, Math.max(MIN_WORDLESS_LIVES, action.value));
+      return { ...state, config: { ...state.config, wordlessLives } };
+    }
+    case "WORDLESS_LAUNCH": {
+      const count = state.config.wordlessNames.length;
+      return {
+        ...state,
+        screen: "wordless-reveal",
+        wordless: {
+          level: 1,
+          lives: state.config.wordlessLives,
+          hands: dealWordlessHands(count, 1),
+          played: [],
+          revealIndex: 0,
+          lastMistake: null,
+        },
+      };
+    }
+    case "WORDLESS_NEXT_REVEAL": {
+      const next = state.wordless.revealIndex + 1;
+      if (next < state.config.wordlessNames.length) return { ...state, wordless: { ...state.wordless, revealIndex: next } };
+      return { ...state, screen: "wordless-playing" };
+    }
+    case "WORDLESS_PLAY": {
+      const { wordless, config } = state;
+      const hand = wordless.hands[action.index];
+      if (!hand || hand.length === 0) return state; // that player already played all their cards this level
+      const card = hand[0];
+      const isMistake = wordless.played.length > 0 && card < wordless.played[wordless.played.length - 1];
+      const lives = isMistake ? wordless.lives - 1 : wordless.lives;
+      const hands = wordless.hands.map((h, i) => (i === action.index ? h.slice(1) : h));
+      const played = [...wordless.played, card];
+      const lastMistake = isMistake ? { name: config.wordlessNames[action.index], value: card } : null;
+
+      if (lives <= 0) {
+        return { ...state, screen: "wordless-end", wordless: { ...wordless, hands, played, lives: 0, lastMistake } };
+      }
+      const totalCards = config.wordlessNames.length * wordless.level;
+      if (played.length >= totalCards) {
+        // Level cleared (with or without this last card being a mistake) — deal the next one.
+        const level = wordless.level + 1;
+        return {
+          ...state,
+          screen: "wordless-reveal",
+          wordless: { level, lives, hands: dealWordlessHands(config.wordlessNames.length, level), played: [], revealIndex: 0, lastMistake: null },
+        };
+      }
+      return { ...state, wordless: { ...wordless, hands, played, lives, lastMistake } };
+    }
+
+    // "Обратный отсчёт" (Countdown). See advanceCountdownRound() for how a
+    // round's prompt (task or new handicap) and timer length are picked;
+    // the app can't observe the group's real-life attempt, so — same as
+    // Alias's correct/skip — the group self-reports the outcome, except a
+    // timeout with no tap also counts as a fail (see COUNTDOWN_TICK).
+    case "OPEN_COUNTDOWN_SETUP":
+      return { ...state, screen: "countdown-setup" };
+    case "COUNTDOWN_SET_LIVES": {
+      const countdownLives = Math.min(MAX_COUNTDOWN_LIVES, Math.max(MIN_COUNTDOWN_LIVES, action.value));
+      return { ...state, config: { ...state.config, countdownLives } };
+    }
+    case "COUNTDOWN_SET_SECONDS": {
+      const countdownBaseSeconds = Math.min(MAX_COUNTDOWN_SECONDS, Math.max(MIN_COUNTDOWN_SECONDS, action.value));
+      return { ...state, config: { ...state.config, countdownBaseSeconds } };
+    }
+    case "COUNTDOWN_LAUNCH": {
+      const round = 1;
+      const base = {
+        challengeOrder: shuffledIndices(COUNTDOWN_CHALLENGES.length), challengePointer: -1,
+        ruleOrder: shuffledIndices(COUNTDOWN_HANDICAPS.length), rulePointer: -1,
+        activeRuleIndexes: [],
+      };
+      const next = advanceCountdownRound(base, round, state.config.countdownBaseSeconds);
+      return {
+        ...state,
+        screen: "countdown-round-intro",
+        countdown: { ...base, ...next, round, lives: state.config.countdownLives, timer: { remaining: 0, running: false } },
+      };
+    }
+    case "COUNTDOWN_START_ROUND":
+      return { ...state, screen: "countdown-playing", countdown: { ...state.countdown, timer: { remaining: state.countdown.seconds, running: true } } };
+    case "COUNTDOWN_TICK": {
+      if (!state.countdown.timer.running) return state;
+      const remaining = state.countdown.timer.remaining - 1;
+      if (remaining <= 0) {
+        // Time ran out with no "Успех"/"Провал" tap — counts as a fail.
+        const lives = state.countdown.lives - 1;
+        if (lives <= 0) {
+          return { ...state, screen: "countdown-end", countdown: { ...state.countdown, lives: 0, timer: { remaining: 0, running: false } } };
+        }
+        const round = state.countdown.round + 1;
+        const next = advanceCountdownRound(state.countdown, round, state.config.countdownBaseSeconds);
+        return { ...state, screen: "countdown-round-intro", countdown: { ...state.countdown, ...next, round, lives, timer: { remaining: 0, running: false } } };
+      }
+      return { ...state, countdown: { ...state.countdown, timer: { ...state.countdown.timer, remaining } } };
+    }
+    case "COUNTDOWN_SUCCESS": {
+      const round = state.countdown.round + 1;
+      const next = advanceCountdownRound(state.countdown, round, state.config.countdownBaseSeconds);
+      return { ...state, screen: "countdown-round-intro", countdown: { ...state.countdown, ...next, round, timer: { remaining: 0, running: false } } };
+    }
+    case "COUNTDOWN_FAIL": {
+      const lives = state.countdown.lives - 1;
+      if (lives <= 0) {
+        return { ...state, screen: "countdown-end", countdown: { ...state.countdown, lives: 0, timer: { remaining: 0, running: false } } };
+      }
+      const round = state.countdown.round + 1;
+      const next = advanceCountdownRound(state.countdown, round, state.config.countdownBaseSeconds);
+      return { ...state, screen: "countdown-round-intro", countdown: { ...state.countdown, ...next, round, lives, timer: { remaining: 0, running: false } } };
     }
 
     case "OPEN_MAFIA_SETUP":
@@ -4041,6 +4458,9 @@ function SupportChatWidget() {
 const GAMES = [
   { id: "spy", titleKey: "game.spy", subtitleKey: "hub.spySubtitle", Icon: IconGlasses, openAction: "OPEN_SPY_SETUP" },
   { id: "alias", titleKey: "game.alias", subtitleKey: "hub.aliasSubtitle", Icon: IconMessageCircle, openAction: "OPEN_ALIAS_SETUP" },
+  { id: "croc", titleKey: "game.croc", subtitleKey: "hub.crocSubtitle", Icon: IconMasks, openAction: "OPEN_CROC_SETUP" },
+  { id: "wordless", titleKey: "game.wordless", subtitleKey: "hub.wordlessSubtitle", Icon: IconVolumeX, openAction: "OPEN_WORDLESS_SETUP" },
+  { id: "countdown", titleKey: "game.countdown", subtitleKey: "hub.countdownSubtitle", Icon: IconHourglass, openAction: "OPEN_COUNTDOWN_SETUP" },
   { id: "mafia", titleKey: "game.mafia", subtitleKey: "hub.mafiaSubtitle", Icon: IconSkull, openAction: "OPEN_MAFIA_SETUP" },
   {
     id: "bunker",
@@ -4077,6 +4497,18 @@ const SCREEN_COMPONENTS = {
   "alias-team-intro": AliasTeamIntro,
   "alias-playing": AliasPlaying,
   "alias-round-end": AliasRoundEnd,
+  "croc-setup": CrocSetup,
+  "croc-team-intro": CrocTeamIntro,
+  "croc-playing": CrocPlaying,
+  "croc-round-end": CrocRoundEnd,
+  "wordless-setup": WordlessSetup,
+  "wordless-reveal": WordlessReveal,
+  "wordless-playing": WordlessPlaying,
+  "wordless-end": WordlessEnd,
+  "countdown-setup": CountdownSetup,
+  "countdown-round-intro": CountdownRoundIntro,
+  "countdown-playing": CountdownPlaying,
+  "countdown-end": CountdownEnd,
   "mafia-setup": MafiaSetup,
   "mafia-reveal": MafiaReveal,
   "mafia-roster": MafiaRoster,
@@ -4086,7 +4518,7 @@ const SCREEN_COMPONENTS = {
   court: CourtApp,
 };
 
-const FEEDBACK_GAME_LABEL_KEY = { spy: "game.spy", alias: "game.alias", mafia: "game.mafia", bunker: "game.bunker", court: "game.court" };
+const FEEDBACK_GAME_LABEL_KEY = { spy: "game.spy", alias: "game.alias", croc: "game.croc", wordless: "game.wordless", countdown: "game.countdown", mafia: "game.mafia", bunker: "game.bunker", court: "game.court" };
 
 // Small bottom-sheet card rendered on the Hub when state.feedbackPending is
 // set (see the GO_HUB reducer case). Star tap -> optional comment -> one
@@ -4848,6 +5280,722 @@ function AliasRoundEnd({ state, dispatch }) {
           className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
         >
           <IconRefresh size={20} /> {t("alias.nextTeam")}
+        </button>
+        <button
+          onClick={() => dispatch({ type: "GO_HUB" })}
+          className="w-full bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+        >
+          <IconHome size={20} /> {t("common.toHome")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/* Charades ("Крокодил"): setup                                      */
+/* Deliberately close to Alias's four screens above — same team/timer/*/
+/* scoring mechanic and the same word bank (ALIAS_CATEGORIES via       */
+/* getActiveAliasWords/nextAliasWord, both content-agnostic) — only     */
+/* the instructions differ: act the word out instead of describing it.*/
+/* Uses its own config.croc-prefixed fields and state.croc so the two  */
+/* games never share teams, round length or category selection.        */
+/* ---------------------------------------------------------------- */
+function CrocCategoryPicker({ crocCategories, dispatch }) {
+  const t = useT();
+  const lang = useLang();
+  const activeCount = getActiveAliasWords(crocCategories).length;
+  return (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-5 py-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">{t("croc.categoriesLabel")}</div>
+        <span className="text-xs text-[var(--text-faint)]">{activeCount} {t("croc.wordsLabel")}</span>
+      </div>
+      <div className="flex flex-col divide-y divide-[var(--border)]">
+        {Object.keys(ALIAS_CATEGORIES).map((key) => {
+          const meta = ALIAS_CATEGORY_META[key];
+          const checked = !!crocCategories[key];
+          return (
+            <button
+              key={key}
+              onClick={() => dispatch({ type: "CROC_TOGGLE_CATEGORY", key })}
+              className="flex items-center gap-3 py-2.5 text-left w-full"
+            >
+              <span
+                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                style={{ background: checked ? "rgba(232,181,69,.14)" : "var(--surface-2)", color: checked ? "var(--accent-strong)" : "var(--text-faint)" }}
+              >
+                <meta.Icon size={16} />
+              </span>
+              <span className={"flex-1 text-sm " + (checked ? "text-[var(--text)]" : "text-[var(--text-faint)]")}>{pickLang(meta.title, lang)}</span>
+              <span className="text-xs text-[var(--text-faint)] mr-1">{pickLang(ALIAS_CATEGORIES[key], lang).length}</span>
+              <span
+                className="w-5 h-5 rounded-md border flex items-center justify-center shrink-0"
+                style={{ borderColor: checked ? "var(--accent)" : "var(--border-strong)", background: checked ? "var(--accent)" : "transparent" }}
+              >
+                {checked && <IconCheck size={13} className="text-[var(--accent-ink)]" />}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {activeCount === 0 && (
+        <p className="text-xs text-[var(--text-faint)] text-center mt-3">{t("croc.noneSelected")}</p>
+      )}
+    </div>
+  );
+}
+
+function CrocSetup({ state, dispatch }) {
+  const t = useT();
+  const { crocTeams, crocSeconds, crocCategories } = state.config;
+  const count = crocTeams.length;
+  const [rulesOpen, setRulesOpen] = useState(false);
+  return (
+    <div className="h-full min-h-0 flex flex-col">
+      <TopBar
+        onBack={() => dispatch({ type: "GO_HUB" })}
+        title={t("croc.title")}
+        right={<IconMasks size={18} className="text-[var(--text-faint)]" />}
+        onRightClick={() => setRulesOpen(true)}
+      />
+      <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("croc.rulesTitle")} color="var(--accent-strong)" rules={useRules(CROC_RULES)} />
+
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-4 flex flex-col gap-4">
+        <Stepper label={t("croc.teamsCount")} value={count} min={MIN_TEAMS} max={MAX_TEAMS} onChange={(v) => dispatch({ type: "CROC_SET_TEAM_COUNT", value: v })} />
+        <Stepper label={t("croc.roundTime")} value={crocSeconds} min={MIN_ALIAS_SECONDS} max={MAX_ALIAS_SECONDS} step={ALIAS_SECONDS_STEP} suffix={t("croc.seconds")} onChange={(v) => dispatch({ type: "CROC_SET_SECONDS", value: v })} />
+
+        <CrocCategoryPicker crocCategories={crocCategories} dispatch={dispatch} />
+
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-5 py-4">
+          <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-3">{t("croc.teamsLabel")}</div>
+          <div className="flex flex-col gap-2">
+            {crocTeams.map((name, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="w-7 h-7 rounded-full bg-[var(--surface-2)] text-[var(--text-dim)] text-xs font-mono flex items-center justify-center shrink-0">
+                  {i + 1}
+                </span>
+                <input
+                  value={name}
+                  onChange={(e) => dispatch({ type: "CROC_SET_TEAM_NAME", index: i, value: e.target.value })}
+                  placeholder={`${t("croc.teamPlaceholder")} ${i + 1}`}
+                  className="flex-1 bg-[var(--surface-2)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-faint)] focus:outline-none focus:border-[var(--accent)]/60"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <p className="text-xs text-[var(--text-faint)] text-center px-4">
+          {t("croc.explainHint")}
+        </p>
+
+        <RulesCard title={t("croc.rulesTitle")} color="var(--accent-strong)" rules={useRules(CROC_RULES)} />
+      </div>
+
+      <div className="px-5 pb-8 pt-2 shrink-0">
+        <button
+          onClick={() => dispatch({ type: "CROC_LAUNCH" })}
+          className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+        >
+          <IconPlay size={22} /> {t("common.startGame")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/* Charades: team intro (pass the phone to the next team)             */
+/* ---------------------------------------------------------------- */
+function CrocTeamIntro({ state, dispatch }) {
+  const t = useT();
+  const { croc, config } = state;
+  const teamName = config.crocTeams[croc.currentTeam];
+  return (
+    <div className="h-full min-h-0 flex flex-col">
+      <div className="flex items-center justify-between px-5 pt-4 shrink-0">
+        <ConfirmButton
+          label={t("common.finish")}
+          confirmLabel={t("common.confirm")}
+          onConfirm={() => dispatch({ type: "GO_HUB" })}
+          className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1"
+        />
+        <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">{t("game.croc")}</span>
+        <span className="w-16" />
+      </div>
+
+      <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
+        <div className="pop flex flex-col items-center">
+          <div className="w-20 h-20 rounded-full bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center mb-6 text-[var(--accent-strong)]">
+            <IconMasks size={30} />
+          </div>
+          <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-faint)] mb-2">{t("croc.teamTurn")}</p>
+          <h2 className="font-display text-6xl leading-none mb-4">{teamName}</h2>
+          <p className="text-sm text-[var(--text-dim)] max-w-[30ch] mb-10">
+            {t("croc.passHint").replace("{n}", config.crocSeconds)}
+          </p>
+          <button
+            onClick={() => dispatch({ type: "CROC_START_ROUND" })}
+            className="w-full max-w-xs bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+          >
+            <IconPlay size={22} /> {t("croc.startRound")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/* Charades: playing                                                  */
+/* ---------------------------------------------------------------- */
+function CrocPlaying({ state, dispatch }) {
+  const t = useT();
+  const { croc, config } = state;
+  const { remaining, running } = croc.timer;
+  const urgent = remaining <= 10;
+
+  useWakeLock(true);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => dispatch({ type: "CROC_TICK" }), 1000);
+    return () => clearInterval(id);
+  }, [running, dispatch]);
+
+  // Ticking sound as the round runs out (last 5 seconds) — same signal
+  // Alias/Spy already use for their round timers.
+  useEffect(() => {
+    if (running && remaining >= 1 && remaining <= 5) playTickSound();
+  }, [remaining, running]);
+
+  return (
+    <div className="h-full min-h-0 flex flex-col">
+      <div className="flex items-center justify-between px-5 pt-4 shrink-0">
+        <ConfirmButton
+          label={t("common.finish")}
+          confirmLabel={t("common.confirm")}
+          onConfirm={() => dispatch({ type: "CROC_END_ROUND_MANUAL" })}
+          className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1"
+        />
+        <span
+          className={"font-mono text-lg font-semibold tabular-nums " + (urgent ? "pulse" : "")}
+          style={{ color: urgent ? "var(--danger)" : "var(--text-dim)" }}
+        >
+          {fmtTime(remaining)}
+        </span>
+        <span className="text-sm font-mono text-[var(--text-dim)] w-16 text-right">
+          {croc.roundScore >= 0 ? `+${croc.roundScore}` : croc.roundScore}
+        </span>
+      </div>
+
+      <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-faint)] mb-4">{config.crocTeams[croc.currentTeam]}</p>
+        <h2 className="font-display text-6xl leading-tight break-words px-2">{croc.currentWord}</h2>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 px-5 pb-8 pt-2 shrink-0">
+        <button
+          onClick={() => dispatch({ type: "CROC_SKIP" })}
+          className="bg-[var(--surface-2)] border border-[var(--danger)]/40 text-[var(--danger)] font-display text-2xl tracking-wide py-7 rounded-3xl flex flex-col items-center justify-center gap-1 active:scale-[0.97] transition-transform"
+        >
+          <IconX size={30} />
+          {t("croc.skip")}
+        </button>
+        <button
+          onClick={() => dispatch({ type: "CROC_CORRECT" })}
+          className="bg-[var(--local)] text-[var(--local-ink)] font-display text-2xl tracking-wide py-7 rounded-3xl flex flex-col items-center justify-center gap-1 active:scale-[0.97] transition-transform"
+        >
+          <IconCheck size={30} />
+          {t("croc.correct")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/* Charades: round end                                                */
+/* ---------------------------------------------------------------- */
+function CrocRoundEnd({ state, dispatch }) {
+  const t = useT();
+  const { croc, config } = state;
+  const teamName = config.crocTeams[croc.currentTeam];
+  const earned = croc.roundScore;
+
+  return (
+    <div className="h-full flex flex-col px-6 pb-8" style={{ paddingTop: "3rem" }}>
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col items-center justify-center text-center">
+        <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] flex items-center justify-center mb-6 text-[var(--accent-strong)]">
+          <IconTrophy size={30} />
+        </div>
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-faint)] mb-2">{teamName}</p>
+        <h2 className="font-display text-3xl leading-none mb-1">{t("croc.roundEnded")}</h2>
+        <p className="font-display text-7xl leading-none mt-4 mb-8" style={{ color: earned >= 0 ? "var(--local)" : "var(--danger)" }}>
+          {earned >= 0 ? `+${earned}` : earned}
+        </p>
+
+        <div className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-3xl p-5 flex flex-col gap-3">
+          <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-1">{t("croc.totalScore")}</div>
+          {config.crocTeams.map((name, i) => (
+            <div
+              key={i}
+              className={"flex items-center justify-between px-1 " + (i === croc.currentTeam ? "text-[var(--accent-strong)]" : "text-[var(--text)]")}
+            >
+              <ExpandableText as="span" className="truncate pr-3" text={name} title={t("common.team")} />
+              <span className="font-mono font-semibold">{croc.scores[i]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 shrink-0">
+        <button
+          onClick={() => dispatch({ type: "CROC_NEXT_TEAM" })}
+          className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+        >
+          <IconRefresh size={20} /> {t("croc.nextTeam")}
+        </button>
+        <button
+          onClick={() => dispatch({ type: "GO_HUB" })}
+          className="w-full bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+        >
+          <IconHome size={20} /> {t("common.toHome")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/* "Без слов" ("The Mind"-style co-op): setup                        */
+/* One shared phone, three phases per level: a private reveal (each     */
+/* player sees only their own numbers, exactly like Spy's role reveal), */
+/* then real silent play — the phone's only job during play is to let   */
+/* whoever thinks it's their turn tap their own name, which reveals     */
+/* their card to the group and checks it against everything already    */
+/* played, so nobody has to self-judge. See dealWordlessHands() and the */
+/* WORDLESS_* reducer cases for the rest of the mechanic.               */
+/* ---------------------------------------------------------------- */
+function WordlessSetup({ state, dispatch }) {
+  const t = useT();
+  const { wordlessNames, wordlessLives } = state.config;
+  const count = wordlessNames.length;
+  const [rulesOpen, setRulesOpen] = useState(false);
+  return (
+    <div className="h-full min-h-0 flex flex-col">
+      <TopBar
+        onBack={() => dispatch({ type: "GO_HUB" })}
+        title={t("wordless.title")}
+        right={<IconVolumeX size={18} className="text-[var(--text-faint)]" />}
+        onRightClick={() => setRulesOpen(true)}
+      />
+      <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("wordless.rulesTitle")} color="var(--accent-strong)" rules={useRules(WORDLESS_RULES)} />
+
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-4 flex flex-col gap-4">
+        <Stepper label={t("wordless.playersCount")} value={count} min={MIN_WORDLESS_PLAYERS} max={MAX_WORDLESS_PLAYERS} onChange={(v) => dispatch({ type: "WORDLESS_SET_COUNT", value: v })} />
+        <Stepper label={t("wordless.lives")} value={wordlessLives} min={MIN_WORDLESS_LIVES} max={MAX_WORDLESS_LIVES} onChange={(v) => dispatch({ type: "WORDLESS_SET_LIVES", value: v })} />
+
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-5 py-4">
+          <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-3">{t("common.players")}</div>
+          <div className="flex flex-col gap-2">
+            {wordlessNames.map((name, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="w-7 h-7 rounded-full bg-[var(--surface-2)] text-[var(--text-dim)] text-xs font-mono flex items-center justify-center shrink-0">
+                  {i + 1}
+                </span>
+                <input
+                  value={name}
+                  onChange={(e) => dispatch({ type: "WORDLESS_SET_NAME", index: i, value: e.target.value })}
+                  placeholder={`${t("common.player")} ${i + 1}`}
+                  className="flex-1 bg-[var(--surface-2)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-faint)] focus:outline-none focus:border-[var(--accent)]/60"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <p className="text-xs text-[var(--text-faint)] text-center px-4">
+          {t("wordless.explainHint")}
+        </p>
+
+        <RulesCard title={t("wordless.rulesTitle")} color="var(--accent-strong)" rules={useRules(WORDLESS_RULES)} />
+      </div>
+
+      <div className="px-5 pb-8 pt-2 shrink-0">
+        <button
+          onClick={() => dispatch({ type: "WORDLESS_LAUNCH" })}
+          className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+        >
+          <IconPlay size={22} /> {t("common.startGame")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/* "Без слов": private reveal (uses BlindScreen, like Spy)            */
+/* ---------------------------------------------------------------- */
+function WordlessReveal({ state, dispatch }) {
+  const t = useT();
+  const { config, wordless } = state;
+  const hand = wordless.hands[wordless.revealIndex] || [];
+  return (
+    <BlindScreen
+      key={wordless.revealIndex}
+      playerName={config.wordlessNames[wordless.revealIndex]}
+      index={wordless.revealIndex}
+      total={config.wordlessNames.length}
+      onAbort={() => dispatch({ type: "GO_HUB" })}
+      onContinue={() => dispatch({ type: "WORDLESS_NEXT_REVEAL" })}
+      continueLabel={wordless.revealIndex + 1 < config.wordlessNames.length ? t("spy.continueHide") : t("wordless.continueStart")}
+      renderRole={() => (
+        <div className="flex flex-col items-center w-full">
+          <span className="text-xs uppercase tracking-[0.3em] text-[var(--text-faint)] mb-1">{t("wordless.level")} {wordless.level}</span>
+          <span className="text-xs uppercase tracking-[0.3em] text-[var(--text-faint)] mb-4">{t("wordless.yourNumbers")}</span>
+          <div className="flex flex-wrap items-center justify-center gap-3 max-w-[26ch]">
+            {hand.map((n, i) => (
+              <span
+                key={i}
+                className="font-display text-4xl leading-none px-4 py-3 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)]"
+                style={{ color: "var(--accent-strong)" }}
+              >
+                {n}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    />
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/* "Без слов": playing                                                */
+/* ---------------------------------------------------------------- */
+function WordlessPlaying({ state, dispatch }) {
+  const t = useT();
+  const { config, wordless } = state;
+
+  return (
+    <div className="h-full min-h-0 flex flex-col">
+      <div className="flex items-center justify-between px-5 pt-4 shrink-0">
+        <ConfirmButton
+          label={t("common.finish")}
+          confirmLabel={t("common.confirm")}
+          onConfirm={() => dispatch({ type: "GO_HUB" })}
+          className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1"
+        />
+        <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">{t("wordless.level")} {wordless.level}</span>
+        <span className="flex items-center gap-1 text-sm font-mono text-[var(--danger)] w-16 justify-end">
+          <IconHeart size={14} /> {wordless.lives}
+        </span>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pt-4 pb-6 flex flex-col gap-4">
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl p-4">
+          <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-3">{t("wordless.played")}</div>
+          <div className="flex flex-wrap gap-2 min-h-[2.5rem]">
+            {wordless.played.length === 0 && <span className="text-sm text-[var(--text-faint)]">—</span>}
+            {wordless.played.map((n, i) => (
+              <span key={i} className="font-mono text-sm px-2.5 py-1 rounded-lg bg-[var(--surface-2)] text-[var(--text)]">{n}</span>
+            ))}
+          </div>
+        </div>
+
+        {wordless.lastMistake && (
+          <div className="bg-[var(--danger)]/15 border border-[var(--danger)]/40 rounded-2xl px-4 py-3 text-sm text-[var(--danger)] text-center">
+            {t("wordless.mistake").replace("{name}", wordless.lastMistake.name).replace("{value}", wordless.lastMistake.value)}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2">
+          {config.wordlessNames.map((name, i) => {
+            const left = wordless.hands[i] ? wordless.hands[i].length : 0;
+            return (
+              <button
+                key={i}
+                onClick={() => dispatch({ type: "WORDLESS_PLAY", index: i })}
+                disabled={left === 0}
+                className="w-full flex items-center justify-between bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-5 py-4 disabled:opacity-35 active:scale-[0.98] transition-transform"
+              >
+                <ExpandableText as="span" className="font-display text-lg tracking-wide truncate" text={name} title={t("common.player")} />
+                <span className="text-xs text-[var(--text-faint)] font-mono shrink-0 ml-3">{left} {t("wordless.cardsLeft")}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="text-xs text-[var(--text-faint)] text-center px-4">
+          {t("wordless.playHint")}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/* "Без слов": game over                                              */
+/* ---------------------------------------------------------------- */
+function WordlessEnd({ state, dispatch }) {
+  const t = useT();
+  const { wordless } = state;
+  return (
+    <div className="h-full flex flex-col px-6 pb-8" style={{ paddingTop: "3rem" }}>
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col items-center justify-center text-center">
+        <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] flex items-center justify-center mb-6 text-[var(--danger)]">
+          <IconHeart size={30} />
+        </div>
+        <h2 className="font-display text-3xl leading-none mb-1">{t("wordless.gameOver")}</h2>
+        <p className="font-display text-7xl leading-none mt-4 mb-8" style={{ color: "var(--accent-strong)" }}>
+          {wordless.level}
+        </p>
+        <p className="text-sm text-[var(--text-dim)]">{t("wordless.reachedLevel").replace("{n}", wordless.level)}</p>
+      </div>
+
+      <div className="flex flex-col gap-3 shrink-0">
+        <button
+          onClick={() => dispatch({ type: "WORDLESS_LAUNCH" })}
+          className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+        >
+          <IconRefresh size={20} /> {t("common.playAgain")}
+        </button>
+        <button
+          onClick={() => dispatch({ type: "GO_HUB" })}
+          className="w-full bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+        >
+          <IconHome size={20} /> {t("common.toHome")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/* "Обратный отсчёт" (Countdown): setup                              */
+/* One phone, no per-player state — it just issues rounds to the whole */
+/* group at once. See advanceCountdownRound() for how a round's prompt */
+/* (task or new permanent handicap) and timer length are picked.       */
+/* ---------------------------------------------------------------- */
+function CountdownSetup({ state, dispatch }) {
+  const t = useT();
+  const { countdownLives, countdownBaseSeconds } = state.config;
+  const [rulesOpen, setRulesOpen] = useState(false);
+  return (
+    <div className="h-full min-h-0 flex flex-col">
+      <TopBar
+        onBack={() => dispatch({ type: "GO_HUB" })}
+        title={t("countdown.title")}
+        right={<IconHourglass size={18} className="text-[var(--text-faint)]" />}
+        onRightClick={() => setRulesOpen(true)}
+      />
+      <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("countdown.rulesTitle")} color="var(--accent-strong)" rules={useRules(COUNTDOWN_RULES)} />
+
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-4 flex flex-col gap-4">
+        <Stepper label={t("countdown.lives")} value={countdownLives} min={MIN_COUNTDOWN_LIVES} max={MAX_COUNTDOWN_LIVES} onChange={(v) => dispatch({ type: "COUNTDOWN_SET_LIVES", value: v })} />
+        <Stepper
+          label={t("countdown.seconds")}
+          value={countdownBaseSeconds}
+          min={MIN_COUNTDOWN_SECONDS}
+          max={MAX_COUNTDOWN_SECONDS}
+          step={COUNTDOWN_SECONDS_STEP}
+          suffix={t("countdown.secondsUnit")}
+          onChange={(v) => dispatch({ type: "COUNTDOWN_SET_SECONDS", value: v })}
+        />
+
+        <p className="text-xs text-[var(--text-faint)] text-center px-4">
+          {t("countdown.explainHint")}
+        </p>
+
+        <RulesCard title={t("countdown.rulesTitle")} color="var(--accent-strong)" rules={useRules(COUNTDOWN_RULES)} />
+      </div>
+
+      <div className="px-5 pb-8 pt-2 shrink-0">
+        <button
+          onClick={() => dispatch({ type: "COUNTDOWN_LAUNCH" })}
+          className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+        >
+          <IconPlay size={22} /> {t("common.startGame")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/* Countdown: round intro (read the task/new rule, then go)          */
+/* ---------------------------------------------------------------- */
+function CountdownRoundIntro({ state, dispatch }) {
+  const t = useT();
+  const lang = useLang();
+  const { countdown } = state;
+  const promptText = countdownPromptText(countdown, lang);
+  // On the round a new rule is introduced, it's already shown big above —
+  // don't also repeat it a second time in the accumulated list right below.
+  const rulesToList = countdown.isRuleRound ? countdown.activeRuleIndexes.slice(0, -1) : countdown.activeRuleIndexes;
+
+  return (
+    <div className="h-full min-h-0 flex flex-col">
+      <div className="flex items-center justify-between px-5 pt-4 shrink-0">
+        <ConfirmButton
+          label={t("common.finish")}
+          confirmLabel={t("common.confirm")}
+          onConfirm={() => dispatch({ type: "GO_HUB" })}
+          className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1"
+        />
+        <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">{t("countdown.round")} {countdown.round}</span>
+        <span className="flex items-center gap-1 text-sm font-mono text-[var(--danger)] w-16 justify-end">
+          <IconHeart size={14} /> {countdown.lives}
+        </span>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col items-center justify-center px-6 text-center gap-5 py-4">
+        {countdown.isRuleRound && (
+          <span className="text-xs uppercase tracking-[0.3em]" style={{ color: "var(--danger)" }}>{t("countdown.newRule")}</span>
+        )}
+        <h2 className="font-display text-3xl leading-tight px-2">{promptText}</h2>
+
+        {rulesToList.length > 0 && (
+          <div className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-3xl p-4 text-left">
+            <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2">{t("countdown.activeRules")}</div>
+            <div className="flex flex-col gap-1.5">
+              {rulesToList.map((idx, i) => (
+                <p key={i} className="text-xs text-[var(--text-dim)]">• {pickLang(COUNTDOWN_HANDICAPS[idx], lang)}</p>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="px-5 pb-8 pt-2 shrink-0">
+        <button
+          onClick={() => dispatch({ type: "COUNTDOWN_START_ROUND" })}
+          className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+        >
+          <IconPlay size={22} /> {t("countdown.go")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/* Countdown: playing (ticking timer, self-reported outcome)         */
+/* ---------------------------------------------------------------- */
+function CountdownPlaying({ state, dispatch }) {
+  const t = useT();
+  const lang = useLang();
+  const { countdown } = state;
+  const { remaining, running } = countdown.timer;
+  const pct = countdown.seconds > 0 ? ((countdown.seconds - remaining) / countdown.seconds) * 100 : 0;
+  const urgent = remaining <= 5;
+  const ringColor = urgent ? "var(--danger)" : "var(--accent)";
+  const promptText = countdownPromptText(countdown, lang);
+
+  useWakeLock(true);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => dispatch({ type: "COUNTDOWN_TICK" }), 1000);
+    return () => clearInterval(id);
+  }, [running, dispatch]);
+
+  useEffect(() => {
+    if (running && remaining >= 1 && remaining <= 5) playTickSound();
+  }, [remaining, running]);
+
+  return (
+    <div className="h-full min-h-0 flex flex-col">
+      <div className="flex items-center justify-between px-5 pt-4 shrink-0">
+        <ConfirmButton
+          label={t("common.finish")}
+          confirmLabel={t("common.confirm")}
+          onConfirm={() => dispatch({ type: "GO_HUB" })}
+          className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1"
+        />
+        <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">{t("countdown.round")} {countdown.round}</span>
+        <span className="flex items-center gap-1 text-sm font-mono text-[var(--danger)] w-16 justify-end">
+          <IconHeart size={14} /> {countdown.lives}
+        </span>
+      </div>
+
+      <div className="flex-1 flex flex-col items-center justify-center px-6 text-center gap-6">
+        <p className="text-sm text-[var(--text-dim)] max-w-[28ch]">{promptText}</p>
+        <div
+          className="rounded-full p-2"
+          style={{ background: `conic-gradient(${ringColor} ${pct * 3.6}deg, var(--surface-2) 0deg)`, transition: "background 0.4s linear" }}
+        >
+          <div className="w-40 h-40 rounded-full bg-[var(--bg)] flex flex-col items-center justify-center border border-[var(--border)]">
+            <span
+              className={"font-mono text-5xl font-semibold tabular-nums " + (urgent ? "pulse" : "")}
+              style={{ color: urgent ? "var(--danger)" : "var(--text)" }}
+            >
+              {remaining}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 px-5 pb-8 pt-2 shrink-0">
+        <button
+          onClick={() => dispatch({ type: "COUNTDOWN_FAIL" })}
+          className="bg-[var(--surface-2)] border border-[var(--danger)]/40 text-[var(--danger)] font-display text-2xl tracking-wide py-7 rounded-3xl flex flex-col items-center justify-center gap-1 active:scale-[0.97] transition-transform"
+        >
+          <IconX size={30} />
+          {t("countdown.fail")}
+        </button>
+        <button
+          onClick={() => dispatch({ type: "COUNTDOWN_SUCCESS" })}
+          className="bg-[var(--local)] text-[var(--local-ink)] font-display text-2xl tracking-wide py-7 rounded-3xl flex flex-col items-center justify-center gap-1 active:scale-[0.97] transition-transform"
+        >
+          <IconCheck size={30} />
+          {t("countdown.success")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/* Countdown: game over                                               */
+/* ---------------------------------------------------------------- */
+function CountdownEnd({ state, dispatch }) {
+  const t = useT();
+  const lang = useLang();
+  const { countdown } = state;
+  const roundsSurvived = Math.max(0, countdown.round - 1);
+  return (
+    <div className="h-full flex flex-col px-6 pb-8" style={{ paddingTop: "3rem" }}>
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col items-center text-center">
+        <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] flex items-center justify-center mb-6 text-[var(--danger)] shrink-0">
+          <IconHeart size={30} />
+        </div>
+        <h2 className="font-display text-3xl leading-none mb-1 shrink-0">{t("countdown.gameOver")}</h2>
+        <p className="font-display text-7xl leading-none mt-4 mb-8 shrink-0" style={{ color: "var(--accent-strong)" }}>
+          {roundsSurvived}
+        </p>
+        <p className="text-sm text-[var(--text-dim)] mb-6 shrink-0">{t("countdown.survivedRounds").replace("{n}", roundsSurvived)}</p>
+
+        {countdown.activeRuleIndexes.length > 0 && (
+          <div className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-3xl p-4 text-left">
+            <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2">{t("countdown.finalRules")}</div>
+            <div className="flex flex-col gap-1.5">
+              {countdown.activeRuleIndexes.map((idx, i) => (
+                <p key={i} className="text-xs text-[var(--text-dim)]">• {pickLang(COUNTDOWN_HANDICAPS[idx], lang)}</p>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-3 shrink-0 mt-4">
+        <button
+          onClick={() => dispatch({ type: "COUNTDOWN_LAUNCH" })}
+          className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+        >
+          <IconRefresh size={20} /> {t("common.playAgain")}
         </button>
         <button
           onClick={() => dispatch({ type: "GO_HUB" })}
@@ -7096,6 +8244,75 @@ const ALIAS_RULES = {
     "Ժեստերն ու պանտոմիման արգելված են — միայն բառեր։",
     "Գուշակված բառը՝ գումարած մեկ միավոր, բաց թողնված բառը՝ մինուս մեկ միավոր։",
     "Բացատրողը հեռախոսը փոխանցում է հաջորդ թիմին, երբ ժամանակը սպառվում է։",
+  ],
+};
+
+const CROC_RULES = {
+  ru: [
+    "Показывающий объясняет слово только жестами и мимикой — никаких слов, звуков и шевеления губами.",
+    "Нельзя показывать буквы, их количество или части слова жестами — только образ целиком.",
+    "Угаданное слово — плюс балл, слово пропустили — минус балл.",
+    "Показывающий передаёт телефон следующей команде, когда время выходит.",
+  ],
+  en: [
+    "The performer explains the word using only gestures and body language — no words, sounds, or mouthing.",
+    "You can't spell out letters, show how many there are, or act out parts of the word — only the whole thing.",
+    "A guessed word is plus one point, a skipped word is minus one point.",
+    "The performer passes the phone to the next team when time runs out.",
+  ],
+  hy: [
+    "Ցուցադրողը բացատրում է բառը միայն ժեստերով ու դիմախաղով — առանց խոսքերի, ձայների ու շուրթերի շարժման։",
+    "Չի կարելի ցույց տալ տառերը, դրանց քանակը կամ բառի մասերը ժեստերով — միայն ամբողջական կերպարը։",
+    "Գուշակված բառը՝ գումարած մեկ միավոր, բաց թողնված բառը՝ մինուս մեկ միավոր։",
+    "Ցուցադրողը հեռախոսը փոխանցում է հաջորդ թիմին, երբ ժամանակը սպառվում է։",
+  ],
+};
+
+const WORDLESS_RULES = {
+  ru: [
+    "Каждый раунд все получают свои числа втайне от других — нельзя показывать экран.",
+    "Нельзя разговаривать, считать вслух или подавать сигналы — только интуиция и чувство момента.",
+    "Кто чувствует, что держит самое маленькое из оставшихся чисел, нажимает своё имя на экране.",
+    "Если число оказалось не самым маленьким — минус жизнь, но игра продолжается.",
+    "Когда все числа уровня сыграны, начинается следующий уровень — чисел у каждого станет больше.",
+  ],
+  en: [
+    "Each round everyone gets their own numbers in secret — never show your screen to anyone else.",
+    "No talking, counting out loud, or signaling — only intuition and a sense of timing.",
+    "Whoever feels they're holding the smallest number left taps their own name on the screen.",
+    "If the number wasn't actually the smallest, that costs a life, but play continues.",
+    "Once every number in the level has been played, the next level starts — everyone gets more numbers.",
+  ],
+  hy: [
+    "Ամեն ռաունդում բոլորը գաղտնի ստանում են իրենց թվերը — երբեք մի ցույց տվեք ձեր էկրանը մյուսներին։",
+    "Չի կարելի խոսել, հաշվել բարձրաձայն կամ ազդանշաններ տալ — միայն ինտուիցիա և ժամանակի զգացում։",
+    "Ով զգում է, որ իր մոտ մնացած ամենափոքր թիվն է, սեղմում է իր անունը էկրանին։",
+    "Եթե թիվը ամենափոքրը չի եղել, դա նվազեցնում է կյանք, բայց խաղը շարունակվում է։",
+    "Երբ մակարդակի բոլոր թվերը խաղացվեն, սկսվում է հաջորդ մակարդակը՝ ավելի շատ թվերով յուրաքանչյուրի մոտ։",
+  ],
+};
+
+const COUNTDOWN_RULES = {
+  ru: [
+    "Телефон по очереди выдаёт всей компании короткое живое задание — выполняйте его сообща.",
+    "У каждого задания есть ограничение по времени — таймер идёт на экране.",
+    "Компания сама решает, выполнено задание или нет, и нажимает «Успех» или «Провал».",
+    "Иногда вместо задания появляется новое правило — оно остаётся в силе до конца игры и складывается с предыдущими.",
+    "Ошибка или время, вышедшее без ответа, стоит жизни; когда жизни заканчиваются — игра окончена.",
+  ],
+  en: [
+    "The phone hands the whole group a short, live task in turn — do it together.",
+    "Every task has a time limit — the timer runs on screen.",
+    "The group itself decides whether the task was completed and taps \"Success\" or \"Fail\".",
+    "Sometimes a new rule appears instead of a task — it stays in effect for the rest of the game and stacks with earlier ones.",
+    "A failure, or running out of time without an answer, costs a life; the game ends when lives run out.",
+  ],
+  hy: [
+    "Հեռախոսը հերթով խաղին տալիս է կարճ, կենդանի առաջադրանք — կատարեք այն միասին։",
+    "Յուրաքանչյուր առաջադրանք ունի ժամանակային սահմանափակում — հաշվիչը աշխատում է էկրանին։",
+    "Ընկերությունն ինքն է որոշում՝ առաջադրանքը կատարվե՞լ է, թե ոչ, և սեղմում «Հաջողվեց» կամ «Ձախողվեց»։",
+    "Երբեմն առաջադրանքի փոխարեն հայտնվում է նոր կանոն — այն մնում է ուժի մեջ մինչև խաղի ավարտը և միանում է նախորդներին։",
+    "Ձախողումը կամ ժամանակի ավարտը՝ առանց պատասխանի, նվազեցնում է կյանք. խաղն ավարտվում է, երբ կյանքերը վերջանում են։",
   ],
 };
 
