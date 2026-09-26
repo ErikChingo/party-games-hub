@@ -923,6 +923,300 @@ function tg() {
 }
 
 /* ---------------------------------------------------------------- */
+/* Persistent player identity ("Удержание и вовлечение")             */
+/*                                                                    */
+/* Unlike STATS_KEY above (sessionStorage, one evening only), the      */
+/* features below -- leaderboards, achievements, daily streak -- need  */
+/* an id that survives real sessions. Inside the Telegram Mini App we   */
+/* use the real Telegram user id (stable forever, no setup needed);     */
+/* everywhere else there's no such thing, so a random id is generated   */
+/* once and kept in localStorage. Either way this id is written to the  */
+/* public.player_profiles table (see the migration) only through        */
+/* SECURITY DEFINER RPCs, never a raw upsert -- see recordWordlessScore  */
+/* etc. below.                                                          */
+/* ---------------------------------------------------------------- */
+const PLAYER_ID_KEY = "hatsit_player_id_v1";
+const PLAYER_NAME_KEY = "hatsit_player_name_v1";
+
+function generateAnonId() {
+  try {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") return window.crypto.randomUUID();
+  } catch (e) {}
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+function getPlayerId() {
+  try {
+    const telegram = tg();
+    const tgUser = telegram && telegram.initDataUnsafe && telegram.initDataUnsafe.user;
+    if (tgUser && tgUser.id) return "tg:" + tgUser.id;
+  } catch (e) {}
+  try {
+    let id = localStorage.getItem(PLAYER_ID_KEY);
+    if (!id) {
+      id = "anon:" + generateAnonId();
+      localStorage.setItem(PLAYER_ID_KEY, id);
+    }
+    return id;
+  } catch (e) {
+    return "anon:" + generateAnonId();
+  }
+}
+
+// The name shown on the leaderboard/profile. Inside Telegram this comes
+// straight from the account (no input needed); on a plain web visit it
+// falls back to whatever the player typed into the Profile panel, kept in
+// localStorage -- see setPlayerName().
+function getPlayerName() {
+  try {
+    const telegram = tg();
+    const tgUser = telegram && telegram.initDataUnsafe && telegram.initDataUnsafe.user;
+    if (tgUser) {
+      const full = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ").trim();
+      if (full) return full;
+      if (tgUser.username) return "@" + tgUser.username;
+    }
+  } catch (e) {}
+  try {
+    const saved = (localStorage.getItem(PLAYER_NAME_KEY) || "").trim();
+    if (saved) return saved;
+  } catch (e) {}
+  return null;
+}
+
+function isPlayerNameEditable() {
+  return !tg();
+}
+
+function setPlayerName(name) {
+  const trimmed = (name || "").trim().slice(0, 40);
+  try {
+    localStorage.setItem(PLAYER_NAME_KEY, trimmed);
+  } catch (e) {}
+  supabaseClient.rpc("set_display_name", { p_id: getPlayerId(), p_name: trimmed }).catch((e) => {
+    console.error("setPlayerName failed:", e);
+  });
+  return trimmed;
+}
+
+// Ratcheting score writes -- see record_wordless_score / record_countdown_score
+// in the migration: the server keeps whichever of (old, new) is higher, so
+// calling this after every single round, win or lose, is always safe.
+async function recordWordlessScore(level) {
+  try {
+    await supabaseClient.rpc("record_wordless_score", { p_id: getPlayerId(), p_name: getPlayerName(), p_level: level });
+  } catch (e) {
+    console.error("recordWordlessScore failed:", e);
+  }
+}
+async function recordCountdownScore(rounds) {
+  try {
+    await supabaseClient.rpc("record_countdown_score", { p_id: getPlayerId(), p_name: getPlayerName(), p_rounds: rounds });
+  } catch (e) {
+    console.error("recordCountdownScore failed:", e);
+  }
+}
+// Bunker/Court have no computed win condition (the host/judge ends them by
+// judgement call -- see the GO_HUB reducer comment), so unlike the two
+// functions above there's no "score" to ratchet: this just increments a
+// plain games-played counter. See useRecordGamePlayedOnStart() below for
+// where it's called from (once per room actually starting play).
+async function recordGamePlayed(game) {
+  try {
+    await supabaseClient.rpc("record_game_played", { p_id: getPlayerId(), p_name: getPlayerName(), p_game: game });
+  } catch (e) {
+    console.error("recordGamePlayed failed:", e);
+  }
+}
+// Fires recordGamePlayed(game) exactly when `status` transitions INTO
+// "playing" from something else -- not on every re-render while already
+// playing (Bunker/Court broadcast a state update on nearly every action).
+// Court can start a fresh case without leaving the room (status goes
+// "playing" -> "verdict" -> "playing" again via handleNewCase), and this
+// correctly counts each new case as its own played game, since the edge
+// re-arms itself once status leaves "playing".
+function useRecordGamePlayedOnStart(status, game) {
+  const prevRef = useRef(status);
+  useEffect(() => {
+    if (status === "playing" && prevRef.current !== "playing") {
+      recordGamePlayed(game);
+    }
+    prevRef.current = status;
+  }, [status, game]);
+}
+
+// Local mirror of the server's streak_current/streak_longest, cached so the
+// Hub can show the flame badge instantly without an extra round trip on
+// every open. pingDailyStreak() below is the only writer; it's always
+// followed by an update to this cache.
+const STREAK_CACHE_KEY = "hatsit_streak_cache_v1";
+function loadStreakCache() {
+  try {
+    const raw = localStorage.getItem(STREAK_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { current: parsed.current || 0, longest: parsed.longest || 0, pingedOn: parsed.pingedOn || null };
+    }
+  } catch (e) {}
+  return { current: 0, longest: 0, pingedOn: null };
+}
+function saveStreakCache(patch) {
+  const next = { ...loadStreakCache(), ...patch };
+  try {
+    localStorage.setItem(STREAK_CACHE_KEY, JSON.stringify(next));
+  } catch (e) {}
+  return next;
+}
+function todayDateString() {
+  // YYYY-MM-DD in the player's local timezone (not UTC), so "today" matches
+  // what the player actually perceives as today.
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+// Records "the player opened Hatsit today" toward the daily streak, at most
+// once per calendar day (the pingedOn guard below) so opening the Hub
+// repeatedly in one day doesn't spam the RPC. Safe to call unconditionally
+// on every Hub mount.
+async function pingDailyStreak() {
+  const today = todayDateString();
+  const cache = loadStreakCache();
+  if (cache.pingedOn === today) return cache;
+  try {
+    const { data, error } = await supabaseClient.rpc("record_daily_play", { p_id: getPlayerId(), p_name: getPlayerName() });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row) {
+      return saveStreakCache({ current: row.streak_current, longest: row.streak_longest, pingedOn: today });
+    }
+  } catch (e) {
+    console.error("pingDailyStreak failed:", e);
+  }
+  return cache;
+}
+
+async function fetchMyProfile() {
+  try {
+    const { data, error } = await supabaseClient.from("player_profiles").select("*").eq("id", getPlayerId()).maybeSingle();
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    console.error("fetchMyProfile failed:", e);
+    return null;
+  }
+}
+
+// Top N rows for one leaderboard column, plus (if the player isn't already
+// in that page) a cheap COUNT to work out their own rank.
+const LEADERBOARD_COLUMNS = {
+  wordless: "wordless_best",
+  countdown: "countdown_best",
+  bunker: "bunker_played",
+  court: "court_played",
+};
+// Drives both the ProfilePanel leaderboard tab grid and which column
+// fetchLeaderboard() above reads -- one list to keep in sync instead of two.
+const LEADERBOARD_TABS = [
+  { key: "wordless", labelKey: "leaderboard.wordlessTab" },
+  { key: "countdown", labelKey: "leaderboard.countdownTab" },
+  { key: "bunker", labelKey: "leaderboard.bunkerTab" },
+  { key: "court", labelKey: "leaderboard.courtTab" },
+];
+async function fetchLeaderboard(game, limit = 20) {
+  const column = LEADERBOARD_COLUMNS[game] || "wordless_best";
+  const rows = [];
+  try {
+    // Also fetches the three fields computeUnlockedAchievementIds() reads
+    // (wordless_best/countdown_best/streak_longest), even when they're not
+    // this tab's own column, so getPlayerTitle() can show every row's
+    // cosmetic nickname/color on the leaderboard -- not just the viewer's.
+    const { data, error } = await supabaseClient
+      .from("player_profiles")
+      .select(`id, display_name, wordless_best, countdown_best, streak_longest, ${column}`)
+      .gt(column, 0)
+      .order(column, { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    (data || []).forEach((r) =>
+      rows.push({
+        id: r.id,
+        name: r.display_name,
+        value: r[column],
+        wordless_best: r.wordless_best,
+        countdown_best: r.countdown_best,
+        streak_longest: r.streak_longest,
+      })
+    );
+  } catch (e) {
+    console.error("fetchLeaderboard failed:", e);
+  }
+
+  const myId = getPlayerId();
+  let myRank = null;
+  const myRowInPage = rows.find((r) => r.id === myId);
+  if (myRowInPage) {
+    myRank = rows.indexOf(myRowInPage) + 1;
+  } else {
+    try {
+      const mine = await fetchMyProfile();
+      const myValue = mine ? mine[column] || 0 : 0;
+      if (myValue > 0) {
+        const { count, error } = await supabaseClient
+          .from("player_profiles")
+          .select("id", { count: "exact", head: true })
+          .gt(column, myValue);
+        if (error) throw error;
+        myRank = (count || 0) + 1;
+      }
+    } catch (e) {
+      console.error("fetchLeaderboard rank lookup failed:", e);
+    }
+  }
+  return { rows, myId, myRank };
+}
+
+// computeUnlockedAchievementIds() and the ACHIEVEMENTS list it walks live
+// further down, right after the icon set they reference (Icon components
+// like IconFlame aren't defined yet at this point in the file).
+
+// Generic "tell someone about this result" share -- distinct from
+// shareRoomInvite() above (that one encodes a joinable room code; this one
+// is just bragging rights, no state to carry), but the same
+// Telegram-share-sheet -> Web Share API -> clipboard fallback chain.
+function shareAppResult(text, onCopied) {
+  const telegram = tg();
+  const appUrl = `https://t.me/${TELEGRAM_BOT_USERNAME}/${TELEGRAM_MINIAPP_SHORTNAME}`;
+  if (telegram) {
+    try {
+      if (typeof telegram.shareURL === "function") {
+        telegram.shareURL(appUrl, text);
+        return;
+      }
+      if (typeof telegram.openTelegramLink === "function") {
+        telegram.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(appUrl)}&text=${encodeURIComponent(text)}`);
+        return;
+      }
+    } catch (e) {}
+    try {
+      navigator.clipboard.writeText(text + " " + appUrl);
+      if (onCopied) onCopied();
+    } catch (e) {}
+    return;
+  }
+
+  const url = `${window.location.origin}${window.location.pathname}`;
+  if (navigator.share) {
+    navigator.share({ title: "Хатсит", text, url }).catch(() => {});
+  } else {
+    try {
+      navigator.clipboard.writeText(text + " " + url);
+      if (onCopied) onCopied();
+    } catch (e) {}
+  }
+}
+
+/* ---------------------------------------------------------------- */
 /* App settings — sound & vibration toggles, persisted on the device */
 /* (localStorage). A tiny pub/sub lets any component subscribe, while*/
 /* plain (non-React) helpers like the sound engine read the value    */
@@ -1852,6 +2146,62 @@ const I18N = {
   "stats.reset": { ru: "Сбросить статистику", en: "Reset stats", hy: "Զրոյացնել վիճակագրությունը" },
   "stats.resetConfirm": { ru: "Точно сбросить?", en: "Really reset?", hy: "Իսկապե՞ս զրոյացնել" },
 
+  // === Profile panel (persistent identity: best scores, streak, achievements) ===
+  "profile.title": { ru: "Профиль", en: "Profile", hy: "Պրոֆիլ" },
+  "profile.tab": { ru: "Профиль", en: "Profile", hy: "Պրոֆիլ" },
+  "profile.leaderboardTab": { ru: "Рейтинг", en: "Leaderboard", hy: "Վարկանիշ" },
+  "profile.namePlaceholder": { ru: "Ваше имя", en: "Your name", hy: "Ձեր անունը" },
+  "profile.nameSave": { ru: "Сохранить", en: "Save", hy: "Պահպանել" },
+  "profile.nameSaved": { ru: "Сохранено", en: "Saved", hy: "Պահպանված է" },
+  "profile.telegramNameHint": { ru: "Имя берётся из Telegram", en: "Your name comes from Telegram", hy: "Անունը վերցվում է Telegram-ից" },
+  "profile.wordlessBest": { ru: "Без слов — лучший уровень", en: "Wordless — best level", hy: "Անխոս — լավագույն մակարդակ" },
+  "profile.countdownBest": { ru: "Обратный отсчёт — раундов подряд", en: "Countdown — rounds survived", hy: "Հետհաշվարկ — անընդմեջ ռաունդներ" },
+  "profile.bunkerPlayed": { ru: "Бункер — сыграно партий", en: "Bunker — games played", hy: "Բունկեր — խաղացած խաղեր" },
+  "profile.courtPlayed": { ru: "Суд — сыграно партий", en: "Court — games played", hy: "Դատարան — խաղացած խաղեր" },
+  "profile.streakTitle": { ru: "Серия дней подряд", en: "Daily streak", hy: "Անընդմեջ օրերի շարք" },
+  "profile.streakCurrent": { ru: "Сейчас", en: "Current", hy: "Ընթացիկ" },
+  "profile.streakLongest": { ru: "Рекорд", en: "Best", hy: "Ռեկորդ" },
+  "profile.streakDays": { ru: "дн.", en: "days", hy: "օր" },
+  "profile.streakHint": { ru: "Заходите и играйте каждый день, чтобы не потерять серию", en: "Open the app and play every day to keep your streak alive", hy: "Մտեք և խաղացեք ամեն օր, որ շարքը չընդհատվի" },
+  "profile.achievementsTitle": { ru: "Достижения", en: "Achievements", hy: "Ձեռքբերումներ" },
+  "profile.noStatsYet": { ru: "Сыграйте в «Без слов», «Обратный отсчёт», Бункер или Суд, чтобы попасть в рейтинг.", en: "Play Wordless, Countdown, Bunker or Court to show up on the leaderboard.", hy: "Խաղացեք «Առանց խոսքերի», «Հետհաշվարկ», Բունկեր կամ Դատարան, որպեսզի հայտնվեք վարկանիշում։" },
+
+  // === Achievements ===
+  "achievements.firstSteps.title": { ru: "Первые шаги", en: "First steps", hy: "Առաջին քայլեր" },
+  "achievements.firstSteps.desc": { ru: "Сыграйте свою первую партию в «Без слов» или «Обратный отсчёт»", en: "Play your first round of Wordless or Countdown", hy: "Խաղացեք ձեր առաջին խաղը Անխոս կամ Հետհաշվարկ խաղում" },
+  "achievements.wordless5.title": { ru: "Пять уровней", en: "Five levels", hy: "Հինգ մակարդակ" },
+  "achievements.wordless5.desc": { ru: "Дойдите до 5 уровня в «Без слов»", en: "Reach level 5 in Wordless", hy: "Հասեք 5-րդ մակարդակին Անխոս խաղում" },
+  "achievements.wordless10.title": { ru: "Десять уровней", en: "Ten levels", hy: "Տասը մակարդակ" },
+  "achievements.wordless10.desc": { ru: "Дойдите до 10 уровня в «Без слов»", en: "Reach level 10 in Wordless", hy: "Հասեք 10-րդ մակարդակին Անխոս խաղում" },
+  "achievements.countdown5.title": { ru: "Пять раундов", en: "Five rounds", hy: "Հինգ ռաունդ" },
+  "achievements.countdown5.desc": { ru: "Продержитесь 5 раундов в Обратном отсчёте", en: "Survive 5 rounds in Countdown", hy: "Դիմացեք 5 ռաունդ Հետհաշվարկում" },
+  "achievements.countdown10.title": { ru: "Десять раундов", en: "Ten rounds", hy: "Տասը ռաունդ" },
+  "achievements.countdown10.desc": { ru: "Продержитесь 10 раундов в Обратном отсчёте", en: "Survive 10 rounds in Countdown", hy: "Դիմացեք 10 ռաունդ Հետհաշվարկում" },
+  "achievements.streak3.title": { ru: "Три дня подряд", en: "Three-day streak", hy: "Երեք օր անընդմեջ" },
+  "achievements.streak3.desc": { ru: "Заходите в приложение 3 дня подряд", en: "Open the app 3 days in a row", hy: "Մտեք հավելված 3 օր անընդմեջ" },
+  "achievements.streak7.title": { ru: "Неделя подряд", en: "One-week streak", hy: "Մեկ շաբաթ անընդմեջ" },
+  "achievements.streak7.desc": { ru: "Заходите в приложение 7 дней подряд", en: "Open the app 7 days in a row", hy: "Մտեք հավելված 7 օր անընդմեջ" },
+  "achievements.streak30.title": { ru: "Месяц подряд", en: "One-month streak", hy: "Մեկ ամիս անընդմեջ" },
+  "achievements.streak30.desc": { ru: "Заходите в приложение 30 дней подряд", en: "Open the app 30 days in a row", hy: "Մտեք հավելված 30 օր անընդմեջ" },
+
+  // === Leaderboard ===
+  "leaderboard.title": { ru: "Рейтинг игроков", en: "Leaderboard", hy: "Խաղացողների վարկանիշ" },
+  "leaderboard.wordlessTab": { ru: "Без слов", en: "Wordless", hy: "Անխոս" },
+  "leaderboard.countdownTab": { ru: "Обратный отсчёт", en: "Countdown", hy: "Հետհաշվարկ" },
+  "leaderboard.bunkerTab": { ru: "Бункер", en: "Bunker", hy: "Բունկեր" },
+  "leaderboard.courtTab": { ru: "Суд", en: "Court", hy: "Դատարան" },
+  "leaderboard.you": { ru: "Вы", en: "You", hy: "Դուք" },
+  "leaderboard.yourRank": { ru: "Ваше место: {n}", en: "Your rank: {n}", hy: "Ձեր տեղը՝ {n}" },
+  "leaderboard.empty": { ru: "Пока никто не попал в рейтинг — станьте первым!", en: "Nobody's on the board yet — be the first!", hy: "Դեռ ոչ ոք վարկանիշում չէ․ եղեք առաջինը:" },
+  "leaderboard.loading": { ru: "Загрузка…", en: "Loading…", hy: "Բեռնվում է…" },
+  "leaderboard.gamesUnit": { ru: "партий", en: "games", hy: "խաղ" },
+
+  // === Share result ===
+  "share.button": { ru: "Поделиться результатом", en: "Share result", hy: "Կիսվել արդյունքով" },
+  "share.wordlessText": { ru: "Я дошёл до {n} уровня в «Без слов» в Хатсит! Сможешь лучше?", en: "I reached level {n} in Wordless on Hatsit! Can you beat it?", hy: "Ես հասել եմ {n}-րդ մակարդակին Անխոս խաղում Հաթսիթում: Կկարողանա՞ս ավելի լավ:" },
+  "share.countdownText": { ru: "Я продержался {n} раундов в Обратном отсчёте в Хатсит! Сможешь лучше?", en: "I survived {n} rounds in Countdown on Hatsit! Can you beat it?", hy: "Ես դիմացել եմ {n} ռաունդ Հետհաշվարկում Հաթսիթում: Կկարողանա՞ս ավելի լավ:" },
+  "share.telephoneText": { ru: "Мы сыграли в Испорченный телефон в Хатсит — получилось очень смешно 😄", en: "We just played Broken Telephone on Hatsit — it got hilarious 😄", hy: "Մենք խաղացինք Փչացած հեռախոս Հաթսիթում․ շատ ծիծաղելի ստացվեց 😄" },
+
   // === Support chat widget ===
   "support.fabLabel": { ru: "Поддержка", en: "Support", hy: "Աջակցություն" },
   "support.title": { ru: "💬 Поддержка Хатсит", en: "💬 Hatsit support", hy: "💬 Հաթսիթի աջակցություն" },
@@ -2261,11 +2611,89 @@ const IconGlobe = (p) => <Ic {...p}><circle cx="12" cy="12" r="9" /><path d="M3 
 const IconPencil = (p) => <Ic {...p}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></Ic>;
 const IconUndo = (p) => <Ic {...p}><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></Ic>;
 const IconTrash = (p) => <Ic {...p}><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /></Ic>;
+// Added for the persistent Profile / leaderboard / streak feature --
+// IconUser for the Hub's new Profile button, IconFlame for the daily-streak
+// indicator, IconMedal for achievements (IconTrophy above stays the
+// leaderboard icon, so achievements get their own shape).
+const IconUser = (p) => <Ic {...p}><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.5-7 8-7s8 3 8 7" /></Ic>;
+const IconFlame = (p) => <Ic {...p}><path d="M12 2c1 3-2 4.5-2 7.5a3 3 0 0 0 6 0c1 1 2 2.5 2 4.5a6 6 0 0 1-12 0c0-4 3-5 3-8 0-1.5-.5-2.5 1-4Z" /></Ic>;
+const IconMedal = (p) => <Ic {...p}><circle cx="12" cy="15" r="6" /><path d="M9 3.5L11 10" /><path d="M15 3.5L13 10" /><path d="M12 12v6" /></Ic>;
 const IconList = (p) => <Ic {...p}><path d="M8.5 6h12" /><path d="M8.5 12h12" /><path d="M8.5 18h12" /><path d="M3.5 6h.01" /><path d="M3.5 12h.01" /><path d="M3.5 18h.01" /></Ic>;
 const IconVote = (p) => <Ic {...p}><rect x="4" y="10" width="16" height="10" rx="2" /><path d="M4 14h16" /><path d="M9 10V7a3 3 0 0 1 6 0v3" /><path d="M12 14v3" /></Ic>;
 const IconSettings = (p) => <Ic {...p}><path d="M4 6h10" /><circle cx="17" cy="6" r="2" /><path d="M20 12H10" /><circle cx="7" cy="12" r="2" /><path d="M4 18h10" /><circle cx="17" cy="18" r="2" /></Ic>;
 const IconVolume2 = (p) => <Ic {...p}><path d="M4 9v6h4l5 4V5L8 9H4Z" /><path d="M17 8a5 5 0 0 1 0 8" /><path d="M19.5 5.5a9 9 0 0 1 0 13" /></Ic>;
 const IconVolumeX = (p) => <Ic {...p}><path d="M4 9v6h4l5 4V5L8 9H4Z" /><path d="M17 9l5 6" /><path d="M22 9l-5 6" /></Ic>;
+
+/* ---------------------------------------------------------------- */
+/* Achievements -- badges unlocked purely as a function of the         */
+/* persisted player_profiles row (see getPlayerId()/recordWordlessScore */
+/* etc. above), so "unlocked" always matches wordless_best/              */
+/* countdown_best/streak_longest with nothing extra to store or get out */
+/* of sync server-side. Placed here (after every Icon it references) so  */
+/* the array literal below -- evaluated immediately at module load, not   */
+/* deferred like a function body -- never runs into a const-before-        */
+/* initialization error. Kept at module scope so computeUnlockedAchievementIds */
+/* is easy to unit-test standalone (see the dev notes for this feature). */
+/* ---------------------------------------------------------------- */
+const ACHIEVEMENTS = [
+  { id: "first_steps", Icon: IconMedal, titleKey: "achievements.firstSteps.title", descKey: "achievements.firstSteps.desc", check: (p) => (p.wordless_best || 0) > 0 || (p.countdown_best || 0) > 0 },
+  { id: "wordless_5", Icon: IconVolumeX, titleKey: "achievements.wordless5.title", descKey: "achievements.wordless5.desc", check: (p) => (p.wordless_best || 0) >= 5 },
+  { id: "wordless_10", Icon: IconVolumeX, titleKey: "achievements.wordless10.title", descKey: "achievements.wordless10.desc", check: (p) => (p.wordless_best || 0) >= 10 },
+  { id: "countdown_5", Icon: IconHourglass, titleKey: "achievements.countdown5.title", descKey: "achievements.countdown5.desc", check: (p) => (p.countdown_best || 0) >= 5 },
+  { id: "countdown_10", Icon: IconHourglass, titleKey: "achievements.countdown10.title", descKey: "achievements.countdown10.desc", check: (p) => (p.countdown_best || 0) >= 10 },
+  { id: "streak_3", Icon: IconFlame, titleKey: "achievements.streak3.title", descKey: "achievements.streak3.desc", check: (p) => (p.streak_longest || 0) >= 3 },
+  { id: "streak_7", Icon: IconFlame, titleKey: "achievements.streak7.title", descKey: "achievements.streak7.desc", check: (p) => (p.streak_longest || 0) >= 7 },
+  { id: "streak_30", Icon: IconFlame, titleKey: "achievements.streak30.title", descKey: "achievements.streak30.desc", check: (p) => (p.streak_longest || 0) >= 30 },
+];
+function computeUnlockedAchievementIds(profile) {
+  if (!profile) return [];
+  return ACHIEVEMENTS.filter((a) => {
+    try {
+      return !!a.check(profile);
+    } catch (e) {
+      return false;
+    }
+  }).map((a) => a.id);
+}
+
+/* ---------------------------------------------------------------- */
+/* Player titles ("ники") -- purely cosmetic reward for achievements:  */
+/* a colored nickname shown next to the player's name in the Profile   */
+/* panel and on leaderboard rows (their own AND other players', since   */
+/* seeing someone else's flashy title is part of what makes it worth    */
+/* chasing). One player has exactly one title at a time: the highest-   */
+/* ranked entry below whose achievement they've unlocked, most          */
+/* prestigious first. Colors are drawn straight from the app's existing */
+/* role/game palette (see :root above) so nothing new needs designing.  */
+/* ---------------------------------------------------------------- */
+const PLAYER_TITLES = [
+  { achievementId: "streak_30", color: "#f6cf72", label: { ru: "Бесконечный", en: "Eternal", hy: "Անվերջ" } },
+  { achievementId: "streak_7", color: "#4bb8ac", label: { ru: "Преданный", en: "Devoted", hy: "Նվիրված" } },
+  { achievementId: "wordless_10", color: "#a67ee8", label: { ru: "Мастер тишины", en: "Silence Master", hy: "Լռության վարպետ" } },
+  { achievementId: "countdown_10", color: "#e0954a", label: { ru: "Несгибаемый", en: "Unyielding", hy: "Անդրդվելի" } },
+  { achievementId: "streak_3", color: "#5ea8e6", label: { ru: "Постоянный", en: "Consistent", hy: "Հաստատուն" } },
+  { achievementId: "wordless_5", color: "#8dd44c", label: { ru: "Молчун", en: "Quiet One", hy: "Լռակյաց" } },
+  { achievementId: "countdown_5", color: "#d6598f", label: { ru: "Стойкий", en: "Steadfast", hy: "Կայուն" } },
+  { achievementId: "first_steps", color: "#e8b545", label: { ru: "Новичок", en: "Newcomer", hy: "Սկսնակ" } },
+];
+// Returns the { color, label } tier for the given profile row, or null if
+// nothing is unlocked yet. `profile` only needs the numeric fields
+// computeUnlockedAchievementIds() reads (wordless_best/countdown_best/
+// streak_longest) -- fetchLeaderboard() below fetches exactly those for
+// every row so every player's title can be shown, not just the viewer's.
+function getPlayerTitle(profile) {
+  if (!profile) return null;
+  const unlocked = new Set(computeUnlockedAchievementIds(profile));
+  for (const tier of PLAYER_TITLES) {
+    if (unlocked.has(tier.achievementId)) return tier;
+  }
+  return null;
+}
+// Lets the achievements grid tint each badge with the same color its
+// title uses, so unlocking one visibly previews the nickname color it
+// grants -- one lookup built once from PLAYER_TITLES rather than a second
+// hand-maintained color list.
+const ACHIEVEMENT_TITLE_COLOR = Object.fromEntries(PLAYER_TITLES.map((tr) => [tr.achievementId, tr.color]));
 const IconVibrate = (p) => <Ic {...p}><rect x="8" y="4" width="8" height="16" rx="2" /><path d="M2 9v6" /><path d="M22 9v6" /><path d="M5 7v10" /><path d="M19 7v10" /></Ic>;
 const IconBarChart = (p) => <Ic {...p}><path d="M3 21h18" /><rect x="5" y="12" width="4" height="9" rx="1" /><rect x="10.5" y="7" width="4" height="14" rx="1" /><rect x="16" y="3" width="4" height="18" rx="1" /></Ic>;
 
@@ -4122,6 +4550,315 @@ function StatsPanel({ onClose }) {
 }
 
 /* ---------------------------------------------------------------- */
+/* Persistent Profile / Leaderboard panel ("Удержание и вовлечение")  */
+/* Unlike StatsPanel above (this evening only, by player name), this   */
+/* one is keyed by the persistent player id (getPlayerId()) and reads  */
+/* from Supabase: best scores, daily streak, achievements, and the      */
+/* global top-N leaderboard for Wordless/Countdown. Opened from the     */
+/* same Hub header as Stats/Settings -- see the new Profile button in   */
+/* Hub() below.                                                         */
+/* ---------------------------------------------------------------- */
+function AchievementBadge({ achievement, unlocked, t }) {
+  const Icon = achievement.Icon;
+  // Tints the icon circle with the same color the matching title/nickname
+  // uses (see ACHIEVEMENT_TITLE_COLOR) -- a preview of the cosmetic color
+  // this badge grants, right on the badge itself.
+  const color = ACHIEVEMENT_TITLE_COLOR[achievement.id] || "var(--accent-strong)";
+  return (
+    <div
+      className={
+        "flex flex-col items-center text-center gap-2 rounded-2xl p-3 border transition-opacity " +
+        (unlocked ? "bg-[var(--surface-2)] border-[var(--border-strong)]" : "bg-[var(--surface)]/50 border-[var(--border)] opacity-40")
+      }
+    >
+      <div
+        className={"w-11 h-11 rounded-full flex items-center justify-center shrink-0" + (unlocked ? "" : " bg-[var(--surface-3)] text-[var(--text-faint)]")}
+        style={unlocked ? { background: color + "26", color } : undefined}
+      >
+        <Icon size={20} />
+      </div>
+      <div className="text-[11px] font-semibold leading-tight">{t(achievement.titleKey)}</div>
+      <div className="text-[10px] text-[var(--text-faint)] leading-tight">{t(achievement.descKey)}</div>
+    </div>
+  );
+}
+
+function LeaderboardList({ game, valueSuffix }) {
+  const t = useT();
+  const lang = useLang();
+  const [state, setState] = useState({ loading: true, rows: [], myId: null, myRank: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ loading: true, rows: [], myId: null, myRank: null });
+    fetchLeaderboard(game).then((res) => {
+      if (!cancelled) setState({ loading: false, ...res });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [game]);
+
+  if (state.loading) {
+    return <p className="text-sm text-[var(--text-dim)] text-center py-8">{t("leaderboard.loading")}</p>;
+  }
+  if (state.rows.length === 0) {
+    return <p className="text-sm text-[var(--text-dim)] text-center py-8">{t("leaderboard.empty")}</p>;
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      {state.myRank && !state.rows.some((r) => r.id === state.myId) && (
+        <p className="text-xs text-center text-[var(--text-faint)]">{t("leaderboard.yourRank").replace("{n}", state.myRank)}</p>
+      )}
+      <div className="flex flex-col gap-2">
+        {state.rows.map((r, i) => {
+          const isMe = r.id === state.myId;
+          const title = getPlayerTitle(r);
+          return (
+            <div
+              key={r.id}
+              className={
+                "flex items-center gap-3 rounded-xl px-3.5 py-2.5 " +
+                (isMe ? "bg-[var(--accent)]/10 border border-[var(--accent)]/40" : "bg-[var(--surface-2)]")
+              }
+            >
+              <span className="w-6 text-center text-xs font-mono text-[var(--text-faint)] shrink-0">{i + 1}</span>
+              <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                <ExpandableText
+                  as="span"
+                  className={"min-w-0 text-sm font-medium truncate" + (title ? ` text-[${title.color}]` : "")}
+                  text={r.name || t("common.player")}
+                  title={r.name || t("common.player")}
+                />
+                {title && (
+                  <span
+                    className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0"
+                    style={{ color: title.color, background: title.color + "26", border: `1px solid ${title.color}55` }}
+                  >
+                    {pickLang(title.label, lang)}
+                  </span>
+                )}
+              </div>
+              {isMe && <span className="text-[10px] uppercase tracking-wider text-[var(--accent-strong)] shrink-0">{t("leaderboard.you")}</span>}
+              <span className="text-sm font-mono text-[var(--text-dim)] shrink-0">
+                {r.value}
+                {valueSuffix ? ` ${valueSuffix}` : ""}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ProfilePanel({ onClose, initialTab }) {
+  const t = useT();
+  const lang = useLang();
+  const sheetRef = useRef(null);
+  useModalA11y(sheetRef, onClose);
+  const [tab, setTab] = useState(initialTab || "profile");
+  const [profile, setProfile] = useState(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [nameInput, setNameInput] = useState(() => getPlayerName() || "");
+  const [nameJustSaved, setNameJustSaved] = useState(false);
+  const [lbGame, setLbGame] = useState("wordless");
+  const nameEditable = isPlayerNameEditable();
+  const streakCache = loadStreakCache();
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchMyProfile().then((p) => {
+      if (!cancelled) {
+        setProfile(p);
+        setLoadingProfile(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function saveName() {
+    const saved = setPlayerName(nameInput);
+    setNameInput(saved);
+    setNameJustSaved(true);
+    setTimeout(() => setNameJustSaved(false), 1500);
+  }
+
+  const unlockedIds = new Set(computeUnlockedAchievementIds(profile || {}));
+  const wordlessBest = (profile && profile.wordless_best) || 0;
+  const countdownBest = (profile && profile.countdown_best) || 0;
+  const bunkerPlayed = (profile && profile.bunker_played) || 0;
+  const courtPlayed = (profile && profile.court_played) || 0;
+  const hasAnyStats = wordlessBest > 0 || countdownBest > 0 || bunkerPlayed > 0 || courtPlayed > 0;
+  const myTitle = getPlayerTitle(profile);
+
+  return (
+    <ModalPortal>
+      <div className="modal-overlay fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+        <div className="fixed inset-0 bg-black/60" />
+        <FadeIn className="relative w-full sheet-w">
+          <div
+            ref={sheetRef}
+            role="dialog"
+            aria-modal="true"
+            tabIndex={-1}
+            className="bg-[var(--surface)] border-t border-[var(--border-strong)] rounded-t-3xl px-5 pt-3 pb-8 w-full max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+            style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom, 0px))" }}
+          >
+            <div className="w-10 h-1.5 rounded-full bg-[var(--surface-3)] mx-auto mb-4" />
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-2xl">{tab === "profile" ? t("profile.title") : t("leaderboard.title")}</h2>
+              <button onClick={onClose} className="w-9 h-9 rounded-full flex items-center justify-center text-[var(--text-dim)] active:bg-[var(--surface-2)]" aria-label={t("common.close")}>
+                <IconX size={20} />
+              </button>
+            </div>
+
+            <div className="flex gap-1.5 mb-5 bg-[var(--surface-2)] rounded-2xl p-1">
+              <button
+                onClick={() => setTab("profile")}
+                className={"flex-1 py-2 rounded-xl text-sm font-medium transition-colors " + (tab === "profile" ? "bg-[var(--accent)] text-[var(--accent-ink)]" : "text-[var(--text-dim)]")}
+              >
+                {t("profile.tab")}
+              </button>
+              <button
+                onClick={() => setTab("leaderboard")}
+                className={"flex-1 py-2 rounded-xl text-sm font-medium transition-colors " + (tab === "leaderboard" ? "bg-[var(--accent)] text-[var(--accent-ink)]" : "text-[var(--text-dim)]")}
+              >
+                {t("profile.leaderboardTab")}
+              </button>
+            </div>
+
+            {tab === "profile" ? (
+              <div className="flex flex-col gap-5">
+                {myTitle && (
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="font-display text-lg" style={{ color: myTitle.color }}>
+                      {getPlayerName() || t("common.player")}
+                    </span>
+                    <span
+                      className="text-[10px] uppercase tracking-wider px-2 py-1 rounded-full"
+                      style={{ color: myTitle.color, background: myTitle.color + "26", border: `1px solid ${myTitle.color}55` }}
+                    >
+                      {pickLang(myTitle.label, lang)}
+                    </span>
+                  </div>
+                )}
+                {nameEditable ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={nameInput}
+                      onChange={(e) => setNameInput(e.target.value)}
+                      placeholder={t("profile.namePlaceholder")}
+                      maxLength={40}
+                      className="flex-1 min-w-0 bg-[var(--surface-2)] border border-[var(--border)] rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-[var(--accent)]/60"
+                    />
+                    <button
+                      onClick={saveName}
+                      className="shrink-0 px-4 rounded-xl bg-[var(--surface-2)] border border-[var(--border-strong)] text-sm font-medium active:scale-[0.98] transition-transform flex items-center gap-1.5"
+                    >
+                      {nameJustSaved ? <IconCheck size={16} /> : null}
+                      {nameJustSaved ? t("profile.nameSaved") : t("profile.nameSave")}
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-[var(--text-faint)] text-center">{t("profile.telegramNameHint")}</p>
+                )}
+
+                <div className="bg-[var(--surface-2)] rounded-2xl p-4 flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 text-[var(--danger)]" style={{ background: "var(--surface-3)" }}>
+                    <IconFlame size={22} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-1">{t("profile.streakTitle")}</div>
+                    <div className="flex items-baseline gap-3">
+                      <span className="font-display text-2xl leading-none">
+                        {streakCache.current} <span className="text-xs font-sans text-[var(--text-faint)]">{t("profile.streakDays")} · {t("profile.streakCurrent")}</span>
+                      </span>
+                    </div>
+                    <div className="text-xs text-[var(--text-faint)] mt-1">{t("profile.streakLongest")}: {streakCache.longest} {t("profile.streakDays")}</div>
+                  </div>
+                </div>
+
+                {!loadingProfile && !hasAnyStats ? (
+                  <p className="text-sm text-[var(--text-dim)] text-center py-2">{t("profile.noStatsYet")}</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-[var(--surface-2)] rounded-2xl p-4">
+                      <div className="text-[11px] uppercase tracking-wide text-[var(--text-faint)] mb-1.5">{t("profile.wordlessBest")}</div>
+                      <div className="font-display text-3xl leading-none" style={{ color: "var(--accent-strong)" }}>{wordlessBest}</div>
+                    </div>
+                    <div className="bg-[var(--surface-2)] rounded-2xl p-4">
+                      <div className="text-[11px] uppercase tracking-wide text-[var(--text-faint)] mb-1.5">{t("profile.countdownBest")}</div>
+                      <div className="font-display text-3xl leading-none" style={{ color: "var(--accent-strong)" }}>{countdownBest}</div>
+                    </div>
+                    <div className="bg-[var(--surface-2)] rounded-2xl p-4">
+                      <div className="text-[11px] uppercase tracking-wide text-[var(--text-faint)] mb-1.5">{t("profile.bunkerPlayed")}</div>
+                      <div className="font-display text-3xl leading-none" style={{ color: "var(--accent-strong)" }}>{bunkerPlayed}</div>
+                    </div>
+                    <div className="bg-[var(--surface-2)] rounded-2xl p-4">
+                      <div className="text-[11px] uppercase tracking-wide text-[var(--text-faint)] mb-1.5">{t("profile.courtPlayed")}</div>
+                      <div className="font-display text-3xl leading-none" style={{ color: "var(--accent-strong)" }}>{courtPlayed}</div>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2.5">{t("profile.achievementsTitle")}</div>
+                  <div className="grid grid-cols-3 gap-2.5">
+                    {ACHIEVEMENTS.map((a) => (
+                      <AchievementBadge key={a.id} achievement={a} unlocked={unlockedIds.has(a.id)} t={t} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <div className="grid grid-cols-2 gap-1.5 bg-[var(--surface-2)] rounded-2xl p-1">
+                  {LEADERBOARD_TABS.map((lb) => (
+                    <button
+                      key={lb.key}
+                      onClick={() => setLbGame(lb.key)}
+                      className={"py-2 rounded-xl text-xs font-medium transition-colors " + (lbGame === lb.key ? "bg-[var(--accent)] text-[var(--accent-ink)]" : "text-[var(--text-dim)]")}
+                    >
+                      {t(lb.labelKey)}
+                    </button>
+                  ))}
+                </div>
+                <LeaderboardList game={lbGame} valueSuffix={lbGame === "bunker" || lbGame === "court" ? t("leaderboard.gamesUnit") : undefined} />
+              </div>
+            )}
+          </div>
+        </FadeIn>
+      </div>
+    </ModalPortal>
+  );
+}
+
+// Small "tell someone about this result" button reused on the Wordless,
+// Countdown and Telephone end screens -- see shareAppResult() above.
+function ShareResultButton({ text }) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() =>
+        shareAppResult(text, () => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        })
+      }
+      className="w-full bg-[var(--surface)] border border-[var(--border)] text-[var(--text-dim)] font-display text-base tracking-wide py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+    >
+      <IconSend size={18} /> {copied ? t("common.copy") : t("share.button")}
+    </button>
+  );
+}
+
+/* ---------------------------------------------------------------- */
 /* Support: local FAQ bot + Discord webhook ticket + community link  */
 /* ---------------------------------------------------------------- */
 
@@ -4743,8 +5480,23 @@ function Hub({ state, dispatch }) {
   const t = useT();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [query, setQuery] = useState("");
   const { available: installAvailable, promptInstall } = useInstallPrompt();
+  const [streakCurrent, setStreakCurrent] = useState(() => loadStreakCache().current);
+
+  // Counts "opened Hatsit today" toward the daily streak -- see
+  // pingDailyStreak() (de-duped to once per calendar day, so this is safe to
+  // fire on every single Hub mount, e.g. every GO_HUB).
+  useEffect(() => {
+    let cancelled = false;
+    pingDailyStreak().then((cache) => {
+      if (!cancelled) setStreakCurrent(cache.current);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const games = GAMES.map((g) => ({
     id: g.id,
@@ -4764,14 +5516,31 @@ function Hub({ state, dispatch }) {
   return (
     <div className="h-full flex flex-col overflow-y-auto no-scrollbar px-5 pb-8" style={{ paddingTop: "2.75rem" }}>
       <header className="mb-9">
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <button
-            onClick={() => setStatsOpen(true)}
-            className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-[var(--text-faint)] active:bg-[var(--surface-2)]"
-            aria-label={t("stats.title")}
-          >
-            <IconBarChart size={20} />
-          </button>
+        <div className="flex items-center justify-between gap-1 mb-3">
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              onClick={() => setStatsOpen(true)}
+              className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-[var(--text-faint)] active:bg-[var(--surface-2)]"
+              aria-label={t("stats.title")}
+            >
+              <IconBarChart size={20} />
+            </button>
+            <button
+              onClick={() => setProfileOpen(true)}
+              className="relative w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-[var(--text-faint)] active:bg-[var(--surface-2)]"
+              aria-label={t("profile.title")}
+            >
+              <IconUser size={20} />
+              {streakCurrent > 0 && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-[var(--danger)] text-white text-[9px] font-bold font-mono flex items-center justify-center leading-none"
+                  aria-hidden="true"
+                >
+                  {streakCurrent}
+                </span>
+              )}
+            </button>
+          </div>
           <div className="min-w-0 flex-1 inline-flex items-center justify-center gap-2 text-[var(--text-faint)]">
             <IconUsers size={16} className="shrink-0" />
             <span className="text-xs uppercase tracking-[0.28em] truncate">{t("hub.eyebrow")}</span>
@@ -4849,6 +5618,7 @@ function Hub({ state, dispatch }) {
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
       {statsOpen && <StatsPanel onClose={() => setStatsOpen(false)} />}
+      {profileOpen && <ProfilePanel onClose={() => setProfileOpen(false)} />}
       {state.feedbackPending && <FeedbackPrompt gameId={state.feedbackPending} dispatch={dispatch} />}
     </div>
   );
@@ -5873,6 +6643,14 @@ function WordlessPlaying({ state, dispatch }) {
 function WordlessEnd({ state, dispatch }) {
   const t = useT();
   const { wordless } = state;
+
+  // Fire-and-forget: ratcheting write, safe even on a re-render/StrictMode
+  // double-invoke since record_wordless_score only ever raises the stored
+  // best, never lowers it.
+  useEffect(() => {
+    recordWordlessScore(wordless.level);
+  }, []);
+
   return (
     <div className="h-full flex flex-col px-6 pb-8" style={{ paddingTop: "3rem" }}>
       <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col items-center justify-center text-center">
@@ -5887,6 +6665,7 @@ function WordlessEnd({ state, dispatch }) {
       </div>
 
       <div className="flex flex-col gap-3 shrink-0">
+        <ShareResultButton text={t("share.wordlessText").replace("{n}", wordless.level)} />
         <button
           onClick={() => dispatch({ type: "WORDLESS_LAUNCH" })}
           className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
@@ -6097,6 +6876,11 @@ function CountdownEnd({ state, dispatch }) {
   const lang = useLang();
   const { countdown } = state;
   const roundsSurvived = Math.max(0, countdown.round - 1);
+
+  useEffect(() => {
+    recordCountdownScore(roundsSurvived);
+  }, []);
+
   return (
     <div className="h-full flex flex-col px-6 pb-8" style={{ paddingTop: "3rem" }}>
       <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col items-center text-center">
@@ -6122,6 +6906,7 @@ function CountdownEnd({ state, dispatch }) {
       </div>
 
       <div className="flex flex-col gap-3 shrink-0 mt-4">
+        <ShareResultButton text={t("share.countdownText").replace("{n}", roundsSurvived)} />
         <button
           onClick={() => dispatch({ type: "COUNTDOWN_LAUNCH" })}
           className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
@@ -6516,6 +7301,7 @@ function TelephoneEnd({ state, dispatch }) {
         ))}
       </div>
       <div className="flex flex-col gap-3 shrink-0 mt-4">
+        <ShareResultButton text={t("share.telephoneText")} />
         <button
           onClick={() => dispatch({ type: "TELEPHONE_LAUNCH" })}
           className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
@@ -8294,6 +9080,13 @@ function BunkerApp({ dispatch }) {
     },
   });
 
+  // Counts toward the persistent "Бункер — сыграно партий" leaderboard --
+  // see useRecordGamePlayedOnStart()'s doc comment above. Every device in
+  // the room (host and guests alike) independently notices its own
+  // room.status flip to "playing" via the realtime broadcast, so each
+  // participant is counted once, not just the host.
+  useRecordGamePlayedOnStart(room && room.status, "bunker");
+
   function handleStart() {
     const current = roomRef.current;
     if (!current || !current.players) return;
@@ -9672,6 +10465,12 @@ function CourtApp({ dispatch }) {
       defaultName: t("court.participant"),
     },
   });
+
+  // See the matching call in BunkerApp -- counts toward "Суд — сыграно
+  // партий". Court can start a fresh case without leaving the room
+  // (handleNewCase below flips status "playing" -> "verdict" -> "playing"
+  // again), and the edge-triggered hook correctly counts each new case.
+  useRecordGamePlayedOnStart(room && room.status, "court");
 
   function handleStart() {
     const current = roomRef.current;
