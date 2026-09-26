@@ -12,10 +12,22 @@
 // calls Babel Standalone already produced at runtime, so behavior is
 // unchanged) rather than pulling in Babel — TypeScript is an extremely
 // standard, widely-installed tool and this is a well-worn use of it.
+//
+// The compiled JS is then run through esbuild's minifier (below) before
+// being written to dist/ — it was previously shipped byte-for-byte as
+// TypeScript emits it (readable, full variable names, all comments kept),
+// which meant every visitor downloaded and parsed a much bigger script
+// than necessary on every first visit. That matters more than usual here:
+// this is a Telegram Mini App, opened on phones, often on slow mobile
+// connections, for a party game where the whole point is getting the
+// group playing quickly — extra load-time latency directly works against
+// that. Minifying only changes whitespace/names/dead code, not behavior,
+// so this is safe to add without touching the JSX source at all.
 
 const fs = require("fs");
 const path = require("path");
 const ts = require("typescript");
+const esbuild = require("esbuild");
 
 const ROOT = __dirname;
 const OUT_DIR = path.join(ROOT, "dist");
@@ -61,12 +73,34 @@ function compileJsx(jsxCode) {
   return result.outputText;
 }
 
+// Shrinks the already-compiled JS (whitespace, identifier names, dead
+// code) without changing what it does. Kept as its own step, separate
+// from compileJsx above, so a minification problem is easy to tell apart
+// from a JSX/TypeScript one — if this ever needs to be temporarily
+// disabled, the fix is to make this function return `code` unchanged.
+function minifyJs(code) {
+  const result = esbuild.transformSync(code, {
+    loader: "js",
+    target: "es2019",
+    minify: true,
+    // Without this, esbuild defaults to escaping every non-ASCII
+    // character as \uXXXX for safety on pages that don't declare an
+    // encoding -- which more than doubles the file size here, since the
+    // Russian/Armenian I18N dictionary is most of this script's text.
+    // index.html declares <meta charset="utf-8">, so real UTF-8 bytes are
+    // safe to keep as-is.
+    charset: "utf8",
+  });
+  return result.code;
+}
+
 function build() {
   const source = readSource();
   const { tagStart, tagEnd, jsxCode } = extractBabelScript(source);
   const compiled = compileJsx(jsxCode);
+  const minified = minifyJs(compiled);
 
-  let html = source.slice(0, tagStart) + "<script>" + compiled + "</script>" + source.slice(tagEnd);
+  let html = source.slice(0, tagStart) + "<script>" + minified + "</script>" + source.slice(tagEnd);
 
   // Babel Standalone's only job was transpiling the block above at
   // runtime — once that block is plain JS, loading the library is pure
@@ -90,7 +124,7 @@ function build() {
   }
 
   console.log(
-    `build.js: wrote dist/index.html — JSX source ${(jsxCode.length / 1024).toFixed(0)} KB -> compiled script ${(compiled.length / 1024).toFixed(0)} KB`
+    `build.js: wrote dist/index.html — JSX source ${(jsxCode.length / 1024).toFixed(0)} KB -> compiled ${(compiled.length / 1024).toFixed(0)} KB -> minified ${(minified.length / 1024).toFixed(0)} KB`
   );
 }
 
