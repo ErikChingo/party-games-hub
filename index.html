@@ -1207,7 +1207,8 @@ function shareAppResult(text, onCopied) {
 
   const url = `${window.location.origin}${window.location.pathname}`;
   if (navigator.share) {
-    navigator.share({ title: "Хатсит", text, url }).catch(() => {});
+    const shareLang = HATSIT_LANGS.includes(hatsitSettings.language) ? hatsitSettings.language : "ru";
+    navigator.share({ title: t_lookup("brand.name", shareLang), text, url }).catch(() => {});
   } else {
     try {
       navigator.clipboard.writeText(text + " " + url);
@@ -1712,6 +1713,15 @@ const I18N = {
   "common.player": { ru: "Игрок", en: "Player", hy: "Խաղացող" },
   "common.minutes": { ru: "мин", en: "min", hy: "րոպե" },
   "common.sending": { ru: "Отправка…", en: "Sending…", hy: "Ուղարկվում է…" },
+  "common.fullText": { ru: "Текст полностью", en: "Full text", hy: "Ամբողջական տեքստ" },
+  "brand.name": { ru: "Хатсит", en: "Hatsit", hy: "Հաթսիթ" },
+  "blind.passPhone": { ru: "Передай телефон", en: "Pass the phone", hy: "Հեռախոսը փոխանցիր" },
+  "blind.hideWarning": { ru: "Убедись, что остальные не видят экран, прежде чем нажать кнопку", en: "Make sure no one else can see the screen before you tap the button", hy: "Համոզվիր, որ մյուսները չեն տեսնում էկրանը, նախքան կոճակը սեղմելը" },
+  "blind.showRole": { ru: "Показать роль", en: "Show role", hy: "Ցույց տալ դերը" },
+  "update.available": { ru: "Доступна новая версия {brand}", en: "A new version of {brand} is available", hy: "Հասանելի է {brand}-ի նոր տարբերակը" },
+  "update.button": { ru: "Обновить", en: "Update", hy: "Թարմացնել" },
+  "invite.roomText": { ru: "Присоединяйся к комнате в «{game}» в {brand}! Код: {code}", en: "Join the room in \"{game}\" on {brand}! Code: {code}", hy: "Միացիր «{game}» սենյակին {brand}-ում! Կոդ՝ {code}" },
+  "invite.shareTitle": { ru: "{brand} — приглашение", en: "{brand} — invite", hy: "{brand} — հրավեր" },
   "meta.title": { ru: "Хатсит — игры для компании", en: "Hatsit — party games", hy: "Հաթսիթ — խաղեր ընկերության համար" },
 
   // === Post-game feedback prompt (Hub) ===
@@ -2298,7 +2308,8 @@ function useStats() {
 function recordSpyRound(names, spyIndexes) {
   const stats = loadStats();
   names.forEach((rawName, i) => {
-    const name = (rawName || `Игрок ${i + 1}`).trim() || `Игрок ${i + 1}`;
+    const fallback = `${t_lookup("common.player", currentLangForDefaults())} ${i + 1}`;
+    const name = (rawName || fallback).trim() || fallback;
     const entry = stats.spy[name] || { rounds: 0, timesSpy: 0 };
     entry.rounds += 1;
     if (spyIndexes.includes(i)) entry.timesSpy += 1;
@@ -2312,7 +2323,8 @@ function recordSpyRound(names, spyIndexes) {
 function recordMafiaGame(names, roles, winner) {
   const stats = loadStats();
   names.forEach((rawName, i) => {
-    const name = (rawName || `Игрок ${i + 1}`).trim() || `Игрок ${i + 1}`;
+    const fallback = `${t_lookup("common.player", currentLangForDefaults())} ${i + 1}`;
+    const name = (rawName || fallback).trim() || fallback;
     const role = roles[i];
     const won =
       winner === "mafia"
@@ -2938,8 +2950,17 @@ const COUNTDOWN_RULE_INTERVAL = 3;
 const MIN_TELEPHONE_PLAYERS = 3, MAX_TELEPHONE_PLAYERS = 6;
 const MIN_TELEPHONE_SECONDS = 30, MAX_TELEPHONE_SECONDS = 90, TELEPHONE_SECONDS_STEP = 15;
 
-const defaultNames = (n) => Array.from({ length: n }, (_, i) => `Игрок ${i + 1}`);
-const defaultTeamNames = (n) => Array.from({ length: n }, (_, i) => `Команда ${i + 1}`);
+function currentLangForDefaults() {
+  return HATSIT_LANGS.includes(hatsitSettings.language) ? hatsitSettings.language : "ru";
+}
+const defaultNames = (n) => {
+  const label = t_lookup("common.player", currentLangForDefaults());
+  return Array.from({ length: n }, (_, i) => `${label} ${i + 1}`);
+};
+const defaultTeamNames = (n) => {
+  const label = t_lookup("common.team", currentLangForDefaults());
+  return Array.from({ length: n }, (_, i) => `${label} ${i + 1}`);
+};
 
 const initialMafiaState = {
   roles: [],
@@ -3152,13 +3173,15 @@ function mergeWithDefaults(saved) {
 
 function resizeNames(names, n) {
   const next = names.slice(0, n);
-  for (let i = next.length; i < n; i++) next.push(`Игрок ${i + 1}`);
+  const label = t_lookup("common.player", currentLangForDefaults());
+  for (let i = next.length; i < n; i++) next.push(`${label} ${i + 1}`);
   return next;
 }
 
 function resizeTeams(names, n) {
   const next = names.slice(0, n);
-  for (let i = next.length; i < n; i++) next.push(`Команда ${i + 1}`);
+  const label = t_lookup("common.team", currentLangForDefaults());
+  for (let i = next.length; i < n; i++) next.push(`${label} ${i + 1}`);
   return next;
 }
 
@@ -4127,6 +4150,7 @@ function TextSheet({ title, text, onClose }) {
   // Rendered via a portal straight onto <body> — see the comment on
   // ModalPortal below for why every "fixed inset-0" overlay in this app
   // needs this instead of just returning the markup in place.
+  const t = useT();
   const sheetRef = useRef(null);
   useModalA11y(sheetRef, onClose);
   return (
@@ -4145,11 +4169,11 @@ function TextSheet({ title, text, onClose }) {
           >
             <div className="w-10 h-1.5 rounded-full bg-[var(--surface-3)] mx-auto mb-4" />
             <div className="flex items-center justify-between gap-3 mb-4">
-              <h2 className="font-display text-xl truncate">{title || "Текст полностью"}</h2>
+              <h2 className="font-display text-xl truncate">{title || t("common.fullText")}</h2>
               <button
                 onClick={onClose}
                 className="w-9 h-9 rounded-full flex items-center justify-center text-[var(--text-dim)] active:bg-[var(--surface-2)] shrink-0"
-                aria-label="Закрыть"
+                aria-label={t("common.close")}
               >
                 <IconX size={20} />
               </button>
@@ -4208,6 +4232,7 @@ function ExpandableText({ text, className, title, as }) {
 }
 
 function Stepper({ label, value, min, max, step = 1, onChange, suffix }) {
+  const t = useT();
   return (
     <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-5 py-4">
       <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-3">{label}</div>
@@ -4216,7 +4241,7 @@ function Stepper({ label, value, min, max, step = 1, onChange, suffix }) {
           onClick={() => onChange(value - step)}
           disabled={value <= min}
           className="w-12 h-12 rounded-full border border-[var(--border-strong)] flex items-center justify-center text-[var(--text)] disabled:opacity-25 active:bg-[var(--surface-2)] shrink-0"
-          aria-label="Меньше"
+          aria-label={t("common.less")}
         >
           <IconMinus size={20} />
         </button>
@@ -4228,7 +4253,7 @@ function Stepper({ label, value, min, max, step = 1, onChange, suffix }) {
           onClick={() => onChange(value + step)}
           disabled={value >= max}
           className="w-12 h-12 rounded-full border border-[var(--border-strong)] flex items-center justify-center text-[var(--text)] disabled:opacity-25 active:bg-[var(--surface-2)] shrink-0"
-          aria-label="Больше"
+          aria-label={t("common.more")}
         >
           <IconPlus size={20} />
         </button>
@@ -4241,6 +4266,7 @@ function Stepper({ label, value, min, max, step = 1, onChange, suffix }) {
 /* Blind Screen — the universal "pass the phone" component           */
 /* ---------------------------------------------------------------- */
 function BlindScreen({ playerName, index, total, onContinue, onAbort, renderRole, continueLabel }) {
+  const t = useT();
   const [revealed, setRevealed] = useState(false);
 
   return (
@@ -4258,8 +4284,8 @@ function BlindScreen({ playerName, index, total, onContinue, onAbort, renderRole
           ))}
         </div>
         <ConfirmButton
-          label="Завершить"
-          confirmLabel="Точно?"
+          label={t("common.finish")}
+          confirmLabel={t("common.confirm")}
           onConfirm={onAbort}
           className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1"
         />
@@ -4271,16 +4297,16 @@ function BlindScreen({ playerName, index, total, onContinue, onAbort, renderRole
             <div className="w-20 h-20 rounded-full bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center mb-6 text-[var(--text-faint)]">
               <IconEyeOff size={30} />
             </div>
-            <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-faint)] mb-2">Передай телефон</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-faint)] mb-2">{t("blind.passPhone")}</p>
             <h2 className="font-display text-6xl leading-none mb-4">{playerName}</h2>
             <p className="text-sm text-[var(--text-dim)] max-w-[28ch] mb-10">
-              Убедись, что остальные не видят экран, прежде чем нажать кнопку
+              {t("blind.hideWarning")}
             </p>
             <button
               onClick={() => setRevealed(true)}
               className="w-full max-w-xs bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
             >
-              <IconEye size={22} /> Показать роль
+              <IconEye size={22} /> {t("blind.showRole")}
             </button>
           </div>
         ) : (
@@ -4293,7 +4319,7 @@ function BlindScreen({ playerName, index, total, onContinue, onAbort, renderRole
               }}
               className="mt-10 w-full max-w-xs bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
             >
-              <IconEyeOff size={22} /> {continueLabel || "Скрыть и передать"}
+              <IconEyeOff size={22} /> {continueLabel || t("spy.continueHide")}
             </button>
           </div>
         )}
@@ -4889,7 +4915,11 @@ function getSupportQuickChips(t) {
 // hand. Uses the Web Share API where available (native share sheet on
 // phones), falling back to just copying the link to the clipboard.
 function shareRoomInvite(code, game, gameLabel, onCopied) {
-  const text = `Присоединяйся к комнате в «${gameLabel}» в Хатсит! Код: ${code}`;
+  const inviteLang = HATSIT_LANGS.includes(hatsitSettings.language) ? hatsitSettings.language : "ru";
+  const text = t_lookup("invite.roomText", inviteLang)
+    .replace("{game}", gameLabel)
+    .replace("{brand}", t_lookup("brand.name", inviteLang))
+    .replace("{code}", code);
   const telegram = tg();
 
   if (telegram) {
@@ -4921,7 +4951,7 @@ function shareRoomInvite(code, game, gameLabel, onCopied) {
 
   const url = `${window.location.origin}${window.location.pathname}?room=${code}&game=${game}`;
   if (navigator.share) {
-    navigator.share({ title: "Хатсит — приглашение", text, url }).catch(() => {});
+    navigator.share({ title: t_lookup("invite.shareTitle", inviteLang).replace("{brand}", t_lookup("brand.name", inviteLang)), text, url }).catch(() => {});
   } else {
     try {
       navigator.clipboard.writeText(url);
@@ -5553,7 +5583,7 @@ function Hub({ state, dispatch }) {
             <IconSettings size={20} />
           </button>
         </div>
-        <h1 className="font-display text-7xl leading-none text-center">ХАТСИТ</h1>
+        <h1 className="font-display text-7xl leading-none text-center">{t("brand.name").toUpperCase()}</h1>
         <p className="text-[var(--text-dim)] mt-3 text-sm text-center">{t("hub.subtitle")}</p>
       </header>
 
@@ -9471,6 +9501,7 @@ function RulesCard({ title, color, rules }) {
 // Portal-based for the same reason as every other "fixed inset-0" overlay
 // in this file — see the comment on ModalPortal.
 function RulesSheet({ open, onClose, title, color, rules }) {
+  const t = useT();
   const sheetRef = useRef(null);
   useModalA11y(sheetRef, onClose, open);
   if (!open) return null;
@@ -9496,7 +9527,7 @@ function RulesSheet({ open, onClose, title, color, rules }) {
               <button
                 onClick={onClose}
                 className="w-9 h-9 rounded-full flex items-center justify-center text-[var(--text-dim)] active:bg-[var(--surface-2)] shrink-0"
-                aria-label="Закрыть"
+                aria-label={t("common.close")}
               >
                 <IconX size={20} />
               </button>
@@ -10708,6 +10739,7 @@ function App() {
 // only listens for the resulting "controllerchange" and nudges the
 // browser to check for updates more often than it would on its own.
 function AppUpdateBanner() {
+  const t = useT();
   const [updateAvailable, setUpdateAvailable] = useState(false);
 
   useEffect(() => {
@@ -10747,13 +10779,13 @@ function AppUpdateBanner() {
     >
       <div className="flex items-center gap-3 bg-[var(--surface)] border border-[var(--border-strong)] rounded-2xl px-4 py-3 sheet-w w-full" style={{ boxShadow: "0 8px 30px rgba(0,0,0,.35)" }}>
         <IconRefresh size={18} className="shrink-0 text-[#c084fc]" />
-        <p className="text-sm flex-1">Доступна новая версия Хатсит</p>
+        <p className="text-sm flex-1">{t("update.available").replace("{brand}", t("brand.name"))}</p>
         <button
           onClick={() => window.location.reload()}
           className="text-sm font-medium px-3.5 py-1.5 rounded-full text-white shrink-0 touch-manipulation active:scale-95 transition-transform"
           style={{ background: "linear-gradient(135deg, #a855f7, #7c3aed)" }}
         >
-          Обновить
+          {t("update.button")}
         </button>
       </div>
     </div>
