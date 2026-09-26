@@ -2193,6 +2193,7 @@ const I18N = {
   "achievements.streak7.desc": { ru: "Заходите в приложение 7 дней подряд", en: "Open the app 7 days in a row", hy: "Մտեք հավելված 7 օր անընդմեջ" },
   "achievements.streak30.title": { ru: "Месяц подряд", en: "One-month streak", hy: "Մեկ ամիս անընդմեջ" },
   "achievements.streak30.desc": { ru: "Заходите в приложение 30 дней подряд", en: "Open the app 30 days in a row", hy: "Մտեք հավելված 30 օր անընդմեջ" },
+  "achievements.unlockedToast": { ru: "Новое достижение", en: "New achievement", hy: "Նոր նվաճում" },
 
   // === Leaderboard ===
   "leaderboard.title": { ru: "Рейтинг игроков", en: "Leaderboard", hy: "Խաղացողների վարկանիշ" },
@@ -2706,6 +2707,54 @@ function getPlayerTitle(profile) {
 // grants -- one lookup built once from PLAYER_TITLES rather than a second
 // hand-maintained color list.
 const ACHIEVEMENT_TITLE_COLOR = Object.fromEntries(PLAYER_TITLES.map((tr) => [tr.achievementId, tr.color]));
+
+// Before this, a newly-crossed achievement only ever showed up quietly
+// next time someone happened to open the Profile panel -- the "oh, I got
+// something!" moment right after the game, which is most of the point of
+// having achievements at all, was silently lost. This tracks (per device,
+// in localStorage) which achievement ids have already been celebrated, so
+// WordlessEnd/CountdownEnd can pop a toast for exactly the ones that are
+// new since last time and never repeat one.
+const ACHIEVEMENTS_SEEN_KEY = "hatsit_achievements_seen_v1";
+function loadSeenAchievementIds() {
+  try {
+    const raw = localStorage.getItem(ACHIEVEMENTS_SEEN_KEY);
+    if (raw === null) return null; // never initialized on this device
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch (e) {
+    return null;
+  }
+}
+function saveSeenAchievementIds(idsSet) {
+  try {
+    localStorage.setItem(ACHIEVEMENTS_SEEN_KEY, JSON.stringify(Array.from(idsSet)));
+  } catch (e) {}
+}
+// Compares a freshly-fetched profile's unlocked achievements against the
+// seen-set and returns the ACHIEVEMENTS entries that are newly crossed
+// (never celebrated on this device before), updating the seen-set so each
+// is only ever shown once. On the very first call ever made on a device
+// (no seen-set stored yet -- e.g. right after this feature ships to an
+// existing player who already has achievements unlocked), everything
+// already unlocked is adopted silently instead of reported as "new", so
+// shipping this doesn't flood existing players with toasts for
+// achievements they actually earned long ago.
+function detectNewlyUnlockedAchievements(profile) {
+  const unlockedNow = computeUnlockedAchievementIds(profile);
+  const seen = loadSeenAchievementIds();
+  if (seen === null) {
+    saveSeenAchievementIds(new Set(unlockedNow));
+    return [];
+  }
+  const freshIds = unlockedNow.filter((id) => !seen.has(id));
+  if (freshIds.length > 0) {
+    const next = new Set(seen);
+    unlockedNow.forEach((id) => next.add(id));
+    saveSeenAchievementIds(next);
+  }
+  return freshIds.map((id) => ACHIEVEMENTS.find((a) => a.id === id)).filter(Boolean);
+}
 const IconVibrate = (p) => <Ic {...p}><rect x="8" y="4" width="8" height="16" rx="2" /><path d="M2 9v6" /><path d="M22 9v6" /><path d="M5 7v10" /><path d="M19 7v10" /></Ic>;
 const IconBarChart = (p) => <Ic {...p}><path d="M3 21h18" /><rect x="5" y="12" width="4" height="9" rx="1" /><rect x="10.5" y="7" width="4" height="14" rx="1" /><rect x="16" y="3" width="4" height="18" rx="1" /></Ic>;
 
@@ -4606,6 +4655,54 @@ function AchievementBadge({ achievement, unlocked, t }) {
       <div className="text-[11px] font-semibold leading-tight">{t(achievement.titleKey)}</div>
       <div className="text-[10px] text-[var(--text-faint)] leading-tight">{t(achievement.descKey)}</div>
     </div>
+  );
+}
+
+// Celebratory toast for the instant an achievement is newly unlocked --
+// see detectNewlyUnlockedAchievements above for how "newly" is decided.
+// Rendered through ModalPortal like every other "position: fixed" overlay
+// in this file (see the comment on ModalPortal itself): the screens this
+// shows on top of are wrapped in a transformed FadeIn, which would
+// otherwise silently break `position: fixed` positioning. Auto-dismisses
+// on its own; the caller (WordlessEnd/CountdownEnd) advances to the next
+// queued achievement, if any, in onDone.
+function AchievementUnlockToast({ achievement, onDone }) {
+  const t = useT();
+  const lang = useLang();
+  useEffect(() => {
+    const timer = setTimeout(onDone, 3200);
+    return () => clearTimeout(timer);
+  }, [onDone]);
+  const Icon = achievement.Icon;
+  const color = ACHIEVEMENT_TITLE_COLOR[achievement.id] || "var(--accent-strong)";
+  const tier = PLAYER_TITLES.find((tr) => tr.achievementId === achievement.id);
+  return (
+    <ModalPortal>
+      <div
+        role="status"
+        className="pop fixed left-1/2 -translate-x-1/2 z-[70] w-[calc(100%-2rem)] max-w-sm flex items-center gap-3 bg-[var(--surface)] border border-[var(--border-strong)] rounded-2xl px-4 py-3"
+        style={{ top: "calc(env(safe-area-inset-top, 0px) + 16px)", boxShadow: "0 8px 30px rgba(0,0,0,.35)" }}
+      >
+        <div
+          className="w-11 h-11 rounded-full flex items-center justify-center shrink-0"
+          style={{ background: color + "26", color }}
+        >
+          <Icon size={22} />
+        </div>
+        <div className="min-w-0">
+          <div className="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">{t("achievements.unlockedToast")}</div>
+          <div className="text-sm font-semibold truncate">{t(achievement.titleKey)}</div>
+          {tier && (
+            <span
+              className="inline-block mt-1 text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+              style={{ color: tier.color, background: tier.color + "26", border: `1px solid ${tier.color}55` }}
+            >
+              {pickLang(tier.label, lang)}
+            </span>
+          )}
+        </div>
+      </div>
+    </ModalPortal>
   );
 }
 
@@ -6673,16 +6770,36 @@ function WordlessPlaying({ state, dispatch }) {
 function WordlessEnd({ state, dispatch }) {
   const t = useT();
   const { wordless } = state;
+  const [newAchievements, setNewAchievements] = useState([]);
 
-  // Fire-and-forget: ratcheting write, safe even on a re-render/StrictMode
-  // double-invoke since record_wordless_score only ever raises the stored
-  // best, never lowers it.
+  // Ratcheting write, safe even on a re-render/StrictMode double-invoke
+  // since record_wordless_score only ever raises the stored best, never
+  // lowers it. Once it's written, re-fetch the profile and check whether
+  // that pushed any achievement over its threshold for the first time --
+  // see detectNewlyUnlockedAchievements for why this is the right moment
+  // to check (not e.g. on every render).
   useEffect(() => {
-    recordWordlessScore(wordless.level);
+    let cancelled = false;
+    (async () => {
+      await recordWordlessScore(wordless.level);
+      const profile = await fetchMyProfile();
+      if (cancelled) return;
+      const fresh = detectNewlyUnlockedAchievements(profile);
+      if (fresh.length > 0) setNewAchievements(fresh);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
     <div className="h-full flex flex-col px-6 pb-8" style={{ paddingTop: "3rem" }}>
+      {newAchievements.length > 0 && (
+        <AchievementUnlockToast
+          achievement={newAchievements[0]}
+          onDone={() => setNewAchievements((prev) => prev.slice(1))}
+        />
+      )}
       <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col items-center justify-center text-center">
         <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] flex items-center justify-center mb-6 text-[var(--danger)]">
           <IconHeart size={30} />
@@ -6906,13 +7023,33 @@ function CountdownEnd({ state, dispatch }) {
   const lang = useLang();
   const { countdown } = state;
   const roundsSurvived = Math.max(0, countdown.round - 1);
+  const [newAchievements, setNewAchievements] = useState([]);
 
+  // Same pattern as WordlessEnd: write the ratcheting score, then check
+  // whether the profile that comes back just crossed a fresh achievement
+  // threshold -- see detectNewlyUnlockedAchievements.
   useEffect(() => {
-    recordCountdownScore(roundsSurvived);
+    let cancelled = false;
+    (async () => {
+      await recordCountdownScore(roundsSurvived);
+      const profile = await fetchMyProfile();
+      if (cancelled) return;
+      const fresh = detectNewlyUnlockedAchievements(profile);
+      if (fresh.length > 0) setNewAchievements(fresh);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
     <div className="h-full flex flex-col px-6 pb-8" style={{ paddingTop: "3rem" }}>
+      {newAchievements.length > 0 && (
+        <AchievementUnlockToast
+          achievement={newAchievements[0]}
+          onDone={() => setNewAchievements((prev) => prev.slice(1))}
+        />
+      )}
       <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col items-center text-center">
         <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] flex items-center justify-center mb-6 text-[var(--danger)] shrink-0">
           <IconHeart size={30} />
