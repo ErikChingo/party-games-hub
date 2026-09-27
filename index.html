@@ -1207,9 +1207,30 @@ function setPlayerName(name) {
   try {
     localStorage.setItem(PLAYER_NAME_KEY, trimmed);
   } catch (e) {}
-  supabaseClient.rpc("set_display_name", { p_id: getPlayerId(), p_name: trimmed }).catch((e) => {
+  // Fire-and-forget: must never throw synchronously, or it aborts the
+  // caller (saveName() in ProfilePanel) mid-function, before it reaches
+  // its own setNameInput/setNameJustSaved calls -- which is exactly what
+  // happened live (27 сентября, по репорту "ник не меняется без
+  // обновления страницы"): supabase-js is loaded unpinned from a CDN
+  // (@supabase/supabase-js@2), and on some deployed minor/patch version
+  // .rpc(...) stopped returning something with a .catch method, so this
+  // line threw "...catch is not a function" *synchronously*, right after
+  // localStorage had already been updated -- the save silently "worked"
+  // (localStorage/DB correct) but the visible name+title in the panel
+  // never re-rendered until a full reload re-read localStorage from
+  // scratch. Wrapping in try/catch, and tolerating a return value that
+  // isn't a real promise, makes this resilient to that regardless of
+  // which supabase-js version the CDN happens to serve.
+  try {
+    const req = supabaseClient.rpc("set_display_name", { p_id: getPlayerId(), p_name: trimmed });
+    if (req && typeof req.catch === "function") {
+      req.catch((e) => console.error("setPlayerName failed:", e));
+    } else if (req && typeof req.then === "function") {
+      req.then(undefined, (e) => console.error("setPlayerName failed:", e));
+    }
+  } catch (e) {
     console.error("setPlayerName failed:", e);
-  });
+  }
   return trimmed;
 }
 
