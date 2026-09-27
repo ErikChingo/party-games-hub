@@ -1035,16 +1035,153 @@ function isPlayerNameEditable() {
   return !tgUser;
 }
 
-// Basic content moderation for display names ("Удержание и вовлечение",
-// четвёртый заход) -- mirrors moderate_display_name() added to the
-// Supabase RPCs in this same pass. The server is the real gate (these
-// RPCs are callable directly, bypassing the client entirely), so this
-// copy exists only so the Profile panel can reject an obviously bad name
-// immediately instead of showing a false "saved" confirmation for
-// something the server would silently drop anyway. Deliberately basic --
-// see the SQL function's comment for the same "not a complete filter"
-// caveat -- and deliberately kept in sync by hand with that function,
-// same reasoning as api/ai-chat.js's SYSTEM_PROMPT comment.
+// Content moderation word lists for display names ("Удержание и
+// вовлечение", седьмой заход -- пользователь попросил покрыть "все слова
+// на английском и на русском", а не точечно затыкать дыры). Mirrors
+// moderate_display_name() in the Supabase migration byte-for-byte; both
+// were generated from the same source lists so they can't drift apart.
+//
+// RU_PROFANITY_ROOTS are ROOTS, not whole words: Russian profanity ("mat")
+// is a small set of roots that combine productively with prefixes/suffixes
+// (на-, вы-, за-, -ать, -ота, -ина...), so matching whole words would miss
+// most real inflected forms. Roots are checked as plain substrings.
+//
+// RU_PROFANITY_EXCEPTIONS are real, common, completely innocent words that
+// happen to contain one of those roots (e.g. "барсук" contains "сук",
+// "оскорблять" contains "бля"). Rather than drop a root and lose real
+// coverage, each exception is stripped out of the name before the root
+// check runs -- this list was checked against this app's own text, the
+// top 20,000 most common Russian and English words, and a hand list of
+// common names, so it should be safe against ordinary nicknames.
+//
+// EN_PROFANITY_WORDS is matched with word boundaries (\b) for plain
+// alphanumeric entries, so e.g. "class"/"assist"/"cockpit" are untouched
+// even though they contain "ass"/"cock". A handful of orientation/identity
+// words (gay, lesbian, bisexual, queer...) were deliberately left out of
+// this list -- those describe people, they aren't profanity, and blocking
+// them would be discriminatory rather than moderation.
+//
+// None of this is a complete filter -- it won't catch every obfuscation
+// (letter-for-digit swaps, spaced-out letters, brand-new slang) -- but it
+// covers two established, curated word lists (LDNOOBW's English and
+// Russian lists, expanded with the roots/exceptions above) instead of a
+// short hand-picked set that kept missing common words one bug report at
+// a time.
+const RU_PROFANITY_ROOTS = [
+  "хуй", "хуе", "хуё", "хуя", "пизд", "ебат", "ебал", "ёбан", "еблан", "ебок", "ёбар", "ебуч", 
+  "ёбну", "залуп", "мудак", "мудил", "мудозвон", "мудло", "муда", "гандон", "гондон", "пидор", 
+  "пидар", "пидр", "педик", "бляд", "сволоч", "сук", "суч", "падл", "гнид", "тварь", "мраз", 
+  "шлюх", "шалав", "стерв", "курв", "говн", "дерьм", "жоп", "ссат", "срать", "малаф", "хохл", 
+  "хохол", "хер", 
+];
+const RU_PROFANITY_EXCEPTIONS = [
+  "барсуков", "барсуками", "барсуках", "барсуки", "барсука", "барсук", "сукно", "суккуб", "гребля", 
+  "гребли", "гребцов", "гребец", "любляна", "любляне", "любляну", "хохлатый", "хохлатая", 
+  "хохлатое", "хохлатые", "хохолок", "хохолком", "парикмахерская", "парикмахерской", "парикмахер", 
+  "херувим", "херувима", "педикюр", "педикюра", "педикюрша", "чебоксары", "чебоксарах", 
+  "чебоксарской", "инкассатор", "инкассатора", "инкассаторов", "пассат", "пассата", "сабля", 
+  "сабли", "саблей", "саблю", "стервятник", "стервятника", "стервятники", "стервятников", "дебат", 
+  "разгреб", "колеба", "херман", "херберт", "галлахер", "херб", 
+];
+const EN_PROFANITY_WORDS = [
+  "2g1c", "2 girls 1 cup", "acrotomophilia", "alabama hot pocket", "alaskan pipeline", "anal", 
+  "anilingus", "anus", "apeshit", "arsehole", "ass", "asshole", "assmunch", "auto erotic", 
+  "autoerotic", "babeland", "baby batter", "baby juice", "ball gag", "ball gravy", "ball kicking", 
+  "ball licking", "ball sack", "ball sucking", "bangbros", "bangbus", "bareback", "barely legal", 
+  "barenaked", "bastard", "bastardo", "bastinado", "bbw", "bdsm", "beaner", "beaners", 
+  "beaver cleaver", "beaver lips", "beastiality", "bestiality", "big black", "big breasts", 
+  "big knockers", "big tits", "bimbos", "birdlock", "bitch", "bitches", "black cock", 
+  "blonde action", "blonde on blonde action", "blowjob", "blow job", "blow your load", 
+  "blue waffle", "blumpkin", "bollocks", "bondage", "boner", "boob", "boobs", "booty call", 
+  "brown showers", "brunette action", "bukkake", "bulldyke", "bullet vibe", "bullshit", 
+  "bung hole", "bunghole", "busty", "butt", "buttcheeks", "butthole", "camel toe", "camgirl", 
+  "camslut", "camwhore", "carpet muncher", "carpetmuncher", "chocolate rosebuds", "cialis", 
+  "circlejerk", "cleveland steamer", "clit", "clitoris", "clover clamps", "clusterfuck", "cock", 
+  "cocks", "coprolagnia", "coprophilia", "cornhole", "coon", "coons", "creampie", "cum", "cumming", 
+  "cumshot", "cumshots", "cunnilingus", "cunt", "darkie", "date rape", "daterape", "deep throat", 
+  "deepthroat", "dendrophilia", "dick", "dildo", "dingleberry", "dingleberries", "dirty pillows", 
+  "dirty sanchez", "doggie style", "doggiestyle", "doggy style", "doggystyle", "dog style", 
+  "dolcett", "domination", "dominatrix", "dommes", "donkey punch", "double dong", 
+  "double penetration", "dp action", "dry hump", "dvda", "eat my ass", "ecchi", "ejaculation", 
+  "erotic", "erotism", "escort", "eunuch", "fag", "faggot", "fecal", "felch", "fellatio", "feltch", 
+  "female squirting", "femdom", "figging", "fingerbang", "fingering", "fisting", "foot fetish", 
+  "footjob", "frotting", "fuck", "fuck buttons", "fuckin", "fucking", "fucktards", "fudge packer", 
+  "fudgepacker", "futanari", "gangbang", "gang bang", "gay sex", "genitals", "giant cock", 
+  "girl on", "girl on top", "girls gone wild", "goatcx", "goatse", "god damn", "gokkun", 
+  "golden shower", "goodpoop", "goo girl", "goregasm", "grope", "group sex", "g-spot", "guro", 
+  "hand job", "handjob", "hard core", "hardcore", "hentai", "homoerotic", "honkey", "horny", 
+  "hot carl", "hot chick", "how to kill", "how to murder", "huge fat", "humping", "incest", 
+  "intercourse", "jack off", "jail bait", "jailbait", "jelly donut", "jerk off", "jigaboo", 
+  "jiggaboo", "jiggerboo", "jizz", "juggs", "kike", "kinbaku", "kinkster", "kinky", "knobbing", 
+  "leather restraint", "leather straight jacket", "lemon party", "livesex", "lolita", "lovemaking", 
+  "make me come", "male squirting", "masturbate", "masturbating", "masturbation", "menage a trois", 
+  "milf", "missionary position", "mong", "motherfucker", "mound of venus", "mr hands", 
+  "muff diver", "muffdiving", "nambla", "nawashi", "negro", "neonazi", "nigga", "nigger", 
+  "nig nog", "nimphomania", "nipple", "nipples", "nsfw", "nsfw images", "nude", "nudity", "nutten", 
+  "nympho", "nymphomania", "octopussy", "omorashi", "one cup two girls", "one guy one jar", 
+  "orgasm", "orgy", "paedophile", "paki", "panties", "panty", "pedobear", "pedophile", "pegging", 
+  "penis", "phone sex", "piece of shit", "pikey", "pissing", "piss pig", "pisspig", "playboy", 
+  "pleasure chest", "pole smoker", "ponyplay", "poof", "poon", "poontang", "punany", "poop chute", 
+  "poopchute", "porn", "porno", "pornography", "prince albert piercing", "pthc", "pubes", "pussy", 
+  "queaf", "queef", "quim", "raghead", "raging boner", "rape", "raping", "rapist", "rectum", 
+  "reverse cowgirl", "rimjob", "rimming", "rosy palm", "rosy palm and her 5 sisters", 
+  "rusty trombone", "sadism", "santorum", "scat", "schlong", "scissoring", "semen", "sex", 
+  "sexcam", "sexo", "sexy", "sexual", "sexually", "sexuality", "shaved beaver", "shaved pussy", 
+  "shibari", "shit", "shitblimp", "shitty", "shota", "shrimping", "skeet", "slanteye", "slut", 
+  "s&m", "smut", "snatch", "snowballing", "sodomize", "sodomy", "spastic", "spic", "splooge", 
+  "splooge moose", "spooge", "spread legs", "spunk", "strap on", "strapon", "strappado", 
+  "strip club", "style doggy", "suck", "sucks", "suicide girls", "sultry women", "swastika", 
+  "tainted love", "taste my", "tea bagging", "threesome", "throating", "thumbzilla", "tied up", 
+  "tight white", "tit", "tits", "titties", "titty", "tongue in a", "topless", "tosser", 
+  "towelhead", "tranny", "tribadism", "tub girl", "tubgirl", "tushy", "twat", "twink", "twinkie", 
+  "two girls one cup", "undressing", "upskirt", "urethra play", "urophilia", "vagina", 
+  "venus mound", "viagra", "vibrator", "violet wand", "vorarephilia", "voyeur", "voyeurweb", 
+  "voyuer", "vulva", "wank", "wetback", "wet dream", "white power", "whore", "worldsex", 
+  "wrapping men", "wrinkled starfish", "yaoi", "yellow showers", "yiffy", "zoophilia", "🖕", 
+  "niggas", "f4ck", "fck", "sh1t", "b1tch", 
+];
+// The most common, most recognizable English slurs/profanity are matched
+// as plain substrings (no word boundary) instead, specifically to catch
+// simple no-space concatenation evasion in a nickname field ("FuCkYoU",
+// "xXshitheadXx") -- word-boundary matching alone would miss these since
+// there's no boundary between "fuck" and "you" with no space. Each entry
+// here was checked against the top 20,000 most common English words plus
+// this app's own text and found to have zero innocent collisions as a
+// bare substring (unlike e.g. "ass", "cock", "cum", "tit", "sex", "rape",
+// "dick", "pussy", which all hit common innocent words -- "class",
+// "cockpit"/"peacock", "document", "title"/"competition",
+// "essex"/"homosexual", "grape", "dickens", "pussycat" -- and stay
+// word-boundary-matched instead).
+const EN_PROFANITY_SUBSTRING_WORDS = new Set([
+  "fuck", "fucking", "fuckin", "shit", "shitty", "bitch", "bitches", "cunt", "nigger", "nigga", 
+  "niggas", "fag", "faggot", "whore", "slut", "asshole", "porn", "porno", "twat", "motherfucker", 
+  "bullshit", 
+]);
+
+function escapeRegExpLiteral(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+// Built once at module load, not per keystroke -- these regexes are large
+// (400+ alternatives) but only ever compiled a single time.
+const RU_PROFANITY_REGEX = new RegExp(RU_PROFANITY_ROOTS.map(escapeRegExpLiteral).join("|"), "i");
+const EN_PROFANITY_REGEX = new RegExp(
+  EN_PROFANITY_WORDS.map(escapeRegExpLiteral)
+    .map(w => (/^[a-z0-9]+$/i.test(w) && !EN_PROFANITY_SUBSTRING_WORDS.has(w.toLowerCase()) ? "\\b" + w + "\\b" : w))
+    .join("|"),
+  "i"
+);
+// Longest-first so e.g. "барсуков" is stripped whole rather than leaving a
+// stray "ов" behind after a shorter exception eats "барсук" out of it.
+const RU_PROFANITY_EXCEPTION_RES = [...RU_PROFANITY_EXCEPTIONS]
+  .sort((a, b) => b.length - a.length)
+  .map(w => new RegExp(escapeRegExpLiteral(w), "gi"));
+
+// Content moderation for display names -- mirrors moderate_display_name()
+// in the Supabase migration. The server is the real gate (the RPCs are
+// callable directly, bypassing the client entirely), so this copy exists
+// only so the Profile panel can reject an obviously bad name immediately
+// instead of showing a false "saved" confirmation for something the
+// server would silently drop anyway.
 function moderateDisplayNameClient(name) {
   let cleaned = (name || "")
     .replace(/[\u0000-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2060-\u2064]/g, "")
@@ -1052,9 +1189,10 @@ function moderateDisplayNameClient(name) {
     .trim()
     .slice(0, 40);
   if (!cleaned) return "";
-  if (/(хуй|хуе|хуё|пизд|ебат|ёбан|еблан|залуп|мудак|мудил|гандон|пидор|пидар|бляд|сволоч|fuck|shit|bitch|cunt|nigger|faggot|asshole)/i.test(cleaned)) {
-    return "";
-  }
+  if (EN_PROFANITY_REGEX.test(cleaned)) return "";
+  let ruTest = cleaned;
+  for (const re of RU_PROFANITY_EXCEPTION_RES) ruTest = ruTest.replace(re, " ");
+  if (RU_PROFANITY_REGEX.test(ruTest)) return "";
   if (/(https?:\/\/|www\.|t\.me\/|\.[a-z]{2,6}(\/|$))/i.test(cleaned)) return "";
   return cleaned;
 }
