@@ -889,7 +889,7 @@
 </script>
 
 <script type="text/babel" data-presets="react">
-const { useState, useEffect, useReducer, useRef } = React;
+const { useState, useEffect, useReducer, useRef, useCallback } = React;
 
 /* ---------------------------------------------------------------- */
 /* Supabase — used only by Bunker (online multiplayer, Realtime      */
@@ -920,6 +920,26 @@ const TELEGRAM_MINIAPP_SHORTNAME = "app"; // the short name given to /newapp
 // need to change if Telegram ever renames the global.
 function tg() {
   return (window.Telegram && window.Telegram.WebApp) || null;
+}
+
+/* ---------------------------------------------------------------- */
+/* Analytics ("Удержание и вовлечение", четвёртый заход)             */
+/*                                                                    */
+/* Vercel Web Analytics' script snippet is already installed in       */
+/* <head> (the window.va queue shim + /_vercel/insights/script.js),   */
+/* so custom events need no new dependency -- just calling            */
+/* window.va("event", {...}) at the moments that matter for retention:*/
+/* a game actually starting, a game finishing (with its result        */
+/* recorded), an achievement unlocking, and a share button being      */
+/* pressed. Wrapped in try/catch and a typeof check so a slow/blocked  */
+/* script, an ad-blocker, or Vercel changing the shim's shape can      */
+/* never break the app itself -- analytics is strictly best-effort.   */
+function trackEvent(name, data) {
+  try {
+    if (typeof window !== "undefined" && typeof window.va === "function") {
+      window.va("event", { name, data: data || {} });
+    }
+  } catch (e) {}
 }
 
 /* ---------------------------------------------------------------- */
@@ -988,8 +1008,37 @@ function isPlayerNameEditable() {
   return !tg();
 }
 
+// Basic content moderation for display names ("Удержание и вовлечение",
+// четвёртый заход) -- mirrors moderate_display_name() added to the
+// Supabase RPCs in this same pass. The server is the real gate (these
+// RPCs are callable directly, bypassing the client entirely), so this
+// copy exists only so the Profile panel can reject an obviously bad name
+// immediately instead of showing a false "saved" confirmation for
+// something the server would silently drop anyway. Deliberately basic --
+// see the SQL function's comment for the same "not a complete filter"
+// caveat -- and deliberately kept in sync by hand with that function,
+// same reasoning as api/ai-chat.js's SYSTEM_PROMPT comment.
+function moderateDisplayNameClient(name) {
+  let cleaned = (name || "")
+    .replace(/[\u0000-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2060-\u2064]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 40);
+  if (!cleaned) return "";
+  if (/(хуй|хуе|хуё|пизд|ебат|ёбан|еблан|залуп|мудак|мудил|гандон|пидор|пидар|бляд|сволоч|fuck|shit|bitch|cunt|nigger|faggot|asshole)/i.test(cleaned)) {
+    return "";
+  }
+  if (/(https?:\/\/|www\.|t\.me\/|\.[a-z]{2,6}(\/|$))/i.test(cleaned)) return "";
+  return cleaned;
+}
+
 function setPlayerName(name) {
-  const trimmed = (name || "").trim().slice(0, 40);
+  const moderated = moderateDisplayNameClient(name);
+  // A name that fails moderation is never written -- fall back to
+  // whatever was already saved (mirroring the RPCs' own
+  // coalesce(nullif(...), existing) behavior) instead of clearing it to
+  // blank, so a rejected edit can't accidentally erase a good name.
+  const trimmed = moderated || getPlayerName() || "";
   try {
     localStorage.setItem(PLAYER_NAME_KEY, trimmed);
   } catch (e) {}
@@ -1002,18 +1051,32 @@ function setPlayerName(name) {
 // Ratcheting score writes -- see record_wordless_score / record_countdown_score
 // in the migration: the server keeps whichever of (old, new) is higher, so
 // calling this after every single round, win or lose, is always safe.
+// Both RPCs now return the full updated player_profiles row directly
+// (see the Supabase migration), the same shape fetchMyProfile()'s
+// select("*") returns -- so callers that need the fresh profile (the
+// achievement-toast check on the end screens) can use the return value
+// straight away instead of making a second fetchMyProfile() round trip
+// right after this one. Returns null on failure so callers can fall back.
 async function recordWordlessScore(level) {
+  trackEvent("game_completed", { game: "wordless", level });
   try {
-    await supabaseClient.rpc("record_wordless_score", { p_id: getPlayerId(), p_name: getPlayerName(), p_level: level });
+    const { data, error } = await supabaseClient.rpc("record_wordless_score", { p_id: getPlayerId(), p_name: getPlayerName(), p_level: level });
+    if (error) throw error;
+    return data;
   } catch (e) {
     console.error("recordWordlessScore failed:", e);
+    return null;
   }
 }
 async function recordCountdownScore(rounds) {
+  trackEvent("game_completed", { game: "countdown", rounds });
   try {
-    await supabaseClient.rpc("record_countdown_score", { p_id: getPlayerId(), p_name: getPlayerName(), p_rounds: rounds });
+    const { data, error } = await supabaseClient.rpc("record_countdown_score", { p_id: getPlayerId(), p_name: getPlayerName(), p_rounds: rounds });
+    if (error) throw error;
+    return data;
   } catch (e) {
     console.error("recordCountdownScore failed:", e);
+    return null;
   }
 }
 // Bunker/Court have no computed win condition (the host/judge ends them by
@@ -1022,6 +1085,11 @@ async function recordCountdownScore(rounds) {
 // plain games-played counter. See useRecordGamePlayedOnStart() below for
 // where it's called from (once per room actually starting play).
 async function recordGamePlayed(game) {
+  // Bunker/Court have no separate "game over" moment (see the doc comment
+  // above), so unlike the offline games there's no matching
+  // "game_completed" call to pair this with -- this single event is the
+  // only signal available, so it's tracked as "game_started".
+  trackEvent("game_started", { game });
   try {
     await supabaseClient.rpc("record_game_played", { p_id: getPlayerId(), p_name: getPlayerName(), p_game: game });
   } catch (e) {
@@ -2163,6 +2231,7 @@ const I18N = {
   "profile.namePlaceholder": { ru: "Ваше имя", en: "Your name", hy: "Ձեր անունը" },
   "profile.nameSave": { ru: "Сохранить", en: "Save", hy: "Պահպանել" },
   "profile.nameSaved": { ru: "Сохранено", en: "Saved", hy: "Պահպանված է" },
+  "profile.nameRejected": { ru: "Недопустимое имя", en: "Name not allowed", hy: "Անթույլատրելի անուն" },
   "profile.telegramNameHint": { ru: "Имя берётся из Telegram", en: "Your name comes from Telegram", hy: "Անունը վերցվում է Telegram-ից" },
   "profile.wordlessBest": { ru: "Без слов — лучший уровень", en: "Wordless — best level", hy: "Անխոս — լավագույն մակարդակ" },
   "profile.countdownBest": { ru: "Обратный отсчёт — раундов подряд", en: "Countdown — rounds survived", hy: "Հետհաշվարկ — անընդմեջ ռաունդներ" },
@@ -2307,6 +2376,7 @@ function useStats() {
   return [stats, refresh];
 }
 function recordSpyRound(names, spyIndexes) {
+  trackEvent("game_completed", { game: "spy" });
   const stats = loadStats();
   names.forEach((rawName, i) => {
     const fallback = `${t_lookup("common.player", currentLangForDefaults())} ${i + 1}`;
@@ -2322,6 +2392,7 @@ function recordSpyRound(names, spyIndexes) {
 // else (civilian, doctor, sheriff, putana) is Town — mirrors the exact
 // grouping checkMafiaWinner uses to decide who won.
 function recordMafiaGame(names, roles, winner) {
+  trackEvent("game_completed", { game: "mafia", winner });
   const stats = loadStats();
   names.forEach((rawName, i) => {
     const fallback = `${t_lookup("common.player", currentLangForDefaults())} ${i + 1}`;
@@ -2752,6 +2823,7 @@ function detectNewlyUnlockedAchievements(profile) {
     const next = new Set(seen);
     unlockedNow.forEach((id) => next.add(id));
     saveSeenAchievementIds(next);
+    freshIds.forEach((id) => trackEvent("achievement_unlocked", { id }));
   }
   return freshIds.map((id) => ACHIEVEMENTS.find((a) => a.id === id)).filter(Boolean);
 }
@@ -3428,6 +3500,19 @@ function applyNightFinalize(mafia, patch) {
     phase: victims.length > 0 ? "night-lastword" : "night-result",
   };
 }
+
+// Maps each offline game's "launch" action type to a stable analytics key.
+// Used by App()'s dispatchWithTracking to fire "game_started" from one
+// place instead of touching all 7 games' launch buttons individually.
+const LAUNCH_ACTION_TO_GAME = {
+  LAUNCH_SPY: "spy",
+  ALIAS_LAUNCH: "alias",
+  CROC_LAUNCH: "croc",
+  WORDLESS_LAUNCH: "wordless",
+  COUNTDOWN_LAUNCH: "countdown",
+  TELEPHONE_LAUNCH: "telephone",
+  MAFIA_LAUNCH: "mafia",
+};
 
 function reducer(state, action) {
   switch (action.type) {
@@ -4785,6 +4870,7 @@ function ProfilePanel({ onClose, initialTab }) {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [nameInput, setNameInput] = useState(() => getPlayerName() || "");
   const [nameJustSaved, setNameJustSaved] = useState(false);
+  const [nameRejected, setNameRejected] = useState(false);
   const [lbGame, setLbGame] = useState("wordless");
   const nameEditable = isPlayerNameEditable();
   const streakCache = loadStreakCache();
@@ -4803,8 +4889,17 @@ function ProfilePanel({ onClose, initialTab }) {
   }, []);
 
   function saveName() {
+    const attempted = (nameInput || "").trim();
+    const moderated = moderateDisplayNameClient(nameInput);
     const saved = setPlayerName(nameInput);
     setNameInput(saved);
+    if (attempted && !moderated) {
+      // Rejected by moderation (not just an empty submit) -- say so
+      // instead of showing "Saved" for a name that was actually dropped.
+      setNameRejected(true);
+      setTimeout(() => setNameRejected(false), 2000);
+      return;
+    }
     setNameJustSaved(true);
     setTimeout(() => setNameJustSaved(false), 1500);
   }
@@ -4882,9 +4977,10 @@ function ProfilePanel({ onClose, initialTab }) {
                     <button
                       onClick={saveName}
                       className="shrink-0 px-4 rounded-xl bg-[var(--surface-2)] border border-[var(--border-strong)] text-sm font-medium active:scale-[0.98] transition-transform flex items-center gap-1.5"
+                      style={nameRejected ? { color: "var(--danger)", borderColor: "var(--danger)" } : undefined}
                     >
                       {nameJustSaved ? <IconCheck size={16} /> : null}
-                      {nameJustSaved ? t("profile.nameSaved") : t("profile.nameSave")}
+                      {nameRejected ? t("profile.nameRejected") : nameJustSaved ? t("profile.nameSaved") : t("profile.nameSave")}
                     </button>
                   </div>
                 ) : (
@@ -4963,17 +5059,18 @@ function ProfilePanel({ onClose, initialTab }) {
 
 // Small "tell someone about this result" button reused on the Wordless,
 // Countdown and Telephone end screens -- see shareAppResult() above.
-function ShareResultButton({ text }) {
+function ShareResultButton({ text, game }) {
   const t = useT();
   const [copied, setCopied] = useState(false);
   return (
     <button
-      onClick={() =>
+      onClick={() => {
+        trackEvent("share_clicked", { game: game || "unknown" });
         shareAppResult(text, () => {
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
-        })
-      }
+        });
+      }}
       className="w-full bg-[var(--surface)] border border-[var(--border)] text-[var(--text-dim)] font-display text-base tracking-wide py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
     >
       <IconSend size={18} /> {copied ? t("common.copy") : t("share.button")}
@@ -5012,6 +5109,7 @@ function getSupportQuickChips(t) {
 // hand. Uses the Web Share API where available (native share sheet on
 // phones), falling back to just copying the link to the clipboard.
 function shareRoomInvite(code, game, gameLabel, onCopied) {
+  trackEvent("share_clicked", { game });
   const inviteLang = HATSIT_LANGS.includes(hatsitSettings.language) ? hatsitSettings.language : "ru";
   const text = t_lookup("invite.roomText", inviteLang)
     .replace("{game}", gameLabel)
@@ -6774,16 +6872,17 @@ function WordlessEnd({ state, dispatch }) {
 
   // Ratcheting write, safe even on a re-render/StrictMode double-invoke
   // since record_wordless_score only ever raises the stored best, never
-  // lowers it. Once it's written, re-fetch the profile and check whether
-  // that pushed any achievement over its threshold for the first time --
-  // see detectNewlyUnlockedAchievements for why this is the right moment
-  // to check (not e.g. on every render).
+  // lowers it. The RPC now returns the updated profile row directly (see
+  // its Supabase migration), so the achievement check below runs off that
+  // return value -- no separate fetchMyProfile() round trip needed, which
+  // means the toast can appear after one network call instead of two. If
+  // the RPC failed (returns null), skip the check rather than fetching a
+  // stale profile.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      await recordWordlessScore(wordless.level);
-      const profile = await fetchMyProfile();
-      if (cancelled) return;
+      const profile = await recordWordlessScore(wordless.level);
+      if (cancelled || !profile) return;
       const fresh = detectNewlyUnlockedAchievements(profile);
       if (fresh.length > 0) setNewAchievements(fresh);
     })();
@@ -6812,7 +6911,7 @@ function WordlessEnd({ state, dispatch }) {
       </div>
 
       <div className="flex flex-col gap-3 shrink-0">
-        <ShareResultButton text={t("share.wordlessText").replace("{n}", wordless.level)} />
+        <ShareResultButton text={t("share.wordlessText").replace("{n}", wordless.level)} game="wordless" />
         <button
           onClick={() => dispatch({ type: "WORDLESS_LAUNCH" })}
           className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
@@ -7025,15 +7124,14 @@ function CountdownEnd({ state, dispatch }) {
   const roundsSurvived = Math.max(0, countdown.round - 1);
   const [newAchievements, setNewAchievements] = useState([]);
 
-  // Same pattern as WordlessEnd: write the ratcheting score, then check
-  // whether the profile that comes back just crossed a fresh achievement
-  // threshold -- see detectNewlyUnlockedAchievements.
+  // Same pattern as WordlessEnd: the RPC returns the updated profile row
+  // directly, so the achievement check runs off that instead of a second
+  // fetchMyProfile() call -- see detectNewlyUnlockedAchievements.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      await recordCountdownScore(roundsSurvived);
-      const profile = await fetchMyProfile();
-      if (cancelled) return;
+      const profile = await recordCountdownScore(roundsSurvived);
+      if (cancelled || !profile) return;
       const fresh = detectNewlyUnlockedAchievements(profile);
       if (fresh.length > 0) setNewAchievements(fresh);
     })();
@@ -7073,7 +7171,7 @@ function CountdownEnd({ state, dispatch }) {
       </div>
 
       <div className="flex flex-col gap-3 shrink-0 mt-4">
-        <ShareResultButton text={t("share.countdownText").replace("{n}", roundsSurvived)} />
+        <ShareResultButton text={t("share.countdownText").replace("{n}", roundsSurvived)} game="countdown" />
         <button
           onClick={() => dispatch({ type: "COUNTDOWN_LAUNCH" })}
           className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
@@ -7468,7 +7566,7 @@ function TelephoneEnd({ state, dispatch }) {
         ))}
       </div>
       <div className="flex flex-col gap-3 shrink-0 mt-4">
-        <ShareResultButton text={t("share.telephoneText")} />
+        <ShareResultButton text={t("share.telephoneText")} game="telephone" />
         <button
           onClick={() => dispatch({ type: "TELEPHONE_LAUNCH" })}
           className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
@@ -10754,6 +10852,17 @@ function App() {
     return merged;
   });
 
+  // "game_started" analytics: this is the single choke point every game
+  // launch passes through, so wrapping dispatch here (rather than editing
+  // 7 separate screens) catches all of them from one place. Only the
+  // *_LAUNCH action types are mapped — everything else passes through
+  // untouched, dispatched exactly as before.
+  const dispatchWithTracking = useCallback((action) => {
+    const game = LAUNCH_ACTION_TO_GAME[action && action.type];
+    if (game) trackEvent("game_started", { game });
+    dispatch(action);
+  }, []);
+
   // Keeps the document's declared language (and browser tab title) in
   // sync with the in-app language setting. This matters for real
   // assistive tech (screen readers pick a pronunciation/voice from
@@ -10843,7 +10952,11 @@ function App() {
   // to GAMES) instead of a long if/else chain — see that registry's doc
   // comment for what registering a new game's screens here involves.
   const ScreenComponent = SCREEN_COMPONENTS[state.screen];
-  const screen = ScreenComponent ? <ScreenComponent state={state} dispatch={dispatch} /> : <Hub state={state} dispatch={dispatch} />;
+  // Wrapped dispatch here, not the raw one from useReducer — this is the
+  // single point every screen (and everything they render) gets their
+  // "dispatch" prop from, so it's also the single point that needs to know
+  // about game-launch analytics (see dispatchWithTracking above).
+  const screen = ScreenComponent ? <ScreenComponent state={state} dispatch={dispatchWithTracking} /> : <Hub state={state} dispatch={dispatchWithTracking} />;
 
   return (
     <div
