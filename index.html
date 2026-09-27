@@ -269,10 +269,12 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<!-- Telegram Mini App SDK. Loads (and no-ops harmlessly) on a plain web -->
-<!-- visit too -- window.Telegram is simply undefined outside Telegram's -->
-<!-- in-app browser, which is exactly the feature-detection every use of -->
-<!-- it below is written against. See tg() near the top of the app script. -->
+<!-- Telegram Mini App SDK. Loads on a plain web visit too, and its calls  -->
+<!-- (haptics, back button, etc.) no-op harmlessly there -- but the SDK    -->
+<!-- still creates window.Telegram.WebApp itself either way, it is NOT    -->
+<!-- undefined outside Telegram. See tg()'s comment near the top of the   -->
+<!-- app script for what that means for any check that needs to tell a   -->
+<!-- real Telegram session apart from a plain web visit. -->
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
 <!-- Structured data for search engines (Googlebot renders JS and reads -->
@@ -912,12 +914,19 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const TELEGRAM_BOT_USERNAME = "hatsit_games_bot"; // no leading @
 const TELEGRAM_MINIAPP_SHORTNAME = "app"; // the short name given to /newapp
 
-// window.Telegram.WebApp only exists inside Telegram's in-app browser --
-// undefined on a plain web visit, which is the feature detection every
-// telegram-specific branch below (haptics, share sheet, back button,
-// start_param invite links) is written against. Call tg() instead of
-// touching window.Telegram directly so there's exactly one place that'd
-// need to change if Telegram ever renames the global.
+// IMPORTANT, and easy to get wrong (see isPlayerNameEditable()'s fix
+// comment): window.Telegram.WebApp is created by telegram-web-app.js as
+// soon as that script loads, INCLUDING on a plain web visit -- it is not
+// undefined outside Telegram. Verified live: platform is "unknown" and
+// initData is "" there, but the object itself is truthy. So tg() being
+// truthy only tells you the SDK script loaded, not that you're actually
+// inside Telegram with a real user -- for anything that depends on that
+// distinction (as opposed to calling an optional method that's a safe
+// no-op either way, like haptics or the back button), check
+// `tg().initDataUnsafe.user` instead, the way getPlayerId()/
+// getPlayerName()/isPlayerNameEditable() do. Call tg() instead of touching
+// window.Telegram directly so there's exactly one place that'd need to
+// change if Telegram ever renames the global.
 function tg() {
   return (window.Telegram && window.Telegram.WebApp) || null;
 }
@@ -1004,8 +1013,26 @@ function getPlayerName() {
   return null;
 }
 
+// BUG FIX (27 сентября, по репорту пользователя "не могу изменить имя"):
+// this used to be `return !tg();`, which is wrong -- Telegram's own
+// telegram-web-app.js script creates window.Telegram.WebApp UNCONDITIONALLY
+// once it loads, including on a plain web visit (verified live on
+// hatsit.vercel.app: window.Telegram.WebApp exists there with
+// platform: "unknown" and initData: "" -- there's no real Telegram session
+// behind it). So `tg()` is truthy everywhere, not just inside Telegram, and
+// this function was permanently hiding the name input for every non-
+// Telegram visitor -- the exact opposite of what the comment on tg() itself
+// claims ("undefined on a plain web visit"), which was also wrong and is
+// fixed below.
+//
+// getPlayerId()/getPlayerName() never had this bug: they already check for
+// an actual Telegram user (`telegram.initDataUnsafe.user`, only populated
+// inside a real Telegram session), not just tg()'s truthiness. This now
+// matches that same, correct check.
 function isPlayerNameEditable() {
-  return !tg();
+  const telegram = tg();
+  const tgUser = telegram && telegram.initDataUnsafe && telegram.initDataUnsafe.user;
+  return !tgUser;
 }
 
 // Basic content moderation for display names ("Удержание и вовлечение",
@@ -10906,8 +10933,10 @@ function App() {
     } catch (e) {}
   }, []);
 
-  // Telegram Mini App bring-up. Runs once; every call here is a no-op
-  // outside Telegram since tg() returns null on a plain web visit.
+  // Telegram Mini App bring-up. Runs once; tg() is truthy even on a plain
+  // web visit (see tg()'s own comment), but these specific calls
+  // (ready/expand/setHeaderColor/BackButton) are genuinely safe no-ops
+  // there per Telegram's own SDK, unlike isPlayerNameEditable()'s old bug.
   useEffect(() => {
     const telegram = tg();
     if (!telegram) return;
