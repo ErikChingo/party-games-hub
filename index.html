@@ -133,8 +133,32 @@
   @keyframes typingBounce{ 0%,60%,100%{ transform:translateY(0); opacity:.4;} 30%{ transform:translateY(-4px); opacity:1;} }
   .typing-dot{ animation:typingBounce 1s ease-in-out infinite; }
 
+  /* Player title cosmetics (badge/icon + color-matched frame around the
+     name, used identically in ProfilePanel and Leaderboard rows -- see
+     PLAYER_TITLES/getPlayerTitle()). The color itself is always applied
+     inline (style={{ color, borderColor }}) since it's per-tier data, not
+     something worth a CSS variable for; these classes only add the parts
+     that are the same for every tier (the pill shape) or unique to the one
+     rare tier (the gold glow/shimmer). */
+  .title-frame{
+    display:inline-flex; align-items:center; gap:.3em;
+    padding:.05em .55em; border-radius:999px; border:1.5px solid currentColor;
+  }
+  .title-frame .title-icon{ font-size:.95em; line-height:1; }
+
+  @keyframes titleRareGlow{
+    0%,100%{ box-shadow:0 0 0 1.5px rgba(246,207,114,.9), 0 0 10px rgba(246,207,114,.55), 0 0 22px rgba(246,207,114,.3); }
+    50%{ box-shadow:0 0 0 1.5px rgba(246,207,114,1), 0 0 18px rgba(246,207,114,.85), 0 0 34px rgba(246,207,114,.5); }
+  }
+  @keyframes titleRareShimmer{ 0%{ background-position:0% 50%; } 100%{ background-position:200% 50%; } }
+  .title-frame-rare{
+    background-image:linear-gradient(120deg, rgba(246,207,114,.28), rgba(232,181,69,.05), rgba(246,207,114,.28));
+    background-size:200% 100%;
+    animation: titleRareGlow 2.4s ease-in-out infinite, titleRareShimmer 3s linear infinite;
+  }
+
   @media (prefers-reduced-motion: reduce){
-    .pop, .pulse, .flash-badge, .breathe, .neon-pulse, .typing-dot{ animation:none !important; }
+    .pop, .pulse, .flash-badge, .breathe, .neon-pulse, .typing-dot, .title-frame-rare{ animation:none !important; }
   }
 
   .no-scrollbar::-webkit-scrollbar{ display:none; }
@@ -1234,6 +1258,25 @@ function setPlayerName(name) {
   return trimmed;
 }
 
+// Lets a player pick which of their unlocked titles is shown, instead of
+// always the highest tier (see set_selected_title RPC + getPlayerTitle()
+// above). Unlike setPlayerName() above this is properly awaited by its
+// caller (the title picker needs to know whether the pick actually took,
+// to update its own UI state) rather than fire-and-forget, so the
+// then-only-thenable issue that bit setPlayerName() doesn't apply here --
+// `await` works correctly on any thenable, real Promise or not.
+// titleId === null resets to automatic (always-highest-unlocked) mode.
+async function setSelectedTitle(titleId) {
+  try {
+    const { error } = await supabaseClient.rpc("set_selected_title", { p_id: getPlayerId(), p_title_id: titleId });
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error("setSelectedTitle failed:", e);
+    return false;
+  }
+}
+
 // Ratcheting score writes -- see record_wordless_score / record_countdown_score
 // in the migration: the server keeps whichever of (old, new) is higher, so
 // calling this after every single round, win or lose, is always safe.
@@ -1385,9 +1428,11 @@ async function fetchLeaderboard(game, limit = 20) {
     // (wordless_best/countdown_best/streak_longest), even when they're not
     // this tab's own column, so getPlayerTitle() can show every row's
     // cosmetic nickname/color on the leaderboard -- not just the viewer's.
+    // selected_title is fetched too so a player's chosen tier (not just
+    // their auto-highest one) shows correctly on other people's screens.
     const { data, error } = await supabaseClient
       .from("player_profiles")
-      .select(`id, display_name, wordless_best, countdown_best, streak_longest, ${column}`)
+      .select(`id, display_name, wordless_best, countdown_best, streak_longest, selected_title, ${column}`)
       .gt(column, 0)
       .order(column, { ascending: false })
       .limit(limit);
@@ -1400,6 +1445,7 @@ async function fetchLeaderboard(game, limit = 20) {
         wordless_best: r.wordless_best,
         countdown_best: r.countdown_best,
         streak_longest: r.streak_longest,
+        selected_title: r.selected_title,
       })
     );
   } catch (e) {
@@ -2419,6 +2465,9 @@ const I18N = {
   "profile.nameSaved": { ru: "Сохранено", en: "Saved", hy: "Պահպանված է" },
   "profile.nameRejected": { ru: "Недопустимое имя", en: "Name not allowed", hy: "Անթույլատրելի անուն" },
   "profile.telegramNameHint": { ru: "Имя берётся из Telegram", en: "Your name comes from Telegram", hy: "Անունը վերցվում է Telegram-ից" },
+  "profile.titleChangeBtn": { ru: "Изменить титул", en: "Change title", hy: "Փոխել տիտղոսը" },
+  "profile.titlePickerHeading": { ru: "Выберите, какой титул показывать", en: "Choose which title to show", hy: "Ընտրեք, թե որ տիտղոսը ցուցադրել" },
+  "profile.titleAuto": { ru: "Авто (высший из открытых)", en: "Automatic (highest unlocked)", hy: "Ավտոմատ (ամենաբարձր բացվածը)" },
   "profile.wordlessBest": { ru: "Без слов — лучший уровень", en: "Wordless — best level", hy: "Անխոս — լավագույն մակարդակ" },
   "profile.countdownBest": { ru: "Обратный отсчёт — раундов подряд", en: "Countdown — rounds survived", hy: "Հետհաշվարկ — անընդմեջ ռաունդներ" },
   "profile.bunkerPlayed": { ru: "Бункер — сыграно партий", en: "Bunker — games played", hy: "Բունկեր — խաղացած խաղեր" },
@@ -2937,14 +2986,14 @@ function computeUnlockedAchievementIds(profile) {
 /* role/game palette (see :root above) so nothing new needs designing.  */
 /* ---------------------------------------------------------------- */
 const PLAYER_TITLES = [
-  { achievementId: "streak_30", color: "#f6cf72", label: { ru: "Бесконечный", en: "Eternal", hy: "Անվերջ" } },
-  { achievementId: "streak_7", color: "#4bb8ac", label: { ru: "Преданный", en: "Devoted", hy: "Նվիրված" } },
-  { achievementId: "wordless_10", color: "#a67ee8", label: { ru: "Мастер тишины", en: "Silence Master", hy: "Լռության վարպետ" } },
-  { achievementId: "countdown_10", color: "#e0954a", label: { ru: "Несгибаемый", en: "Unyielding", hy: "Անդրդվելի" } },
-  { achievementId: "streak_3", color: "#5ea8e6", label: { ru: "Постоянный", en: "Consistent", hy: "Հաստատուն" } },
-  { achievementId: "wordless_5", color: "#8dd44c", label: { ru: "Молчун", en: "Quiet One", hy: "Լռակյաց" } },
-  { achievementId: "countdown_5", color: "#d6598f", label: { ru: "Стойкий", en: "Steadfast", hy: "Կայուն" } },
-  { achievementId: "first_steps", color: "#e8b545", label: { ru: "Новичок", en: "Newcomer", hy: "Սկսնակ" } },
+  { achievementId: "streak_30", color: "#f6cf72", icon: "👑", rare: true, label: { ru: "Бесконечный", en: "Eternal", hy: "Անվերջ" } },
+  { achievementId: "streak_7", color: "#4bb8ac", icon: "🛡️", rare: false, label: { ru: "Преданный", en: "Devoted", hy: "Նվիրված" } },
+  { achievementId: "wordless_10", color: "#a67ee8", icon: "🤫", rare: false, label: { ru: "Мастер тишины", en: "Silence Master", hy: "Լռության վարպետ" } },
+  { achievementId: "countdown_10", color: "#e0954a", icon: "⚡", rare: false, label: { ru: "Несгибаемый", en: "Unyielding", hy: "Անդրդվելի" } },
+  { achievementId: "streak_3", color: "#5ea8e6", icon: "📅", rare: false, label: { ru: "Постоянный", en: "Consistent", hy: "Հաստատուն" } },
+  { achievementId: "wordless_5", color: "#8dd44c", icon: "🤐", rare: false, label: { ru: "Молчун", en: "Quiet One", hy: "Լռակյաց" } },
+  { achievementId: "countdown_5", color: "#d6598f", icon: "🪨", rare: false, label: { ru: "Стойкий", en: "Steadfast", hy: "Կայուն" } },
+  { achievementId: "first_steps", color: "#e8b545", icon: "🌱", rare: false, label: { ru: "Новичок", en: "Newcomer", hy: "Սկսնակ" } },
 ];
 // Returns the { color, label } tier for the given profile row, or null if
 // nothing is unlocked yet. `profile` only needs the numeric fields
@@ -2954,6 +3003,15 @@ const PLAYER_TITLES = [
 function getPlayerTitle(profile) {
   if (!profile) return null;
   const unlocked = new Set(computeUnlockedAchievementIds(profile));
+  // A player can pick which of their unlocked tiers is shown instead of
+  // always the highest one (see set_selected_title RPC). Still re-checked
+  // against `unlocked` here even though the RPC already validates server
+  // side -- profile.selected_title may be stale/local, and this keeps
+  // getPlayerTitle() safe to call with any object shape.
+  if (profile.selected_title) {
+    const chosen = PLAYER_TITLES.find((t) => t.achievementId === profile.selected_title);
+    if (chosen && unlocked.has(chosen.achievementId)) return chosen;
+  }
   for (const tier of PLAYER_TITLES) {
     if (unlocked.has(tier.achievementId)) return tier;
   }
@@ -5018,12 +5076,19 @@ function LeaderboardList({ game, valueSuffix }) {
             >
               <span className="w-6 text-center text-xs font-mono text-[var(--text-faint)] shrink-0">{i + 1}</span>
               <div className="flex-1 min-w-0 flex items-center gap-1.5">
-                <ExpandableText
-                  as="span"
-                  className={"min-w-0 text-sm font-medium truncate" + (title ? ` text-[${title.color}]` : "")}
-                  text={r.name || t("common.player")}
-                  title={r.name || t("common.player")}
-                />
+                {title ? (
+                  <span
+                    className={"min-w-0 flex items-center title-frame" + (title.rare ? " title-frame-rare" : "")}
+                    style={{ color: title.color, borderColor: title.color }}
+                  >
+                    <span className="title-icon" aria-hidden="true">
+                      {title.icon}
+                    </span>
+                    <ExpandableText as="span" className="min-w-0 text-sm font-medium truncate" text={r.name || t("common.player")} title={r.name || t("common.player")} />
+                  </span>
+                ) : (
+                  <ExpandableText as="span" className="min-w-0 text-sm font-medium truncate" text={r.name || t("common.player")} title={r.name || t("common.player")} />
+                )}
                 {title && (
                   <span
                     className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0"
@@ -5058,8 +5123,24 @@ function ProfilePanel({ onClose, initialTab }) {
   const [nameJustSaved, setNameJustSaved] = useState(false);
   const [nameRejected, setNameRejected] = useState(false);
   const [lbGame, setLbGame] = useState("wordless");
+  const [titlePickerOpen, setTitlePickerOpen] = useState(false);
+  const [savingTitleId, setSavingTitleId] = useState(undefined); // id currently being written, or undefined
   const nameEditable = isPlayerNameEditable();
   const streakCache = loadStreakCache();
+
+  // achievementIdOrNull === null resets to automatic (always-highest) mode.
+  // Applies the change to local state optimistically-ish (only after the
+  // RPC confirms it took, since an unlocked-on-the-client-but-not-really id
+  // would otherwise show a title the server silently refused to set).
+  async function chooseTitle(achievementIdOrNull) {
+    setSavingTitleId(achievementIdOrNull);
+    const ok = await setSelectedTitle(achievementIdOrNull);
+    if (ok) {
+      setProfile((prev) => (prev ? { ...prev, selected_title: achievementIdOrNull } : prev));
+      setTitlePickerOpen(false);
+    }
+    setSavingTitleId(undefined);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -5139,8 +5220,14 @@ function ProfilePanel({ onClose, initialTab }) {
               <div className="flex flex-col gap-5">
                 {myTitle && (
                   <div className="flex items-center justify-center gap-2">
-                    <span className="font-display text-lg" style={{ color: myTitle.color }}>
-                      {getPlayerName() || t("common.player")}
+                    <span
+                      className={"flex items-center gap-1.5 title-frame" + (myTitle.rare ? " title-frame-rare" : "")}
+                      style={{ color: myTitle.color, borderColor: myTitle.color }}
+                    >
+                      <span className="title-icon" aria-hidden="true">
+                        {myTitle.icon}
+                      </span>
+                      <span className="font-display text-lg">{getPlayerName() || t("common.player")}</span>
                     </span>
                     <span
                       className="text-[10px] uppercase tracking-wider px-2 py-1 rounded-full"
@@ -5148,6 +5235,55 @@ function ProfilePanel({ onClose, initialTab }) {
                     >
                       {pickLang(myTitle.label, lang)}
                     </span>
+                  </div>
+                )}
+                {myTitle && (
+                  <div className="flex flex-col items-center gap-2 -mt-2">
+                    <button
+                      onClick={() => setTitlePickerOpen((v) => !v)}
+                      className="text-xs text-[var(--text-dim)] underline decoration-dotted underline-offset-2 active:text-[var(--text)]"
+                    >
+                      {t("profile.titleChangeBtn")}
+                    </button>
+                    {titlePickerOpen && (
+                      <div className="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded-xl p-3 flex flex-col gap-1.5">
+                        <p className="text-[10px] uppercase tracking-wider text-[var(--text-faint)] text-center mb-1">{t("profile.titlePickerHeading")}</p>
+                        <button
+                          onClick={() => chooseTitle(null)}
+                          disabled={savingTitleId !== undefined}
+                          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--text)]"
+                          style={{
+                            background: !(profile && profile.selected_title) ? "var(--surface-3)" : "transparent",
+                            border: `1.5px solid ${!(profile && profile.selected_title) ? "var(--border-strong)" : "transparent"}`,
+                          }}
+                        >
+                          <span className="flex-1 text-left">{t("profile.titleAuto")}</span>
+                          {savingTitleId === null && <span className="text-xs">…</span>}
+                        </button>
+                        {PLAYER_TITLES.filter((tier) => unlockedIds.has(tier.achievementId)).map((tier) => {
+                          const selected = !!(profile && profile.selected_title === tier.achievementId);
+                          return (
+                            <button
+                              key={tier.achievementId}
+                              onClick={() => chooseTitle(tier.achievementId)}
+                              disabled={savingTitleId !== undefined}
+                              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
+                              style={{
+                                color: tier.color,
+                                background: selected ? tier.color + "22" : "transparent",
+                                border: `1.5px solid ${selected ? tier.color : "transparent"}`,
+                              }}
+                            >
+                              <span className="title-icon" aria-hidden="true">
+                                {tier.icon}
+                              </span>
+                              <span className="flex-1 text-left">{pickLang(tier.label, lang)}</span>
+                              {savingTitleId === tier.achievementId && <span className="text-xs">…</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
                 {nameEditable ? (
