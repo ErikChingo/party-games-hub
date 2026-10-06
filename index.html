@@ -2200,14 +2200,13 @@ const I18N = {
   "mafia.playersCount": { ru: "Количество игроков", en: "Number of players", hy: "Խաղացողների քանակ" },
   "mafia.mafiaCount": { ru: "Количество мафии", en: "Number of mafia", hy: "Մաֆիայի քանակ" },
   "mroom.title": { ru: "Мафия: комната", en: "Mafia: room", hy: "Մաֆիա․ սենյակ" },
-  "mroom.subtitle": { ru: "Каждый играет со своего телефона. Игру ведёт программа — никому не нужно быть ведущим.", en: "Everyone plays from their own phone. The app runs the game — nobody has to be the host.", hy: "Յուրաքանչյուրը խաղում է իր հեռախոսից։ Խաղը վարում է ծրագիրը — ոչ ոք պարտավոր չէ լինել վարող։" },
   "mroom.createDesc": { ru: "Вы получите код комнаты и будете играть вместе со всеми.", en: "You'll get a room code and play together with everyone.", hy: "Դուք կստանաք սենյակի կոդ և կխաղաք բոլորի հետ։" },
   "mroom.joinDesc": { ru: "Введите 4-значный код, который назвал создатель комнаты.", en: "Enter the 4-digit code the room creator gave you.", hy: "Մուտքագրեք 4-նիշանոց կոդը, որը տվել է սենյակի ստեղծողը։" },
-  "mroom.playOnOnePhone": { ru: "Играть на одном телефоне с ведущим", en: "Play on one phone with a host", hy: "Խաղալ մեկ հեռախոսով՝ վարողի հետ" },
   "mroom.modeLabel": { ru: "Как играем", en: "How to play", hy: "Ինչպես ենք խաղում" },
   "mroom.modeOnePhone": { ru: "Один телефон", en: "One phone", hy: "Մեկ հեռախոս" },
-  "mroom.modeRoom": { ru: "Комната по коду", en: "Room by code", hy: "Սենյակ կոդով" },
-  "mroom.modeHint": { ru: "Один телефон: игру ведёт человек-ведущий. Комната по коду: у каждого свой телефон, игру ведёт программа.", en: "One phone: a person hosts the game. Room by code: everyone on their own phone, the app hosts.", hy: "Մեկ հեռախոս՝ խաղը վարում է մարդը։ Սենյակ կոդով՝ յուրաքանչյուրն իր հեռախոսով, խաղը վարում է ծրագիրը։" },
+  "mroom.modeRoom": { ru: "Онлайн", en: "Online", hy: "Օնլայն" },
+  "mroom.newBadge": { ru: "НОВОЕ", en: "NEW", hy: "ՆՈՐ" },
+  "mroom.modeHint": { ru: "Один телефон: игру ведёт человек-ведущий. Онлайн: у каждого свой телефон, игру ведёт программа.", en: "One phone: a person hosts the game. Online: everyone on their own phone, the app hosts.", hy: "Մեկ հեռախոս՝ խաղը վարում է մարդը։ Օնլայն՝ յուրաքանչյուրն իր հեռախոսով, խաղը վարում է ծրագիրը։" },
   "mroom.errNotFound": { ru: "Комната не найдена. Проверьте код.", en: "Room not found. Check the code.", hy: "Սենյակը չի գտնվել։ Ստուգեք կոդը։" },
   "mroom.errStarted": { ru: "Игра в этой комнате уже началась.", en: "The game in this room has already started.", hy: "Այս սենյակում խաղն արդեն սկսվել է։" },
   "mroom.errFull": { ru: "В комнате уже 20 игроков.", en: "The room already has 20 players.", hy: "Սենյակում արդեն 20 խաղացող կա։" },
@@ -4151,7 +4150,7 @@ function reducer(state, action) {
       // not a computed win condition. GO_HUB is the one moment every game
       // funnels through regardless.
       const leftScreen = state.screen;
-      const feedbackPending = /-setup$/.test(leftScreen)
+      const feedbackPending = action.noFeedback || /-setup$/.test(leftScreen)
         ? null
         : leftScreen.startsWith("spy") ? "spy"
         : leftScreen.startsWith("alias") ? "alias"
@@ -4851,6 +4850,13 @@ function reducer(state, action) {
 /* ---------------------------------------------------------------- */
 /* Soft fade + slight slide-up on mount — used to transition between      */
 /* whole screens and between tabs. Give it a fresh `key` to replay it.    */
+// The Mafia setup screen and the online-room screen are two tabs of one page
+// (see MafiaModeSwitch), so moving between them must not replay the
+// screen-change animation.
+function screenFadeKey(screen) {
+  return screen === "mafiaroom" ? "mafia-setup" : screen;
+}
+
 function FadeIn({ children, className }) {
   const [shown, setShown] = useState(false);
   useEffect(() => {
@@ -8593,6 +8599,33 @@ function MafiaRosterList({ state }) {
 /* ---------------------------------------------------------------- */
 /* Mafia: setup                                                      */
 /* ---------------------------------------------------------------- */
+// "One phone" / "Online" tabs shown at the top of both Mafia entry screens.
+// Both tabs are real buttons with the same box so the two labels sit on the
+// same line; tapping one swaps what is below without leaving the page.
+function MafiaModeSwitch({ mode, dispatch }) {
+  const t = useT();
+  const tabClass = (active) =>
+    "relative flex-1 min-w-0 h-11 px-2 rounded-xl text-sm font-medium leading-none flex items-center justify-center text-center " +
+    (active ? "bg-[var(--accent)] text-[var(--accent-ink)]" : "text-[var(--text-dim)]");
+  return (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-5 py-4">
+      <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-4">{t("mroom.modeLabel")}</div>
+      <div className="flex gap-2 p-1 rounded-2xl bg-[var(--surface-2)]">
+        <button type="button" aria-pressed={mode === "onePhone"} onClick={() => mode !== "onePhone" && dispatch({ type: "OPEN_MAFIA_SETUP" })} className={tabClass(mode === "onePhone")}>
+          {t("mroom.modeOnePhone")}
+        </button>
+        <button type="button" aria-pressed={mode === "online"} onClick={() => mode !== "online" && dispatch({ type: "OPEN_MAFIA_ROOM" })} className={tabClass(mode === "online")}>
+          {t("mroom.modeRoom")}
+          <span className="absolute -top-2.5 right-1.5 px-1.5 py-[3px] rounded-full bg-[var(--danger)] text-white text-[9px] font-bold leading-none tracking-[0.08em] shadow">
+            {t("mroom.newBadge")}
+          </span>
+        </button>
+      </div>
+      <p className="text-xs text-[var(--text-faint)] mt-3">{t("mroom.modeHint")}</p>
+    </div>
+  );
+}
+
 function MafiaSetup({ state, dispatch }) {
   const t = useT();
   const { mafiaPlayerCount, mafiaNames, mafiaCount, mafiaDoctor, mafiaSheriff, mafiaDon, mafiaManiac, mafiaPutana } = state.config;
@@ -8611,16 +8644,7 @@ function MafiaSetup({ state, dispatch }) {
       <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("mafia.rulesTitle")} color="var(--spy)" rules={useRules(MAFIA_RULES)} />
 
       <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-4 flex flex-col gap-4">
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-5 py-4">
-          <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-3">{t("mroom.modeLabel")}</div>
-          <div className="flex gap-2 p-1 rounded-2xl bg-[var(--surface-2)]">
-            <span className="flex-1 py-2.5 rounded-xl text-sm font-medium text-center bg-[var(--accent)] text-[var(--accent-ink)]">{t("mroom.modeOnePhone")}</span>
-            <button onClick={() => dispatch({ type: "OPEN_MAFIA_ROOM" })} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-[var(--text-dim)]">
-              {t("mroom.modeRoom")}
-            </button>
-          </div>
-          <p className="text-xs text-[var(--text-faint)] mt-3">{t("mroom.modeHint")}</p>
-        </div>
+        <MafiaModeSwitch mode="onePhone" dispatch={dispatch} />
         <Stepper label={t("mafia.playersCount")} value={mafiaPlayerCount} min={MIN_MAFIA_PLAYERS} max={MAX_MAFIA_PLAYERS} onChange={(v) => dispatch({ type: "MAFIA_SET_COUNT", value: v })} />
         <Stepper label={t("mafia.mafiaCount")} value={mafiaCount} min={MIN_MAFIA_COUNT} max={maxMafia} onChange={(v) => dispatch({ type: "MAFIA_SET_MAFIA_COUNT", value: v })} />
         <Stepper
@@ -10269,20 +10293,14 @@ function MafiaRoomMenu({ dispatch, onCreate, onJoin, busy, error, initialCode })
   return (
     <div className="h-full min-h-0 flex flex-col">
       <TopBar
-        onBack={() => dispatch({ type: "OPEN_MAFIA_SETUP" })}
-        title={t("mroom.title")}
+        onBack={() => (mode !== null ? setMode(null) : dispatch({ type: "GO_HUB", noFeedback: true }))}
+        title={t("mafia.title")}
         right={<IconSkull size={18} className="text-[var(--text-faint)]" />}
         onRightClick={() => setRulesOpen(true)}
       />
       <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("mafia.rulesTitle")} color="var(--spy)" rules={useRules(MAFIA_ROOM_RULES)} />
-      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-8 flex flex-col">
-        <div className="text-center my-6">
-          <div className="w-16 h-16 rounded-2xl bg-[var(--accent)]/15 text-[var(--accent-strong)] flex items-center justify-center mx-auto mb-4">
-            <IconSkull size={30} />
-          </div>
-          <h2 className="font-display text-3xl">{t("mroom.title")}</h2>
-          <p className="text-sm text-[var(--text-dim)] mt-2 max-w-[32ch] mx-auto">{t("mroom.subtitle")}</p>
-        </div>
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-8 flex flex-col gap-4">
+        <MafiaModeSwitch mode="online" dispatch={dispatch} />
 
         {mode === null && (
           <div className="flex flex-col gap-3">
@@ -10295,9 +10313,6 @@ function MafiaRoomMenu({ dispatch, onCreate, onJoin, busy, error, initialCode })
               <div className="text-sm text-[var(--text-dim)]">{t("mroom.joinDesc")}</div>
             </button>
             {error && <p className="text-sm text-[var(--danger)] text-center">{error}</p>}
-            <button onClick={() => dispatch({ type: "OPEN_MAFIA_SETUP" })} className="text-sm text-[var(--text-faint)] py-2">
-              {t("mroom.playOnOnePhone")}
-            </button>
           </div>
         )}
 
@@ -13531,7 +13546,7 @@ function App() {
         overflow: "hidden",
       }}
     >
-      <FadeIn key={state.screen} className="h-full">
+      <FadeIn key={screenFadeKey(state.screen)} className="h-full">
         {screen}
       </FadeIn>
     </div>
