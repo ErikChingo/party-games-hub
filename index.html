@@ -199,6 +199,9 @@
   .telegram-promo-banner{
     top: calc(1rem + env(safe-area-inset-top, 0px));
   }
+  /* The chat button would cover the "Send" button of the post-game rating card.
+     (data-feedback is kept current by App.) */
+  html[data-feedback="1"] .support-fab{ display:none; }
 
   /* Desktop/laptop framing: gated on having a real mouse/trackpad         */
   /* (hover:hover + pointer:fine describe the PRIMARY input device, not    */
@@ -2217,7 +2220,10 @@ const I18N = {
   "mroom.voiceLabel": { ru: "Голос ведущего", en: "Host's voice", hy: "Վարողի ձայնը" },
   "mroom.voiceHere": { ru: "Голос ведущего звучит из этого телефона. Сделайте громче.", en: "The host's voice plays from this phone. Turn the volume up.", hy: "Վարողի ձայնը հնչում է այս հեռախոսից։ Բարձրացրեք ձայնը։" },
   "mroom.voiceOn": { ru: "Голос ведущего звучит из телефона игрока {name}.", en: "The host's voice plays from {name}'s phone.", hy: "Վարողի ձայնը հնչում է {name} խաղացողի հեռախոսից։" },
-  "mroom.voiceUnavailable": { ru: "Этот телефон не может говорить: во встроенном браузере Telegram и Instagram голоса нет.", en: "This phone can't speak: the in-app browsers of Telegram and Instagram have no voice.", hy: "Այս հեռախոսը չի կարող խոսել. Telegram-ի և Instagram-ի ներկառուցված դիտարկիչներում ձայն չկա։" },
+  "mroom.voiceUnavailable": { ru: "Этот телефон не может говорить: в нём нет голоса для этого языка (или это встроенный браузер Telegram / Instagram).", en: "This phone can't speak: it has no voice for this language (or this is the in-app browser of Telegram / Instagram).", hy: "Այս հեռախոսը չի կարող խոսել․ այս լեզվի համար ձայն չկա (կամ սա Telegram-ի / Instagram-ի ներկառուցված դիտարկիչն է)։" },
+  "mroom.voiceHereSilent": { ru: "Голос ведущего закреплён за этим телефоном, но он не может говорить.", en: "The host's voice is set to this phone, but it can't speak.", hy: "Վարողի ձայնը կցված է այս հեռախոսին, բայց այն չի կարող խոսել։" },
+  "mroom.voteConfirm": { ru: "Проголосовать: {name}", en: "Vote: {name}", hy: "Քվեարկել՝ {name}" },
+  "mroom.votePick": { ru: "Выберите игрока и подтвердите", en: "Pick a player, then confirm", hy: "Ընտրեք խաղացողին և հաստատեք" },
   "mroom.voiceNeedsOther": { ru: "Пусть один игрок откроет комнату в обычном браузере (Chrome или Safari) и нажмёт «Голос на этом телефоне».", en: "Have one player open the room in a regular browser (Chrome or Safari) and tap “Voice on this phone”.", hy: "Թող խաղացողներից մեկը բացի սենյակը սովորական դիտարկիչում (Chrome կամ Safari) և սեղմի «Ձայնը այս հեռախոսում»։" },
   "mroom.voiceTake": { ru: "Голос на этом телефоне", en: "Voice on this phone", hy: "Ձայնը այս հեռախոսում" },
   "mroom.voiceTest": { ru: "Проверить голос", en: "Test the voice", hy: "Ստուգել ձայնը" },
@@ -2717,6 +2723,11 @@ function useHatsitCurrentScreen() {
   const [screen, setScreen] = useState(hatsitCurrentScreen);
   useEffect(() => {
     hatsitScreenListeners.add(setScreen);
+    // App publishes its first screen before this widget has subscribed
+    // (App's effects run first). Without this catch-up, opening the site by
+    // an invite link or reloading mid-game left "hub" here forever and the
+    // chat button floated over the game.
+    setScreen(hatsitCurrentScreen);
     return () => hatsitScreenListeners.delete(setScreen);
   }, []);
   return screen;
@@ -4913,7 +4924,7 @@ function ConfirmButton({ label, confirmLabel, onConfirm, className }) {
           onConfirm();
         } else {
           setArmed(true);
-          timeoutRef.current = setTimeout(() => setArmed(false), 2200);
+          timeoutRef.current = setTimeout(() => setArmed(false), 4000);
         }
       }}
     >
@@ -8522,13 +8533,16 @@ function RoleToggle({ Icon, color, bg, title, description, checked, onChange }) 
   );
 }
 
-function MafiaPlayerButton({ name, index, onClick, danger }) {
+function MafiaPlayerButton({ name, index, onClick, danger, selected }) {
   return (
     <button
       onClick={() => onClick(index)}
+      aria-pressed={selected ? "true" : undefined}
       className={
         "w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 border text-left transition-transform active:scale-[0.98] " +
-        (danger
+        (selected
+          ? "bg-[var(--accent)]/15 border-[var(--accent)]"
+          : danger
           ? "bg-[var(--surface)] border-[var(--danger)]/30 active:bg-[var(--danger)]/10"
           : "bg-[var(--surface)] border-[var(--border)] active:bg-[var(--surface-2)]")
       }
@@ -9865,7 +9879,7 @@ function getMafiaRoomIdentity() {
 
 // In-app browsers (Telegram, Instagram) are WebViews without speech
 // synthesis, so such a phone can play but cannot be the host's voice.
-function mafiaCanSpeak() {
+function mafiaSpeechApiPresent() {
   try {
     return typeof window.speechSynthesis === "object" && window.speechSynthesis !== null && typeof window.SpeechSynthesisUtterance === "function";
   } catch (e) {
@@ -9873,10 +9887,42 @@ function mafiaCanSpeak() {
   }
 }
 
+// Having the speech API is not enough: a device with no voice for the
+// game's language "says" a sentence in a few milliseconds without a sound
+// (a Windows PC with only English voices, a phone with no Armenian voice).
+// Such a phone must not be the host's voice.
+function mafiaHasVoiceFor(lang) {
+  try {
+    const voices = window.speechSynthesis.getVoices();
+    // An empty list means "not loaded yet" or "this browser doesn't tell";
+    // mafiaNoteSpeechResult() catches the silent case at the first sentence.
+    if (!voices || voices.length === 0) return true;
+    const prefix = (MAFIA_SPEECH_LANG[lang] || "ru-RU").slice(0, 2).toLowerCase();
+    return voices.some((voice) => String(voice.lang || "").toLowerCase().startsWith(prefix));
+  } catch (e) {
+    return true;
+  }
+}
+
+// Language in which this phone has been caught "speaking" silently.
+let mafiaSilentLang = null;
+// Call when an utterance ended by itself (not cancelled). A real sentence
+// takes seconds; one that is over almost at once was never spoken.
+function mafiaNoteSpeechResult(lang, text, elapsedMs) {
+  if (String(text || "").trim().length >= 12 && elapsedMs < 300) mafiaSilentLang = lang;
+}
+
+function mafiaCanSpeak() {
+  if (!mafiaSpeechApiPresent()) return false;
+  const lang = HATSIT_LANGS.includes(hatsitSettings.language) ? hatsitSettings.language : "ru";
+  if (mafiaSilentLang === lang) return false;
+  return mafiaHasVoiceFor(lang);
+}
+
 // Browsers only let a page talk after the user has tapped something;
 // called from the taps that precede the host's first line.
 function mafiaPrimeSpeech() {
-  if (!mafiaCanSpeak()) return;
+  if (!mafiaSpeechApiPresent()) return;
   try {
     const utterance = new window.SpeechSynthesisUtterance(" ");
     utterance.volume = 0;
@@ -10219,7 +10265,16 @@ function useMafiaVoice(view, act) {
       const utterance = new window.SpeechSynthesisUtterance(text);
       utterance.lang = MAFIA_SPEECH_LANG[lang] || "ru-RU";
       utterance.rate = 1;
-      utterance.onend = finish;
+      let startedAt = Date.now();
+      utterance.onstart = () => {
+        startedAt = Date.now();
+      };
+      utterance.onend = () => {
+        // Caught talking without a sound: the next poll tells the server,
+        // which hands the voice to a phone that really can speak.
+        mafiaNoteSpeechResult(lang, text, Date.now() - startedAt);
+        finish();
+      };
       utterance.onerror = finish;
       // Some phones never fire "end"; don't let one lost event stall a phase.
       const guard = setTimeout(finish, 4000 + text.length * 140);
@@ -10239,7 +10294,7 @@ function useMafiaVoice(view, act) {
   useEffect(
     () => () => {
       try {
-        if (mafiaCanSpeak()) window.speechSynthesis.cancel();
+        if (mafiaSpeechApiPresent()) window.speechSynthesis.cancel();
       } catch (e) {}
     },
     []
@@ -10416,10 +10471,31 @@ function MafiaRoomVoiceCard({ view, act }) {
   const canSpeak = mafiaCanSpeak();
   const voicePlayer = view.players.find((p) => p.is_voice);
   const [tested, setTested] = useState(false);
+  const [, setVoiceTick] = useState(0);
+  const testRef = useRef(null);
+  // The list of voices arrives a moment after the page loads.
+  useEffect(() => {
+    if (!mafiaSpeechApiPresent() || typeof window.speechSynthesis.addEventListener !== "function") return undefined;
+    const onVoices = () => setVoiceTick((n) => n + 1);
+    window.speechSynthesis.addEventListener("voiceschanged", onVoices);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", onVoices);
+  }, []);
   function testVoice() {
     try {
-      const utterance = new window.SpeechSynthesisUtterance(t_lookup("mhost.test", lang));
+      const text = t_lookup("mhost.test", lang);
+      const utterance = new window.SpeechSynthesisUtterance(text);
       utterance.lang = MAFIA_SPEECH_LANG[lang] || "ru-RU";
+      const test = { cancelled: false, startedAt: Date.now() };
+      utterance.onstart = () => {
+        test.startedAt = Date.now();
+      };
+      utterance.onend = () => {
+        if (test.cancelled) return;
+        mafiaNoteSpeechResult(lang, text, Date.now() - test.startedAt);
+        setVoiceTick((n) => n + 1);
+      };
+      if (testRef.current) testRef.current.cancelled = true;
+      testRef.current = test;
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(utterance);
       setTested(true);
@@ -10431,7 +10507,7 @@ function MafiaRoomVoiceCard({ view, act }) {
         <IconMic size={14} /> {t("mroom.voiceLabel")}
       </div>
       <p className="text-sm">
-        {view.is_voice ? t("mroom.voiceHere") : t("mroom.voiceOn").replace("{name}", voicePlayer ? voicePlayer.name : "—")}
+        {view.is_voice ? (canSpeak ? t("mroom.voiceHere") : t("mroom.voiceHereSilent")) : t("mroom.voiceOn").replace("{name}", voicePlayer ? voicePlayer.name : "—")}
       </p>
       {!canSpeak && <p className="text-xs mt-2" style={{ color: "var(--danger)" }}>{t("mroom.voiceUnavailable")}</p>}
       {view.is_voice && !canSpeak && <p className="text-xs text-[var(--text-faint)] mt-1">{t("mroom.voiceNeedsOther")}</p>}
@@ -10851,22 +10927,15 @@ function MafiaRoomComplaints({ view, act }) {
                 </button>
               )}
               {view.is_host &&
-                (p.warnings >= 3 ? (
+                (
+                  // Two taps: one stray touch must not hand out a warning.
                   <ConfirmButton
                     label={<><IconAlertTriangle size={14} /> +1</>}
-                    confirmLabel={t("mafia.confirmRemove")}
+                    confirmLabel={p.warnings >= 3 ? t("mafia.confirmRemove") : t("common.confirm")}
                     onConfirm={() => act("mafia_host_warn", { p_target: p.seat })}
                     className="h-9 px-2.5 rounded-xl flex items-center gap-1 text-xs font-medium shrink-0 border border-[var(--danger)]/40 text-[var(--danger)] active:scale-95 transition-transform"
                   />
-                ) : (
-                  <button
-                    onClick={() => act("mafia_host_warn", { p_target: p.seat })}
-                    aria-label={t("mafia.giveWarning")}
-                    className="h-9 px-2.5 rounded-xl flex items-center gap-1 text-xs font-medium shrink-0 border border-[var(--danger)]/40 text-[var(--danger)] active:scale-95 transition-transform"
-                  >
-                    <IconAlertTriangle size={14} /> +1
-                  </button>
-                ))}
+                )}
             </div>
           );
         })}
@@ -10886,7 +10955,7 @@ function MafiaRoomSpeech({ view, act, seconds }) {
       <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-faint)] mb-1">
         {lastWord ? t("mafia.lastWord") : `${t("mafia.speaking")} · ${view.spoken}/${view.alive_count}`}
       </p>
-      <h2 className="font-display text-4xl leading-tight mb-5 max-w-full truncate">{mine ? t("mroom.youSpeak") : mafiaSeatName(view, seat)}</h2>
+      <h2 className={"font-display leading-tight mb-5 max-w-full " + (mine ? "text-3xl" : "text-4xl truncate")}>{mine ? t("mroom.youSpeak") : mafiaSeatName(view, seat)}</h2>
       <MafiaRoomTimer seconds={seconds} total={total} />
       {mine && (
         <button
@@ -10916,6 +10985,18 @@ function MafiaRoomVote({ view, act, seconds }) {
   const eligible = view.players.filter((p) => p.alive && !p.no_vote).length;
   const noVoteNames = view.players.filter((p) => p.alive && p.no_vote).map((p) => p.name);
   const canVote = me.alive && !me.no_vote && !me.voted;
+  // undefined = nothing picked yet, null = "nobody", number = a seat.
+  // The vote is final, so it takes a pick and then a separate confirm tap.
+  const [choice, setChoice] = useState(undefined);
+  const [sending, setSending] = useState(false);
+  const picked = choice !== undefined;
+  const choiceName = choice === null ? t("mroom.voteNobody") : picked ? mafiaSeatName(view, choice) : "";
+  async function confirmVote() {
+    if (!picked || sending) return;
+    setSending(true);
+    await act("mafia_vote", { p_target: choice });
+    setSending(false);
+  }
   return (
     <div className="flex flex-col pb-4">
       <MafiaPhaseHeader
@@ -10934,16 +11015,27 @@ function MafiaRoomVote({ view, act, seconds }) {
       {canVote ? (
         <>
           <button
-            onClick={() => act("mafia_vote", { p_target: null })}
-            className="w-full bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text-dim)] font-display text-lg tracking-wide py-3.5 rounded-2xl active:scale-[0.98] transition-transform mb-3"
+            onClick={() => setChoice(null)}
+            aria-pressed={choice === null ? "true" : undefined}
+            className={
+              "w-full border font-display text-lg tracking-wide py-3.5 rounded-2xl active:scale-[0.98] transition-transform mb-3 " +
+              (choice === null ? "bg-[var(--accent)]/15 border-[var(--accent)] text-[var(--text)]" : "bg-[var(--surface-2)] border-[var(--border-strong)] text-[var(--text-dim)]")
+            }
           >
             {t("mroom.voteNobody")}
           </button>
           <div className="flex flex-col gap-2">
             {view.players.filter((p) => p.alive && !p.is_me).map((p) => (
-              <MafiaPlayerButton key={p.seat} name={p.name} index={p.seat} danger onClick={(seat) => act("mafia_vote", { p_target: seat })} />
+              <MafiaPlayerButton key={p.seat} name={p.name} index={p.seat} danger selected={choice === p.seat} onClick={(seat) => setChoice(seat)} />
             ))}
           </div>
+          <button
+            onClick={confirmVote}
+            disabled={!picked || sending}
+            className="mt-4 w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-lg tracking-wide py-3.5 rounded-2xl disabled:opacity-30 active:scale-[0.98] transition-transform"
+          >
+            {picked ? t("mroom.voteConfirm").replace("{name}", choiceName) : t("mroom.votePick")}
+          </button>
         </>
       ) : (
         <p className="text-center text-sm text-[var(--text-dim)] mt-6">
@@ -13427,6 +13519,15 @@ function App() {
   // lobbies, rounds) and goes back to normal on the Hub. See useWakeLock.
   useWakeLock(state.screen !== "hub");
 
+  // Lets plain CSS know the rating card is up, for the support chat button
+  // that is mounted outside App.
+  const feedbackShown = !!state.feedbackPending && state.screen === "hub";
+  useEffect(() => {
+    try {
+      document.documentElement.setAttribute("data-feedback", feedbackShown ? "1" : "0");
+    } catch (e) {}
+  }, [feedbackShown]);
+
   // "game_started" analytics: this is the single choke point every game
   // launch passes through, so wrapping dispatch here (rather than editing
   // 7 separate screens) catches all of them from one place. Only the
@@ -13643,7 +13744,9 @@ function TelegramPromoBanner() {
     }
   });
 
-  if (isInsideTelegram() || dismissed) return null;
+  // Hub only: inside a game it sat on top of the screen's title and back arrow.
+  const onHub = useHatsitCurrentScreen() === "hub";
+  if (isInsideTelegram() || dismissed || !onHub) return null;
 
   function dismiss() {
     setDismissed(true);
