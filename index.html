@@ -10445,7 +10445,18 @@ function MafiaRoomVoiceCard({ view, act }) {
 function MafiaRoomLobby({ room, dispatch }) {
   const t = useT();
   const { view, code, act, error, connStatus, handleLeave, handleStart } = room;
-  const settings = view.settings || {};
+  // Settings the creator has just tapped but the server hasn't confirmed
+  // yet. Every tap used to wait for a round trip to the database before
+  // the number on screen moved, which made the steppers and role switches
+  // feel sluggish. Now the screen changes at once, taps made in quick
+  // succession are sent as one request, and the server's (clamped) answer
+  // replaces the draft when it arrives.
+  const [draft, setDraft] = useState(null);
+  const draftRef = useRef(null);
+  const sendTimerRef = useRef(null);
+  const actRef = useRef(act);
+  actRef.current = act;
+  const settings = { ...(view.settings || {}), ...(draft || {}) };
   const count = view.players.length;
   const maxMafia = Math.max(1, Math.floor((Math.max(count, MAFIA_ROOM_MIN_PLAYERS) - 1) / 2));
   const [copied, setCopied] = useState(false);
@@ -10453,7 +10464,33 @@ function MafiaRoomLobby({ room, dispatch }) {
   const [qrOpen, setQrOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [starting, setStarting] = useState(false);
-  const setSetting = (patch) => act("mafia_update_settings", { p_settings: patch });
+  async function flushSettings() {
+    clearTimeout(sendTimerRef.current);
+    const sent = draftRef.current;
+    if (!sent) return;
+    await actRef.current("mafia_update_settings", { p_settings: sent });
+    // Tapped again while that was on its way: keep showing the newer
+    // draft, its own request is already scheduled.
+    if (draftRef.current === sent) {
+      draftRef.current = null;
+      setDraft(null);
+    }
+  }
+  function setSetting(patch) {
+    const next = { ...(draftRef.current || {}), ...patch };
+    draftRef.current = next;
+    setDraft(next);
+    clearTimeout(sendTimerRef.current);
+    sendTimerRef.current = setTimeout(flushSettings, 300);
+  }
+  // Leaving the lobby with a change still waiting to be sent: send it.
+  useEffect(
+    () => () => {
+      clearTimeout(sendTimerRef.current);
+      if (draftRef.current) actRef.current("mafia_update_settings", { p_settings: draftRef.current });
+    },
+    []
+  );
   const roleToggles = [
     { key: "doctor", Icon: IconCross, color: "var(--doctor)", bg: "rgba(94,168,230,.14)" },
     { key: "sheriff", Icon: IconShield, color: "var(--sheriff)", bg: "rgba(166,126,232,.14)" },
@@ -10477,6 +10514,7 @@ function MafiaRoomLobby({ room, dispatch }) {
   async function start() {
     mafiaPrimeSpeech();
     setStarting(true);
+    await flushSettings();
     await handleStart();
     setStarting(false);
   }
@@ -10530,7 +10568,7 @@ function MafiaRoomLobby({ room, dispatch }) {
 
         {view.is_host ? (
           <>
-            <Stepper label={t("mafia.mafiaCount")} value={settings.mafia_count} min={1} max={maxMafia} onChange={(v) => setSetting({ mafia_count: v })} />
+            <Stepper label={t("mafia.mafiaCount")} value={Math.min(maxMafia, settings.mafia_count)} min={1} max={maxMafia} onChange={(v) => setSetting({ mafia_count: Math.min(maxMafia, Math.max(1, v)) })} />
             <Stepper
               label={t("mafia.speechTime")}
               value={settings.speech_seconds}
@@ -10538,7 +10576,7 @@ function MafiaRoomLobby({ room, dispatch }) {
               max={MAX_MAFIA_SPEECH_SEC}
               step={MAFIA_SPEECH_SEC_STEP}
               suffix={t("alias.seconds")}
-              onChange={(v) => setSetting({ speech_seconds: v })}
+              onChange={(v) => setSetting({ speech_seconds: Math.min(MAX_MAFIA_SPEECH_SEC, Math.max(MIN_MAFIA_SPEECH_SEC, v)) })}
             />
             <div className="flex flex-col gap-2">
               {roleToggles.map((r) => (
