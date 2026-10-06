@@ -921,7 +921,7 @@
 </script>
 
 <script type="text/babel" data-presets="react">
-const { useState, useEffect, useReducer, useRef, useCallback } = React;
+const { useState, useEffect, useReducer, useRef, useCallback, useMemo } = React;
 
 /* ---------------------------------------------------------------- */
 /* Supabase — used only by Bunker (online multiplayer, Realtime      */
@@ -2199,6 +2199,107 @@ const I18N = {
   "mafia.title": { ru: "МАФИЯ", en: "MAFIA", hy: "ՄԱՖԻԱ" },
   "mafia.playersCount": { ru: "Количество игроков", en: "Number of players", hy: "Խաղացողների քանակ" },
   "mafia.mafiaCount": { ru: "Количество мафии", en: "Number of mafia", hy: "Մաֆիայի քանակ" },
+  "mroom.title": { ru: "Мафия: комната", en: "Mafia: room", hy: "Մաֆիա․ սենյակ" },
+  "mroom.subtitle": { ru: "Каждый играет со своего телефона. Игру ведёт программа — никому не нужно быть ведущим.", en: "Everyone plays from their own phone. The app runs the game — nobody has to be the host.", hy: "Յուրաքանչյուրը խաղում է իր հեռախոսից։ Խաղը վարում է ծրագիրը — ոչ ոք պարտավոր չէ լինել վարող։" },
+  "mroom.createDesc": { ru: "Вы получите код комнаты и будете играть вместе со всеми.", en: "You'll get a room code and play together with everyone.", hy: "Դուք կստանաք սենյակի կոդ և կխաղաք բոլորի հետ։" },
+  "mroom.joinDesc": { ru: "Введите 4-значный код, который назвал создатель комнаты.", en: "Enter the 4-digit code the room creator gave you.", hy: "Մուտքագրեք 4-նիշանոց կոդը, որը տվել է սենյակի ստեղծողը։" },
+  "mroom.playOnOnePhone": { ru: "Играть на одном телефоне с ведущим", en: "Play on one phone with a host", hy: "Խաղալ մեկ հեռախոսով՝ վարողի հետ" },
+  "mroom.modeLabel": { ru: "Как играем", en: "How to play", hy: "Ինչպես ենք խաղում" },
+  "mroom.modeOnePhone": { ru: "Один телефон", en: "One phone", hy: "Մեկ հեռախոս" },
+  "mroom.modeRoom": { ru: "Комната по коду", en: "Room by code", hy: "Սենյակ կոդով" },
+  "mroom.modeHint": { ru: "Один телефон: игру ведёт человек-ведущий. Комната по коду: у каждого свой телефон, игру ведёт программа.", en: "One phone: a person hosts the game. Room by code: everyone on their own phone, the app hosts.", hy: "Մեկ հեռախոս՝ խաղը վարում է մարդը։ Սենյակ կոդով՝ յուրաքանչյուրն իր հեռախոսով, խաղը վարում է ծրագիրը։" },
+  "mroom.errNotFound": { ru: "Комната не найдена. Проверьте код.", en: "Room not found. Check the code.", hy: "Սենյակը չի գտնվել։ Ստուգեք կոդը։" },
+  "mroom.errStarted": { ru: "Игра в этой комнате уже началась.", en: "The game in this room has already started.", hy: "Այս սենյակում խաղն արդեն սկսվել է։" },
+  "mroom.errFull": { ru: "В комнате уже 20 игроков.", en: "The room already has 20 players.", hy: "Սենյակում արդեն 20 խաղացող կա։" },
+  "mroom.errGone": { ru: "Комната закрыта.", en: "The room is closed.", hy: "Սենյակը փակված է։" },
+  "mroom.needPlayers": { ru: "Нужно минимум 5 игроков", en: "At least 5 players needed", hy: "Անհրաժեշտ է առնվազն 5 խաղացող" },
+  "mroom.offline": { ru: "Не на связи", en: "Offline", hy: "Կապի մեջ չէ" },
+  "mroom.creator": { ru: "Создатель", en: "Creator", hy: "Ստեղծող" },
+  "mroom.voiceLabel": { ru: "Голос ведущего", en: "Host's voice", hy: "Վարողի ձայնը" },
+  "mroom.voiceHere": { ru: "Голос ведущего звучит из этого телефона. Сделайте громче.", en: "The host's voice plays from this phone. Turn the volume up.", hy: "Վարողի ձայնը հնչում է այս հեռախոսից։ Բարձրացրեք ձայնը։" },
+  "mroom.voiceOn": { ru: "Голос ведущего звучит из телефона игрока {name}.", en: "The host's voice plays from {name}'s phone.", hy: "Վարողի ձայնը հնչում է {name} խաղացողի հեռախոսից։" },
+  "mroom.voiceUnavailable": { ru: "Этот телефон не может говорить: во встроенном браузере Telegram и Instagram голоса нет.", en: "This phone can't speak: the in-app browsers of Telegram and Instagram have no voice.", hy: "Այս հեռախոսը չի կարող խոսել. Telegram-ի և Instagram-ի ներկառուցված դիտարկիչներում ձայն չկա։" },
+  "mroom.voiceNeedsOther": { ru: "Пусть один игрок откроет комнату в обычном браузере (Chrome или Safari) и нажмёт «Голос на этом телефоне».", en: "Have one player open the room in a regular browser (Chrome or Safari) and tap “Voice on this phone”.", hy: "Թող խաղացողներից մեկը բացի սենյակը սովորական դիտարկիչում (Chrome կամ Safari) և սեղմի «Ձայնը այս հեռախոսում»։" },
+  "mroom.voiceTake": { ru: "Голос на этом телефоне", en: "Voice on this phone", hy: "Ձայնը այս հեռախոսում" },
+  "mroom.voiceTest": { ru: "Проверить голос", en: "Test the voice", hy: "Ստուգել ձայնը" },
+  "mroom.voiceTestAgain": { ru: "Проверить ещё раз", en: "Test again", hy: "Ստուգել կրկին" },
+  "mroom.settingsLabel": { ru: "Настройки игры", en: "Game settings", hy: "Խաղի կարգավորումներ" },
+  "mroom.start": { ru: "Начать игру", en: "Start the game", hy: "Սկսել խաղը" },
+  "mroom.waitingCreator": { ru: "Ждём создателя комнаты…", en: "Waiting for the room creator…", hy: "Սպասում ենք սենյակի ստեղծողին…" },
+  "mroom.hideRole": { ru: "Скрыть", en: "Hide", hy: "Թաքցնել" },
+  "mroom.hideAndReady": { ru: "Скрыть — я готов", en: "Hide — I'm ready", hy: "Թաքցնել — պատրաստ եմ" },
+  "mroom.waitingOthers": { ru: "Ждём остальных", en: "Waiting for the others", hy: "Սպասում ենք մյուսներին" },
+  "mroom.lookAndReady": { ru: "Посмотрите роль и нажмите «Готов»", en: "Look at your role and tap “Ready”", hy: "Նայեք դերը և սեղմեք «Պատրաստ եմ»" },
+  "mroom.skipWaiting": { ru: "Не ждать остальных", en: "Don't wait for the others", hy: "Չսպասել մյուսներին" },
+  "mroom.yourTurn": { ru: "Ваш ход", en: "Your turn", hy: "Ձեր քայլը" },
+  "mroom.prompt_putana": { ru: "К кому вы придёте этой ночью?", en: "Who will you visit tonight?", hy: "Ու՞մ մոտ կգնաք այս գիշեր" },
+  "mroom.prompt_mafia": { ru: "Кого убивает мафия?", en: "Who does the mafia kill?", hy: "Ու՞մ է սպանում մաֆիան" },
+  "mroom.prompt_don": { ru: "Кого проверить?", en: "Who do you check?", hy: "Ու՞մ ստուգել" },
+  "mroom.prompt_maniac": { ru: "Кто ваша жертва?", en: "Who is your victim?", hy: "Ո՞վ է ձեր զոհը" },
+  "mroom.prompt_doctor": { ru: "Кого лечить?", en: "Who do you heal?", hy: "Ու՞մ բուժել" },
+  "mroom.prompt_sheriff": { ru: "Кого проверить?", en: "Who do you check?", hy: "Ու՞մ ստուգել" },
+  "mroom.resultBlocked": { ru: "Этой ночью вас заблокировали. Проверка не удалась.", en: "You were blocked tonight. The check failed.", hy: "Այս գիշեր ձեզ արգելափակել են։ Ստուգումը չստացվեց։" },
+  "mroom.resultMafia": { ru: "{name} — мафия.", en: "{name} is mafia.", hy: "{name}-ը մաֆիա է։" },
+  "mroom.resultNotMafia": { ru: "{name} — не мафия.", en: "{name} is not mafia.", hy: "{name}-ը մաֆիա չէ։" },
+  "mroom.resultSheriff": { ru: "{name} — шериф.", en: "{name} is the sheriff.", hy: "{name}-ը շերիֆն է։" },
+  "mroom.resultNotSheriff": { ru: "{name} — не шериф.", en: "{name} is not the sheriff.", hy: "{name}-ը շերիֆը չէ։" },
+  "mroom.resultPicked": { ru: "Выбор принят: {name}.", en: "Choice accepted: {name}.", hy: "Ընտրությունն ընդունված է՝ {name}։" },
+  "mroom.mafiaWaiting": { ru: "Ждём остальных. Закройте глаза, когда ведущий скажет.", en: "Waiting for the others. Close your eyes when the host says so.", hy: "Սպասում ենք մյուսներին։ Փակեք աչքերը, երբ վարողն ասի։" },
+  "mroom.nightTitle": { ru: "Ночь", en: "Night", hy: "Գիշեր" },
+  "mroom.nightHint": { ru: "Закройте глаза. Откройте, когда ведущий назовёт вашу роль.", en: "Close your eyes. Open them when the host calls your role.", hy: "Փակեք աչքերը։ Բացեք, երբ վարողը կանչի ձեր դերը։" },
+  "mroom.deadHint": { ru: "Вы выбыли из игры. Наблюдайте молча.", en: "You are out of the game. Watch in silence.", hy: "Դուք դուրս եք եկել խաղից։ Հետևեք լուռ։" },
+  "mroom.mafiaMissed": { ru: "Мафия не договорилась и промахнулась.", en: "The mafia couldn't agree and missed.", hy: "Մաֆիան չպայմանավորվեց և վրիպեց։" },
+  "mroom.complaintsRule": { ru: "Жалоб для предупреждения: {n}. Создатель комнаты может выдать его сам.", en: "Complaints needed for a warning: {n}. The room creator can also give one.", hy: "Նախազգուշացման համար անհրաժեշտ բողոքներ՝ {n}։ Սենյակի ստեղծողը կարող է տալ այն ինքը։" },
+  "mroom.complaintsCount": { ru: "жалоб {n}/{m}", en: "complaints {n}/{m}", hy: "բողոք {n}/{m}" },
+  "mroom.complain": { ru: "Пожаловаться", en: "Complain", hy: "Բողոքել" },
+  "mroom.complained": { ru: "Жалоба подана", en: "Complained", hy: "Բողոքված է" },
+  "mroom.youSpeak": { ru: "Ваша очередь говорить", en: "Your turn to speak", hy: "Ձեր խոսելու հերթն է" },
+  "mroom.doneSpeaking": { ru: "Я закончил", en: "I'm done", hy: "Ավարտեցի" },
+  "mroom.skipPlayer": { ru: "Пропустить игрока", en: "Skip this player", hy: "Բաց թողնել խաղացողին" },
+  "mroom.voteTitle": { ru: "Голосование", en: "Vote", hy: "Քվեարկություն" },
+  "mroom.votedCount": { ru: "Проголосовали: {n} из {m}", en: "Voted: {n} of {m}", hy: "Քվեարկել են՝ {n}-ը {m}-ից" },
+  "mroom.voteNobody": { ru: "Никого", en: "Nobody", hy: "Ոչ ոքի" },
+  "mroom.youNoVote": { ru: "У вас 3 предупреждения: вы пропускаете это голосование.", en: "You have 3 warnings: you sit this vote out.", hy: "Դուք ունեք 3 նախազգուշացում. բաց եք թողնում այս քվեարկությունը։" },
+  "mroom.voteAccepted": { ru: "Голос принят. Ждём остальных.", en: "Vote accepted. Waiting for the others.", hy: "Ձայնն ընդունված է։ Սպասում ենք մյուսներին։" },
+  "mroom.finishVote": { ru: "Завершить голосование", en: "Finish the vote", hy: "Ավարտել քվեարկությունը" },
+  "mroom.voteTie": { ru: "Голоса разделились. Никто не выбывает.", en: "The vote is tied. Nobody leaves.", hy: "Ձայները հավասար են։ Ոչ ոք դուրս չի գալիս։" },
+  "mroom.whoVoted": { ru: "Кто за кого голосовал", en: "Who voted for whom", hy: "Ով ում օգտին է քվեարկել" },
+  "mroom.toMenu": { ru: "Выйти из комнаты", en: "Leave the room", hy: "Դուրս գալ սենյակից" },
+  "mhost.test": { ru: "Проверка голоса. Меня хорошо слышно?", en: "Voice check. Can everyone hear me?", hy: "Ձայնի ստուգում։ Ինձ լա՞վ եք լսում։" },
+  "mhost.roles_dealt": { ru: "Роли розданы. Посмотрите свою роль на телефоне и нажмите «Готов».", en: "Roles are dealt. Look at your role on your phone and tap “Ready”.", hy: "Դերերը բաժանված են։ Նայեք ձեր դերը հեռախոսում և սեղմեք «Պատրաստ եմ»։" },
+  "mhost.night_start": { ru: "Наступает ночь. Город засыпает. Все закрывают глаза.", en: "Night falls. The city goes to sleep. Everyone, close your eyes.", hy: "Գիշեր է իջնում։ Քաղաքը քնում է։ Բոլորը փակում են աչքերը։" },
+  "mhost.wake_putana": { ru: "Просыпается путана. Выберите, к кому вы придёте этой ночью.", en: "The seductress wakes up. Choose who you visit tonight.", hy: "Արթնանում է գայթակղիչը։ Ընտրեք, թե ում մոտ կգնաք այս գիշեր։" },
+  "mhost.wake_mafia": { ru: "Просыпается мафия. Договоритесь жестами и выберите жертву. Все должны нажать на одного игрока.", en: "The mafia wakes up. Agree with gestures and choose a victim. Everyone must tap the same player.", hy: "Արթնանում է մաֆիան։ Պայմանավորվեք ժեստերով և ընտրեք զոհին։ Բոլորը պետք է սեղմեն նույն խաղացողի վրա։" },
+  "mhost.wake_don": { ru: "Просыпается дон. Выберите, кого проверить.", en: "The don wakes up. Choose who to check.", hy: "Արթնանում է դոնը։ Ընտրեք, թե ում ստուգել։" },
+  "mhost.wake_maniac": { ru: "Просыпается маньяк. Выберите жертву.", en: "The maniac wakes up. Choose a victim.", hy: "Արթնանում է մանյակը։ Ընտրեք զոհին։" },
+  "mhost.wake_doctor": { ru: "Просыпается доктор. Выберите, кого лечить.", en: "The doctor wakes up. Choose who to heal.", hy: "Արթնանում է բժիշկը։ Ընտրեք, թե ում բուժել։" },
+  "mhost.wake_sheriff": { ru: "Просыпается шериф. Выберите, кого проверить.", en: "The sheriff wakes up. Choose who to check.", hy: "Արթնանում է շերիֆը։ Ընտրեք, թե ում ստուգել։" },
+  "mhost.sleep_putana": { ru: "Путана засыпает.", en: "The seductress goes to sleep.", hy: "Գայթակղիչը քնում է։" },
+  "mhost.sleep_mafia": { ru: "Мафия засыпает.", en: "The mafia goes to sleep.", hy: "Մաֆիան քնում է։" },
+  "mhost.sleep_don": { ru: "Дон засыпает.", en: "The don goes to sleep.", hy: "Դոնը քնում է։" },
+  "mhost.sleep_maniac": { ru: "Маньяк засыпает.", en: "The maniac goes to sleep.", hy: "Մանյակը քնում է։" },
+  "mhost.sleep_doctor": { ru: "Доктор засыпает.", en: "The doctor goes to sleep.", hy: "Բժիշկը քնում է։" },
+  "mhost.sleep_sheriff": { ru: "Шериф засыпает.", en: "The sheriff goes to sleep.", hy: "Շերիֆը քնում է։" },
+  "mhost.morning": { ru: "Наступает утро. Город просыпается. Все открывают глаза.", en: "Morning comes. The city wakes up. Everyone, open your eyes.", hy: "Առավոտ է։ Քաղաքն արթնանում է։ Բոլորը բացում են աչքերը։" },
+  "mhost.morningMissed": { ru: "Мафия не смогла договориться и промахнулась.", en: "The mafia couldn't agree and missed.", hy: "Մաֆիան չկարողացավ պայմանավորվել և վրիպեց։" },
+  "mhost.morningVictim": { ru: "Этой ночью город потерял игрока: {name}. Роль: {role}.", en: "Last night the city lost a player: {name}. Role: {role}.", hy: "Այս գիշեր քաղաքը կորցրեց խաղացողի՝ {name}։ Դերը՝ {role}։" },
+  "mhost.morningSaved": { ru: "Этой ночью никто не погиб: доктор спас жертву.", en: "Nobody died last night: the doctor saved the victim.", hy: "Այս գիշեր ոչ ոք չմահացավ. բժիշկը փրկեց զոհին։" },
+  "mhost.morningNobody": { ru: "Этой ночью никто не погиб.", en: "Nobody died last night.", hy: "Այս գիշեր ոչ ոք չմահացավ։" },
+  "mhost.lastword": { ru: "Последнее слово: {name}.", en: "Last word: {name}.", hy: "Վերջին խոսքը՝ {name}։" },
+  "mhost.day_first": { ru: "Начинается обсуждение. Первым говорит {name}.", en: "The discussion begins. {name} speaks first.", hy: "Սկսվում է քննարկումը։ Առաջինը խոսում է {name}-ը։" },
+  "mhost.day_speaker": { ru: "Говорит {name}.", en: "{name} speaks.", hy: "Խոսում է {name}-ը։" },
+  "mhost.vote_start": { ru: "Все высказались. Голосование. Выберите игрока на своём телефоне.", en: "Everyone has spoken. Time to vote. Choose a player on your phone.", hy: "Բոլորը խոսեցին։ Քվեարկություն։ Ընտրեք խաղացողի ձեր հեռախոսում։" },
+  "mhost.voteExiled": { ru: "Город решил. {name} покидает игру.", en: "The city has decided. {name} leaves the game.", hy: "Քաղաքը որոշեց։ {name}-ը լքում է խաղը։" },
+  "mhost.voteTie": { ru: "Голоса разделились. Никто не покидает игру.", en: "The vote is tied. Nobody leaves the game.", hy: "Ձայները հավասար են։ Ոչ ոք չի լքում խաղը։" },
+  "mhost.voteNobody": { ru: "Город никого не выгнал.", en: "The city exiled nobody.", hy: "Քաղաքը ոչ ոքի չհեռացրեց։" },
+  "mhost.reveal": { ru: "{name}. Роль: {role}.", en: "{name}. Role: {role}.", hy: "{name}։ Դերը՝ {role}։" },
+  "mhost.removed": { ru: "{name} получает четвёртое предупреждение и выбывает из игры. Роль: {role}.", en: "{name} gets a fourth warning and is out of the game. Role: {role}.", hy: "{name}-ը ստանում է չորրորդ նախազգուշացումը և դուրս է գալիս խաղից։ Դերը՝ {role}։" },
+  "mhost.warningHost": { ru: "Создатель комнаты выдал предупреждение. {name}: {count} из 4.", en: "The room creator gave a warning. {name}: {count} of 4.", hy: "Սենյակի ստեղծողը նախազգուշացում տվեց։ {name}՝ {count}-ը 4-ից։" },
+  "mhost.warningPlayers": { ru: "Игроки пожаловались. {name} получает предупреждение: {count} из 4.", en: "The players complained. {name} gets a warning: {count} of 4.", hy: "Խաղացողները բողոքեցին։ {name}-ը ստանում է նախազգուշացում՝ {count}-ը 4-ից։" },
+  "mhost.warningNoVote": { ru: "{name} пропускает ближайшее голосование.", en: "{name} sits out the next vote.", hy: "{name}-ը բաց է թողնում մոտակա քվեարկությունը։" },
+  "mhost.win_town": { ru: "Игра окончена. Победили мирные жители.", en: "The game is over. The town wins.", hy: "Խաղն ավարտվեց։ Հաղթեցին խաղաղ բնակիչները։" },
+  "mhost.win_mafia": { ru: "Игра окончена. Победила мафия.", en: "The game is over. The mafia wins.", hy: "Խաղն ավարտվեց։ Հաղթեց մաֆիան։" },
+  "mhost.win_maniac": { ru: "Игра окончена. Победил маньяк.", en: "The game is over. The maniac wins.", hy: "Խաղն ավարտվեց։ Հաղթեց մանյակը։" },
   "mafia.speechTime": { ru: "Время на речь игрока", en: "Speaking time per player", hy: "Մեկ խաղացողի խոսքի ժամանակը" },
   "mafia.speaking": { ru: "Говорит", en: "Speaking", hy: "Խոսում է" },
   "mafia.nextSpeaker": { ru: "Следующий: {name}", en: "Next: {name}", hy: "Հաջորդը՝ {name}" },
@@ -2696,19 +2797,123 @@ function recordMafiaGame(names, roles, winner) {
 }
 
 /* ---------------------------------------------------------------- */
-/* Screen Wake Lock — keeps the phone's screen on while an "active   */
-/* round" of any game is on screen, and releases it the moment that  */
-/* component unmounts (back to the hub, game over, etc). The browser */
-/* itself force-releases the lock whenever the tab is hidden, so we   */
-/* also re-acquire it on visibilitychange (e.g. phone was locked and   */
-/* unlocked mid-round without leaving the page).                     */
+/* Keeping the screen on while a game is open.                        */
+/*                                                                    */
+/* Called once, from App, for every screen except the Hub -- setup,   */
+/* role reveals, lobbies and rounds alike -- so no individual game    */
+/* screen has to remember to ask for it.                              */
+/*                                                                    */
+/* Two mechanisms, because the standard one isn't available where     */
+/* most of our players are:                                           */
+/*  1. navigator.wakeLock (Chrome, Safari, installed PWA). The        */
+/*     browser force-releases it whenever the tab is hidden, so it's  */
+/*     re-acquired on visibilitychange.                               */
+/*  2. In-app browsers (Telegram Mini App, Instagram, ...) are        */
+/*     WebViews, which don't implement the Wake Lock API at all, and  */
+/*     Telegram's own WebApp API has no keep-awake call either. There */
+/*     the only thing that keeps a phone awake is a playing video     */
+/*     that has an audio track, so a tiny silent black clip is looped */
+/*     off-screen (the same trick as NoSleep.js). A video may only    */
+/*     start from a user gesture, hence the tap listeners below.      */
 /* ---------------------------------------------------------------- */
+const SILENT_CLIP_MP4 = "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAZ0bW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAB9AAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAAApl0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAB9AAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAfQAAAAAAABAAAAAAIRbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAoAAAAUABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABvG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAXxzdGJsAAAAuHN0c2QAAAAAAAAAAQAAAKhhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAALmF2Y0MBQsAe/+EAFmdCwB7ZHsBEAAADAAQAAAMAKDxYuSABAAVoy4PLIAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAAAtUAAALVAAAABhzdHRzAAAAAAAAAAEAAAAKAAAIAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAABAAAAAQAAADxzdHN6AAAAAAAAAAAAAAAKAAACggAAAAoAAAAKAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAADhzdGNvAAAAAAAAAAoAAAa5AAAJQwAACVUAAAljAAAJdAAACYEAAAmSAAAJnwAACbAAAAnBAAADBXRyYWsAAABcdGtoZAAAAAMAAAAAAAAAAAAAAAIAAAAAAAAH0AAAAAAAAAAAAAAAAQEAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAACRlZHRzAAAAHGVsc3QAAAAAAAAAAQAAB9AAAAQAAAEAAAAAAn1tZGlhAAAAIG1kaGQAAAAAAAAAAAAAAAAAAB9AAABCgFXEAAAAAAAtaGRscgAAAAAAAAAAc291bgAAAAAAAAAAAAAAAFNvdW5kSGFuZGxlcgAAAAIobWluZgAAABBzbWhkAAAAAAAAAAAAAAAkZGluZgAAABxkcmVmAAAAAAAAAAEAAAAMdXJsIAAAAAEAAAHsc3RibAAAAH5zdHNkAAAAAAAAAAEAAABubXA0YQAAAAAAAAABAAAAAAAAAAAAAQAQAAAAAB9AAAAAAAA2ZXNkcwAAAAADgICAJQACAASAgIAXQBUAAAAAAB9AAAABPwWAgIAFFYhW5QAGgICAAQIAAAAUYnRydAAAAAAAAB9AAAABPwAAACBzdHRzAAAAAAAAAAIAAAAQAAAEAAAAAAEAAAKAAAAAfHN0c2MAAAAAAAAACQAAAAEAAAABAAAAAQAAAAIAAAACAAAAAQAAAAQAAAABAAAAAQAAAAUAAAACAAAAAQAAAAYAAAABAAAAAQAAAAcAAAACAAAAAQAAAAgAAAABAAAAAQAAAAkAAAACAAAAAQAAAAsAAAABAAAAAQAAAFhzdHN6AAAAAAAAAAAAAAARAAAAFQAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAA8c3RjbwAAAAAAAAALAAAGpAAACTsAAAlNAAAJXwAACWwAAAl9AAAJigAACZsAAAmoAAAJuQAACcoAAAAac2dwZAEAAAByb2xsAAAAAgAAAAH//wAAABxzYmdwAAAAAHJvbGwAAAABAAAAEQAAAAEAAABidWR0YQAAAFptZXRhAAAAAAAAACFoZGxyAAAAAAAAAABtZGlyYXBwbAAAAAAAAAAAAAAAAC1pbHN0AAAAJal0b28AAAAdZGF0YQAAAAEAAAAATGF2ZjYwLjE2LjEwMAAAAAhmcmVlAAADMm1kYXTeAgBMYXZjNjAuMzEuMTAyAAIwQA4AAAJvBgX//2vcRem95tlIt5Ys2CDZI+7veDI2NCAtIGNvcmUgMTY0IHIzMTA4IDMxZTE5ZjkgLSBILjI2NC9NUEVHLTQgQVZDIGNvZGVjIC0gQ29weWxlZnQgMjAwMy0yMDIzIC0gaHR0cDovL3d3dy52aWRlb2xhbi5vcmcveDI2NC5odG1sIC0gb3B0aW9uczogY2FiYWM9MCByZWY9MyBkZWJsb2NrPTE6MDowIGFuYWx5c2U9MHgxOjB4MTExIG1lPWhleCBzdWJtZT03IHBzeT0xIHBzeV9yZD0xLjAwOjAuMDAgbWl4ZWRfcmVmPTEgbWVfcmFuZ2U9MTYgY2hyb21hX21lPTEgdHJlbGxpcz0xIDh4OGRjdD0wIGNxbT0wIGRlYWR6b25lPTIxLDExIGZhc3RfcHNraXA9MSBjaHJvbWFfcXBfb2Zmc2V0PS0yIHRocmVhZHM9MSBsb29rYWhlYWRfdGhyZWFkcz0xIHNsaWNlZF90aHJlYWRzPTAgbnI9MCBkZWNpbWF0ZT0xIGludGVybGFjZWQ9MCBibHVyYXlfY29tcGF0PTAgY29uc3RyYWluZWRfaW50cmE9MCBiZnJhbWVzPTAgd2VpZ2h0cD0wIGtleWludD0xMCBrZXlpbnRfbWluPTEgc2NlbmVjdXQ9NDAgaW50cmFfcmVmcmVzaD0wIHJjX2xvb2thaGVhZD0xMCByYz1jcmYgbWJ0cmVlPTEgY3JmPTIzLjAgcWNvbXA9MC42MCBxcG1pbj0wIHFwbWF4PTY5IHFwc3RlcD00IGlwX3JhdGlvPTEuNDAgYXE9MToxLjAwAIAAAAALZYiEBHyYoAA2I4ABGCAHARggBwAAAAZBmjgI+oABGCAHARggBwAAAAZBmlQCPqABGCAHAAAABUGaYBH1ARggBwEYIAcAAAAFQZqAEfUBGCAHAAAABUGaoBH1ARggBwEYIAcAAAAFQZrAEfUBGCAHAAAABUGa4BH1ARggBwEYIAcAAAAFQZsAEPUBGCAHARggBwAAAAVBmyA/1AEYIAc=";
+const SILENT_CLIP_WEBM = "data:video/webm;base64,GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAA4eEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggptTbuMU6uEHFO7a1Osgg4I7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNjAuMTYuMTAwV0GNTGF2ZjYwLjE2LjEwMESJiECfwAAAAAAAFlSua0mPrgEAAAAAAAA414EBc8WIaJ0Nujnzt0ycgQAitZyDdW5kiIEAhoVWX1ZQOIOBASPjg4QL68IA4ImwgRC6gRCagQKuAQAAAAAACUXXgQJzxYgyRjqI6csMEpyBACK1nIN1bmSIgQCGiEFfVk9SQklTg4EC4ZGfgQG1iEC/QAAAAAAAYmSBIGOiSQYCHl0Bdm9yYmlzAAAAAAFAHwAA/////0AfAAD/////mQEDdm9yYmlzNAAAAFhpcGguT3JnIGxpYlZvcmJpcyBJIDIwMjAwNzA0IChSZWR1Y2luZyBFbnZpcm9ubWVudCkBAAAAFQAAAGVuY29kZXI9TGF2YzYwLjMxLjEwMgEFdm9yYmlzD0JDVgEAAAEADFIUISUZU0pjCJVSUikFHWNQW0cdY9Q5RiFkEFOISRmle08qlVhKyBFSWClFHVNMU0mVUpYpRR1jFFNIIVPWMWWhcxRLhkkJJWxNrnQWS+iZY5YxRh1jzlpKnWPWMUUdY1JSSaFzGDpmJWQUOkbF6GJ8MDqVokIovsfeUukthYpbir3XGlPrLYQYS2nBCGFz7bXV3EpqxRhjjDHGxeJTKILQkFUAAAEAAEAEAUJDVgEACgAAwlAMRVGA0JBVAEAGAIAAFEVxFMdxHEeSJMsCQkNWAQBAAAACAAAojuEokiNJkmRZlmVZlqZ5lqi5qi/7ri7rru3qug6EhqwEAIAAABhGoXVMKoMQQ8pDhBRj0DOjEEMMTMYcY040pAwyiDPFkDKIWywuqBAEoSErAoAoAADAGMQYYgw556RkUiLnmJROSgOdo9RRyiiVFEuMGaUSW4kxgs5R6ihllEKMpcWMUomxxFQAAECAAwBAgIVQaMiKACAKAIAwBimFlEKMKeYUc4gx5RyDDDHGIGTOKegYk05K5ZyTzkmJGGPOMQeVc05K56Ry0EnJpBMAABDgAAAQYCEUGrIiAIgTADBIkqZZmiaKlqaJomeKquqJoqpanmeanmmqqmeaqmqqquuaqurKlueZpmeaquqZpqqKpuq6pqq6rqeqtmy6qi6brmrbruz6tmu7vu6pqmybqivrpurKuurKtu66tu1Lnqeqoqq6rmeqrqu6rm6rrmvbmmrKrqm6sm26ri27smzrrizrumaqrmy6qi2brizrruzatirLui+6rm6rsqz7qiz7vmzruu7auvCLrmvrqizrvirLvjHbtvDLui4ckyeqqqeqruuZquuqrmvbquvauqaarmy6ri2bqivbqizrtivLtq6ZqiybrivbpuvKsirLvu/Ksm6LruvrpizruirLwu7qujHMtq37ouvquirLuq/Ksq67uu77sm4Lu6aqum7Ksq+bsqz7tq4Ly6zbujG6ru+rsi38qiwLv677wjLrPmN0XV9XbVkYVtn2fd33lWPWdWFZbVv5XVtnvL5uDLtu/MqtC8uy2raxzLqtLK+vG8Mu7Hxb+JWaqtq26bq6bsqyr8u6LrR13VdG1/V91bZ9X5Vl37eFX2kbw7CMrqv7qizrwmvLyi/rurDswi8sq20rv6vryjDburDcvrAsv+4Ly6rbvu/qutK1dWW5fZ+xK7fxCwAAGHAAAAgwoQwUGrIiAIgTAEAQcg4pBqFiCkIIoaQQQioVY1Iy5qRkzkkppZQUSkmtYkxK5pyUzDEpoZSWSimphFJaKqXEFEppLaXWYkqpxVBKa6Wk1kpJraWUYkytxRgxJiVzTkrmnJSSUmslldYy5yhlDkrqIKSUSiqtpNRi5pykDjorHYTUSioxlZRiC6nEVkpqraQUYysx1dRajiGlGEtKsZWUWm0x1dZaqzViTErmnJTMOSolpdZKKq1lzknqILTUOSippNRiKinFyjlJHYSUMsiolJRaK6nEElKJrbQUYympxdRirinFFkNJLZaUWiypxNZijLW1VFMnpcWSUowllRhbrLm21moMpcRWSouxpJRbazHXFmOOoaQWSyuxlZRabLXl2FrLNbVUY0qt1hZjjTHllGutPafWYk0x1dparLnVllvMtedOSmullBZLSjG21mKN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";
+const AWAKE_VIDEO_DISABLED_KEY = "hatsit_awake_video_off_v1";
+const screenAwakeVideo = {
+  el: null,
+  wanted: false,
+  disabled() {
+    try {
+      return localStorage.getItem(AWAKE_VIDEO_DISABLED_KEY) === "1";
+    } catch (e) {
+      return false;
+    }
+  },
+  ensure() {
+    if (this.el || this.disabled()) return this.el;
+    const video = document.createElement("video");
+    video.setAttribute("title", "Hatsit");
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
+    video.setAttribute("disableremoteplayback", "");
+    video.setAttribute("aria-hidden", "true");
+    video.setAttribute("tabindex", "-1");
+    video.loop = true;
+    // Deliberately NOT muted: phones let the screen sleep under a muted
+    // video. The clip's own audio track is pure silence.
+    video.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1;";
+    for (const [src, type] of [[SILENT_CLIP_MP4, "video/mp4"], [SILENT_CLIP_WEBM, "video/webm"]]) {
+      const source = document.createElement("source");
+      source.src = src;
+      source.type = type;
+      video.appendChild(source);
+    }
+    // Some phones stop treating a clip as "playing" once it reaches its
+    // end, loop attribute or not -- so never let it get there.
+    video.addEventListener("timeupdate", () => {
+      if (video.currentTime > 1.2) video.currentTime = Math.random() * 0.5;
+    });
+    // Safety net: a WebView that doesn't allow inline playback would open
+    // this clip fullscreen over the game. If that ever happens, close it
+    // and never use the video on this device again.
+    video.addEventListener("webkitbeginfullscreen", () => {
+      try {
+        localStorage.setItem(AWAKE_VIDEO_DISABLED_KEY, "1");
+      } catch (e) {}
+      this.wanted = false;
+      try {
+        video.pause();
+        if (video.webkitExitFullscreen) video.webkitExitFullscreen();
+        video.remove();
+      } catch (e) {}
+      this.el = null;
+    });
+    document.body.appendChild(video);
+    this.el = video;
+    return video;
+  },
+  play() {
+    if (!this.wanted || document.visibilityState !== "visible") return;
+    const video = this.ensure();
+    if (!video || !video.paused) return;
+    try {
+      const attempt = video.play();
+      if (attempt && typeof attempt.then === "function") attempt.then(undefined, () => {});
+    } catch (e) {}
+  },
+  start() {
+    this.wanted = true;
+    this.play();
+  },
+  stop() {
+    this.wanted = false;
+    if (this.el) {
+      try {
+        this.el.pause();
+      } catch (e) {}
+    }
+  },
+};
 function useWakeLock(active) {
   const lockRef = useRef(null);
   useEffect(() => {
-    if (!active || !("wakeLock" in navigator)) return;
+    if (!active) return;
     let cancelled = false;
+    let usingVideo = false;
+    function fallBackToVideo() {
+      if (cancelled) return;
+      usingVideo = true;
+      screenAwakeVideo.start();
+    }
     async function acquire() {
+      if (usingVideo) {
+        screenAwakeVideo.play();
+        return;
+      }
+      if (!("wakeLock" in navigator)) {
+        fallBackToVideo();
+        return;
+      }
       try {
         const lock = await navigator.wakeLock.request("screen");
         if (cancelled) {
@@ -2719,16 +2924,31 @@ function useWakeLock(active) {
         lock.addEventListener && lock.addEventListener("release", () => {
           if (lockRef.current === lock) lockRef.current = null;
         });
-      } catch (e) {}
+      } catch (e) {
+        // The API exists but this browser refused it (a WebView with the
+        // permission blocked, battery saver, ...). A hidden tab is the one
+        // refusal that fixes itself -- visibilitychange retries that.
+        if (document.visibilityState === "visible") fallBackToVideo();
+      }
     }
     acquire();
     function handleVisibility() {
       if (document.visibilityState === "visible" && !lockRef.current) acquire();
     }
+    // The video can only start from a tap; the first one inside a game
+    // starts it (and later ones restart it if the phone paused it).
+    function handleGesture() {
+      if (usingVideo) screenAwakeVideo.play();
+    }
     document.addEventListener("visibilitychange", handleVisibility);
+    document.addEventListener("pointerdown", handleGesture, true);
+    document.addEventListener("touchend", handleGesture, true);
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", handleVisibility);
+      document.removeEventListener("pointerdown", handleGesture, true);
+      document.removeEventListener("touchend", handleGesture, true);
+      if (usingVideo) screenAwakeVideo.stop();
       if (lockRef.current) {
         lockRef.current.release().catch(() => {});
         lockRef.current = null;
@@ -3658,7 +3878,7 @@ let pendingInviteParams = (() => {
     const params = new URLSearchParams(window.location.search);
     const room = (params.get("room") || "").replace(/\D/g, "").slice(0, 4);
     const game = params.get("game");
-    if (room && (game === "bunker" || game === "court")) return { room, game };
+    if (room && (game === "bunker" || game === "court" || game === "mafiaroom")) return { room, game };
   } catch (e) {}
   // Same invite, Telegram's own shape: a Mini App opened via
   // t.me/<bot>/<app>?startapp=bunker_1234 gets that "bunker_1234" back as
@@ -3667,7 +3887,7 @@ let pendingInviteParams = (() => {
   try {
     const telegram = tg();
     const startParam = telegram && telegram.initDataUnsafe && telegram.initDataUnsafe.start_param;
-    const match = typeof startParam === "string" && startParam.match(/^(bunker|court)_(\d{4})$/);
+    const match = typeof startParam === "string" && startParam.match(/^(bunker|court|mafiaroom)_(\d{4})$/);
     if (match) return { room: match[2], game: match[1] };
   } catch (e) {}
   return null;
@@ -3839,7 +4059,9 @@ function checkMafiaWinner(roles, alive) {
 
 function nextNightPhase(roles, alive, after) {
   const order = ["putana", "mafia", "don", "maniac", "doctor", "sheriff"];
-  const isRoleAlive = (roleId) => roles.some((r, i) => r === roleId && alive[i]);
+  // The "mafia" step is the shared kill, so a lone surviving don still
+  // gets it. `after` = null means "start of the night".
+  const isRoleAlive = (roleId) => roles.some((r, i) => alive[i] && (roleId === "mafia" ? r === "mafia" || r === "don" : r === roleId));
   const idx = order.indexOf(after);
   for (let i = idx + 1; i < order.length; i++) {
     if (isRoleAlive(order[i])) return `night-${order[i]}`;
@@ -3947,6 +4169,8 @@ function reducer(state, action) {
       return { ...state, feedbackPending: null };
     case "OPEN_SPY_SETUP":
       return { ...state, screen: "spy-setup", endReason: null };
+    case "OPEN_MAFIA_ROOM":
+      return { ...state, screen: "mafiaroom" };
     case "OPEN_BUNKER":
       return { ...state, screen: "bunker" };
     case "OPEN_COURT":
@@ -4593,7 +4817,7 @@ function reducer(state, action) {
           ...state,
           mafia: {
             ...mafia,
-            phase: "night-mafia",
+            phase: nextNightPhase(mafia.roles, mafia.alive, null),
             night: mafia.night + 1,
             mafiaTarget: null,
             donTarget: null,
@@ -4610,7 +4834,7 @@ function reducer(state, action) {
         };
       }
       if (mafia.phase === "roster") {
-        return { ...state, screen: "mafia-game", mafia: { ...mafia, phase: "night-mafia", night: 1 } };
+        return { ...state, screen: "mafia-game", mafia: { ...mafia, phase: nextNightPhase(mafia.roles, mafia.alive, null), night: 1 } };
       }
       return state;
     }
@@ -6255,6 +6479,7 @@ const SCREEN_COMPONENTS = {
   "mafia-roster": MafiaRoster,
   "mafia-game": MafiaGame,
   "mafia-end": MafiaEnd,
+  mafiaroom: MafiaRoomApp,
   bunker: BunkerApp,
   court: CourtApp,
 };
@@ -6648,7 +6873,6 @@ function SpyPlaying({ state, dispatch }) {
   const urgent = remaining <= 10;
   const ringColor = urgent ? "var(--danger)" : "var(--accent)";
 
-  useWakeLock(true);
 
   useEffect(() => {
     if (!running) return;
@@ -6991,7 +7215,6 @@ function AliasPlaying({ state, dispatch }) {
   const { remaining, running } = alias.timer;
   const urgent = remaining <= 10;
 
-  useWakeLock(true);
 
   useEffect(() => {
     if (!running) return;
@@ -7268,7 +7491,6 @@ function CrocPlaying({ state, dispatch }) {
   const { remaining, running } = croc.timer;
   const urgent = remaining <= 10;
 
-  useWakeLock(true);
 
   useEffect(() => {
     if (!running) return;
@@ -7736,7 +7958,6 @@ function CountdownPlaying({ state, dispatch }) {
   const ringColor = urgent ? "var(--danger)" : "var(--accent)";
   const promptText = countdownPromptText(countdown, lang);
 
-  useWakeLock(true);
 
   useEffect(() => {
     if (!running) return;
@@ -8085,7 +8306,6 @@ function TelephoneTurn({ state, dispatch }) {
     setRemaining(config.telephoneSeconds);
   }, [telephone.turnIndex]);
 
-  useWakeLock(revealed);
   useEffect(() => {
     if (!revealed || remaining <= 0) return;
     const id = setTimeout(() => setRemaining((r) => Math.max(0, r - 1)), 1000);
@@ -8391,6 +8611,16 @@ function MafiaSetup({ state, dispatch }) {
       <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("mafia.rulesTitle")} color="var(--spy)" rules={useRules(MAFIA_RULES)} />
 
       <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-4 flex flex-col gap-4">
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-5 py-4">
+          <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-3">{t("mroom.modeLabel")}</div>
+          <div className="flex gap-2 p-1 rounded-2xl bg-[var(--surface-2)]">
+            <span className="flex-1 py-2.5 rounded-xl text-sm font-medium text-center bg-[var(--accent)] text-[var(--accent-ink)]">{t("mroom.modeOnePhone")}</span>
+            <button onClick={() => dispatch({ type: "OPEN_MAFIA_ROOM" })} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-[var(--text-dim)]">
+              {t("mroom.modeRoom")}
+            </button>
+          </div>
+          <p className="text-xs text-[var(--text-faint)] mt-3">{t("mroom.modeHint")}</p>
+        </div>
         <Stepper label={t("mafia.playersCount")} value={mafiaPlayerCount} min={MIN_MAFIA_PLAYERS} max={MAX_MAFIA_PLAYERS} onChange={(v) => dispatch({ type: "MAFIA_SET_COUNT", value: v })} />
         <Stepper label={t("mafia.mafiaCount")} value={mafiaCount} min={MIN_MAFIA_COUNT} max={maxMafia} onChange={(v) => dispatch({ type: "MAFIA_SET_MAFIA_COUNT", value: v })} />
         <Stepper
@@ -9302,7 +9532,6 @@ function MafiaGame({ state, dispatch }) {
   const t = useT();
   const { mafia } = state;
 
-  useWakeLock(true);
 
   if (mafia.rosterOpen) {
     return (
@@ -9563,6 +9792,1338 @@ function MafiaEnd({ state, dispatch }) {
       </div>
     </div>
   );
+}
+
+/* ---------------------------------------------------------------- */
+/* Mafia: room by code, with an automatic host                        */
+/*                                                                    */
+/* Everyone plays from their own phone, the room creator included --  */
+/* nobody has to sit out to run the game. Unlike Bunker/Court, where  */
+/* the creator's phone holds the room and broadcasts it, here every   */
+/* role and every calculation lives in the database (the mafia_*      */
+/* functions): a phone only ever receives its own player's view, so   */
+/* there is nothing to peek at, even for the creator.                 */
+/*                                                                    */
+/* The game runs itself: each phase carries a deadline on the server  */
+/* and moves on when a phone asks after it has passed. The host's     */
+/* lines are spoken by ONE phone (browser speech synthesis); the      */
+/* others show them as text.                                          */
+/* ---------------------------------------------------------------- */
+const MAFIA_ROOM_IDENTITY_KEY = "hatsit_mafia_identity_v1";
+const MAFIA_ROOM_SESSION_KEY = "hatsit_mafiaroom_session_v1";
+const MAFIA_ROOM_POLL_MS = 2500;
+const MAFIA_ROOM_MIN_PLAYERS = 5;
+const MAFIA_SPEECH_LANG = { ru: "ru-RU", en: "en-US", hy: "hy-AM" };
+
+// A per-device id + secret for room play. The secret never leaves this
+// phone except to prove "I am that player" to the mafia_* functions; it
+// is what stops someone else from reading this player's role.
+function getMafiaRoomIdentity() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(MAFIA_ROOM_IDENTITY_KEY) || "null");
+    if (saved && typeof saved.id === "string" && typeof saved.secret === "string" && saved.secret.length >= 16) return saved;
+  } catch (e) {}
+  const random = () => {
+    try {
+      const bytes = new Uint8Array(16);
+      window.crypto.getRandomValues(bytes);
+      return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    } catch (e) {
+      return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    }
+  };
+  const identity = { id: "m" + random().slice(0, 20), secret: random() + random() };
+  try {
+    localStorage.setItem(MAFIA_ROOM_IDENTITY_KEY, JSON.stringify(identity));
+  } catch (e) {}
+  return identity;
+}
+
+// In-app browsers (Telegram, Instagram) are WebViews without speech
+// synthesis, so such a phone can play but cannot be the host's voice.
+function mafiaCanSpeak() {
+  try {
+    return typeof window.speechSynthesis === "object" && window.speechSynthesis !== null && typeof window.SpeechSynthesisUtterance === "function";
+  } catch (e) {
+    return false;
+  }
+}
+
+// Browsers only let a page talk after the user has tapped something;
+// called from the taps that precede the host's first line.
+function mafiaPrimeSpeech() {
+  if (!mafiaCanSpeak()) return;
+  try {
+    const utterance = new window.SpeechSynthesisUtterance(" ");
+    utterance.volume = 0;
+    window.speechSynthesis.speak(utterance);
+  } catch (e) {}
+}
+
+function mafiaSeatName(view, seat) {
+  const player = view && view.players ? view.players.find((p) => p.seat === seat) : null;
+  return player ? player.name : "";
+}
+
+// Turns one entry of the server's phrase queue into the sentence the
+// host says, in the given language. The server only sends a key and the
+// facts (seats, roles); wording lives here.
+function mafiaHostLine(entry, view, lang) {
+  if (!entry) return "";
+  const line = (key) => t_lookup("mhost." + key, lang);
+  const params = entry.params || {};
+  const name = (seat) => mafiaSeatName(view, seat);
+  const role = (id) => (id ? t_lookup(`role.${id}.name`, lang) : "");
+  switch (entry.key) {
+    case "morning": {
+      const parts = [line("morning")];
+      if (params.missed) parts.push(line("morningMissed"));
+      const victims = params.victims || [];
+      if (victims.length > 0) {
+        victims.forEach((v) => parts.push(line("morningVictim").replace("{name}", name(v.seat)).replace("{role}", role(v.role))));
+      } else {
+        parts.push(line(params.saved ? "morningSaved" : "morningNobody"));
+      }
+      return parts.join(" ");
+    }
+    case "lastword":
+    case "day_first":
+    case "day_speaker":
+      return line(entry.key).replace("{name}", name(params.seat));
+    case "vote_result":
+      if (params.exiled !== null && params.exiled !== undefined) return line("voteExiled").replace("{name}", name(params.exiled));
+      return line(params.tie ? "voteTie" : "voteNobody");
+    case "reveal":
+    case "removed":
+      return line(entry.key).replace("{name}", name(params.seat)).replace("{role}", role(params.role));
+    case "warning": {
+      const text = line(params.by === "host" ? "warningHost" : "warningPlayers").replace("{name}", name(params.seat)).replace("{count}", params.count);
+      return params.count === 3 ? text + " " + line("warningNoVote").replace("{name}", name(params.seat)) : text;
+    }
+    case "win":
+      return line("win_" + params.winner);
+    default:
+      return line(entry.key);
+  }
+}
+
+// Talks to the mafia_* functions and keeps this phone's view fresh:
+// a slow poll as the safety net, a refetch exactly when the current
+// phase's deadline passes, and a "something changed" ping between the
+// phones in the room so taps show up at once.
+function useMafiaRoom() {
+  const t = useT();
+  const identity = useMemo(getMafiaRoomIdentity, []);
+  const [view, setView] = useState(null);
+  const [code, setCode] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [connStatus, setConnStatus] = useState("idle");
+  const [deadlineAt, setDeadlineAt] = useState(null);
+  const [inviteCode] = useState(() => {
+    if (pendingInviteParams && pendingInviteParams.game === "mafiaroom") {
+      const invite = pendingInviteParams.room;
+      pendingInviteParams = null;
+      return invite;
+    }
+    return "";
+  });
+  const codeRef = useRef(null);
+  const channelRef = useRef(null);
+  const requestIdRef = useRef(0);
+  const acceptedIdRef = useRef(0);
+  const messagesRef = useRef(null);
+  messagesRef.current = {
+    notFound: t("mroom.errNotFound"),
+    started: t("mroom.errStarted"),
+    full: t("mroom.errFull"),
+    needPlayers: t("mroom.needPlayers"),
+    failed: t("bunker.connectFailed"),
+    gone: t("mroom.errGone"),
+  };
+
+  const leaveLocally = useCallback((message) => {
+    codeRef.current = null;
+    setCode(null);
+    setView(null);
+    setDeadlineAt(null);
+    setConnStatus("idle");
+    setError(message || null);
+    try {
+      sessionStorage.removeItem(MAFIA_ROOM_SESSION_KEY);
+    } catch (e) {}
+  }, []);
+
+  // Views can arrive out of order (poll, a tap's answer and a ping-driven
+  // refetch all race), so only a newer request's answer is ever applied.
+  const applyView = useCallback((data, requestId) => {
+    if (!data || data.error || requestId < acceptedIdRef.current) return;
+    acceptedIdRef.current = requestId;
+    setView(data);
+    setDeadlineAt(data.ms_left === null || data.ms_left === undefined ? null : Date.now() + data.ms_left);
+  }, []);
+
+  const rpc = useCallback(async (fn, args) => {
+    const requestId = ++requestIdRef.current;
+    try {
+      const { data, error: rpcError } = await supabaseClient.rpc(fn, { p_player_id: identity.id, p_secret: identity.secret, ...args });
+      if (rpcError) throw rpcError;
+      return { data, requestId };
+    } catch (e) {
+      console.error(fn + " failed:", e && e.message ? e.message : e);
+      return { data: null, requestId };
+    }
+  }, [identity]);
+
+  const refresh = useCallback(async () => {
+    const current = codeRef.current;
+    if (!current) return;
+    const { data, requestId } = await rpc("mafia_view", { p_code: current, p_can_speak: mafiaCanSpeak() });
+    if (codeRef.current !== current) return;
+    if (!data) {
+      setConnStatus(typeof navigator !== "undefined" && navigator.onLine === false ? "offline" : "reconnecting");
+      return;
+    }
+    setConnStatus("idle");
+    if (data.error === "not_in_room") {
+      leaveLocally(messagesRef.current.gone);
+      return;
+    }
+    applyView(data, requestId);
+  }, [rpc, applyView, leaveLocally]);
+
+  const ping = useCallback(() => {
+    try {
+      if (channelRef.current) channelRef.current.send({ type: "broadcast", event: "ping", payload: {} });
+    } catch (e) {}
+  }, []);
+
+  // One game action: call it, show its answer right away, tell the others.
+  const act = useCallback(async (fn, args) => {
+    const current = codeRef.current;
+    if (!current) return null;
+    const { data, requestId } = await rpc(fn, { p_code: current, ...(args || {}) });
+    if (data && !data.error) {
+      applyView(data, requestId);
+      ping();
+    }
+    return data;
+  }, [rpc, applyView, ping]);
+
+  const enter = useCallback((data, requestId) => {
+    codeRef.current = data.code;
+    setCode(data.code);
+    setError(null);
+    applyView(data, requestId);
+    try {
+      sessionStorage.setItem(MAFIA_ROOM_SESSION_KEY, JSON.stringify({ code: data.code }));
+    } catch (e) {}
+  }, [applyView]);
+
+  const describeError = useCallback((data) => {
+    const m = messagesRef.current;
+    if (!data) return m.failed;
+    if (data.error === "not_found") return m.notFound;
+    if (data.error === "started") return m.started;
+    if (data.error === "full") return m.full;
+    if (data.error === "need_players") return m.needPlayers;
+    return m.failed;
+  }, []);
+
+  const handleCreate = useCallback(async (name) => {
+    setBusy(true);
+    setError(null);
+    const { data, requestId } = await rpc("mafia_create_room", { p_name: name, p_can_speak: mafiaCanSpeak() });
+    setBusy(false);
+    if (!data || data.error) return setError(describeError(data));
+    enter(data, requestId);
+  }, [rpc, enter, describeError]);
+
+  const handleJoin = useCallback(async (name, joinCode) => {
+    setBusy(true);
+    setError(null);
+    const { data, requestId } = await rpc("mafia_join_room", { p_code: joinCode, p_name: name, p_can_speak: mafiaCanSpeak() });
+    setBusy(false);
+    if (!data || data.error) return setError(describeError(data));
+    enter(data, requestId);
+    setTimeout(ping, 400);
+  }, [rpc, enter, describeError, ping]);
+
+  const handleLeave = useCallback(async () => {
+    const current = codeRef.current;
+    leaveLocally(null);
+    if (current) {
+      await rpc("mafia_leave_room", { p_code: current });
+      ping();
+    }
+  }, [rpc, leaveLocally, ping]);
+
+  const handleStart = useCallback(async () => {
+    const data = await act("mafia_start");
+    if (data && data.error) setError(describeError(data));
+    else setError(null);
+  }, [act, describeError]);
+
+  // Silently come back to the room this tab was in (reload, or the phone
+  // restoring a backgrounded tab) -- but only on a real reload, not every
+  // time the player opens this screen from the Hub.
+  useEffect(() => {
+    const eligible = pendingReconnectScreen === "mafiaroom";
+    pendingReconnectScreen = null;
+    let saved = null;
+    try {
+      saved = JSON.parse(sessionStorage.getItem(MAFIA_ROOM_SESSION_KEY) || "null");
+    } catch (e) {}
+    if (!eligible || !saved || !saved.code) {
+      try {
+        sessionStorage.removeItem(MAFIA_ROOM_SESSION_KEY);
+      } catch (e) {}
+      return;
+    }
+    let cancelled = false;
+    setConnStatus("reconnecting");
+    rpc("mafia_join_room", { p_code: saved.code, p_name: "", p_can_speak: mafiaCanSpeak() }).then(({ data, requestId }) => {
+      if (cancelled) return;
+      setConnStatus("idle");
+      if (data && !data.error) enter(data, requestId);
+      else leaveLocally(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // While in a room: poll, listen for pings, refetch on coming back.
+  useEffect(() => {
+    if (!code) return;
+    const pollId = setInterval(refresh, MAFIA_ROOM_POLL_MS);
+    let pingTimer = null;
+    const channel = supabaseClient.channel("mafiaroom-" + code, { config: { broadcast: { self: false } } });
+    channel.on("broadcast", { event: "ping" }, () => {
+      clearTimeout(pingTimer);
+      pingTimer = setTimeout(refresh, 120);
+    });
+    channel.subscribe();
+    channelRef.current = channel;
+    function handleVisibility() {
+      if (document.visibilityState === "visible") refresh();
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      clearInterval(pollId);
+      clearTimeout(pingTimer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      channelRef.current = null;
+      try {
+        supabaseClient.removeChannel(channel);
+      } catch (e) {}
+    };
+  }, [code, refresh]);
+
+  // The moment the current phase's time is up, ask the server (that ask
+  // is what moves the game on).
+  useEffect(() => {
+    if (!code || deadlineAt === null) return;
+    const id = setTimeout(refresh, Math.max(0, deadlineAt - Date.now()) + 250);
+    return () => clearTimeout(id);
+  }, [code, deadlineAt, refresh]);
+
+  return { identity, view, code, busy, error, connStatus, deadlineAt, inviteCode, act, handleCreate, handleJoin, handleLeave, handleStart };
+}
+
+function useSecondsLeft(deadlineAt) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (deadlineAt === null) return;
+    const id = setInterval(() => setTick((n) => n + 1), 500);
+    return () => clearInterval(id);
+  }, [deadlineAt]);
+  return deadlineAt === null ? null : Math.max(0, Math.ceil((deadlineAt - Date.now()) / 1000));
+}
+
+// Speaks the host's lines on the one phone that is the room's voice, and
+// tells the server when the line a phase was waiting for has been said.
+// Every phone (voice or not) gets the latest line back as text.
+function useMafiaVoice(view, act) {
+  const lang = useLang();
+  const spokenRef = useRef(null);
+  const utterancesRef = useRef([]);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const queue = view && Array.isArray(view.speech) ? view.speech : [];
+  const lastSeq = queue.length > 0 ? queue[queue.length - 1].seq : 0;
+  const isVoice = !!(view && view.is_voice);
+  const status = view ? view.status : null;
+
+  useEffect(() => {
+    if (!view) {
+      spokenRef.current = null;
+      return;
+    }
+    // Joined (or reloaded) in the middle of a game: don't replay what the
+    // table has already heard.
+    if (spokenRef.current === null) {
+      spokenRef.current = status === "playing" ? lastSeq : 0;
+      return;
+    }
+    const fresh = queue.filter((entry) => entry.seq > spokenRef.current);
+    if (fresh.length === 0) return;
+    spokenRef.current = lastSeq;
+    if (!isVoice) return;
+
+    const reportDone = (seq) => {
+      const current = viewRef.current;
+      if (current && current.gate_seq === seq) setTimeout(() => act("mafia_speech_done", { p_seq: seq }), 350);
+    };
+    if (!mafiaCanSpeak()) {
+      // This phone holds the voice but cannot talk: don't make the table
+      // sit through the fallback timers in silence.
+      fresh.forEach((entry) => reportDone(entry.seq));
+      return;
+    }
+    fresh.forEach((entry) => {
+      const text = mafiaHostLine(entry, viewRef.current, lang);
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(guard);
+        utterancesRef.current = utterancesRef.current.filter((u) => u !== utterance);
+        reportDone(entry.seq);
+      };
+      const utterance = new window.SpeechSynthesisUtterance(text);
+      utterance.lang = MAFIA_SPEECH_LANG[lang] || "ru-RU";
+      utterance.rate = 1;
+      utterance.onend = finish;
+      utterance.onerror = finish;
+      // Some phones never fire "end"; don't let one lost event stall a phase.
+      const guard = setTimeout(finish, 4000 + text.length * 140);
+      // Kept referenced on purpose: Chrome drops the end event of an
+      // utterance that has been garbage-collected mid-sentence.
+      utterancesRef.current.push(utterance);
+      try {
+        window.speechSynthesis.resume();
+        window.speechSynthesis.speak(utterance);
+      } catch (e) {
+        finish();
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastSeq, isVoice, status]);
+
+  useEffect(
+    () => () => {
+      try {
+        if (mafiaCanSpeak()) window.speechSynthesis.cancel();
+      } catch (e) {}
+    },
+    []
+  );
+
+  return queue.length > 0 ? mafiaHostLine(queue[queue.length - 1], view, lang) : "";
+}
+
+const MAFIA_ROOM_RULES = {
+  ru: [
+    "Каждый играет со своего телефона. Роль видна только вам — не показывайте экран соседям.",
+    "Игру ведёт сама программа: голос ведущего звучит из одного телефона, на остальных его слова показаны текстом.",
+    "Ночью все закрывают глаза. Когда ведущий называет вашу роль, откройте глаза, выберите игрока на телефоне и нажмите «Закрыть».",
+    "Мафия договаривается жестами: все мафиози должны нажать на одного и того же игрока, иначе это промах.",
+    "Днём игроки говорят по очереди, у каждого своё время. Затем все голосуют на телефонах; после голосования видно, кто за кого голосовал. При ничьей никто не выбывает.",
+    "Предупреждения: если на игрока за день пожаловалось больше половины живых, он получает предупреждение. Создатель комнаты тоже может выдать его сам. 3 предупреждения — игрок пропускает ближайшее голосование, 4 — выбывает.",
+  ],
+  en: [
+    "Everyone plays from their own phone. Only you see your role — don't show your screen to your neighbors.",
+    "The app runs the game: the host's voice comes from one phone, the others show the same words as text.",
+    "At night everyone closes their eyes. When the host calls your role, open your eyes, pick a player on your phone and tap “Close”.",
+    "The mafia agree with gestures: every mafia member must tap the same player, otherwise it's a miss.",
+    "During the day players speak in turn, each with their own time. Then everyone votes on their phones; afterwards everyone sees who voted for whom. A tie eliminates no one.",
+    "Warnings: if more than half of the living players complain about someone in one day, that player gets a warning. The room creator can also give one. 3 warnings — the player sits out the next vote, 4 — they are out.",
+  ],
+  hy: [
+    "Յուրաքանչյուրը խաղում է իր հեռախոսից։ Դերը տեսնում եք միայն դուք — էկրանը հարևաններին մի ցույց տվեք։",
+    "Խաղը վարում է ծրագիրը. վարողի ձայնը հնչում է մեկ հեռախոսից, մյուսների վրա նույն խոսքերը ցուցադրվում են տեքստով։",
+    "Գիշերը բոլորը փակում են աչքերը։ Երբ վարողը կանչում է ձեր դերը, բացեք աչքերը, հեռախոսում ընտրեք խաղացողի և սեղմեք «Փակել»։",
+    "Մաֆիան պայմանավորվում է ժեստերով. բոլոր մաֆիոզները պետք է սեղմեն նույն խաղացողի վրա, այլապես դա վրիպում է։",
+    "Ցերեկը խաղացողները խոսում են հերթով, յուրաքանչյուրն ունի իր ժամանակը։ Ապա բոլորը քվեարկում են հեռախոսներով. քվեարկությունից հետո երևում է, թե ով ում օգտին է քվեարկել։ Հավասար ձայների դեպքում ոչ ոք դուրս չի գալիս։",
+    "Նախազգուշացումներ. եթե մեկ օրվա ընթացքում խաղացողից բողոքել է ողջ խաղացողների կեսից ավելին, նա ստանում է նախազգուշացում։ Սենյակի ստեղծողը նույնպես կարող է տալ այն։ 3 նախազգուշացում — խաղացողը բաց է թողնում մոտակա քվեարկությունը, 4 — դուրս է գալիս։",
+  ],
+};
+
+function MafiaRoomMenu({ dispatch, onCreate, onJoin, busy, error, initialCode }) {
+  const t = useT();
+  const [mode, setMode] = useState(initialCode ? "join" : null);
+  const [name, setName] = useState(() => (isInsideTelegram() ? getPlayerName() || "" : ""));
+  const [code, setCode] = useState(initialCode || "");
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const inputClass = "w-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-4 py-3.5 text-[var(--text)] outline-none focus:border-[var(--accent)]";
+  const nameField = (
+    <div>
+      <label className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2 block">{t("common.yourName")}</label>
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("common.enterName")} maxLength={20} className={inputClass} />
+    </div>
+  );
+  const primaryClass = "w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl disabled:opacity-30 active:scale-[0.98] transition-transform";
+
+  return (
+    <div className="h-full min-h-0 flex flex-col">
+      <TopBar
+        onBack={() => dispatch({ type: "OPEN_MAFIA_SETUP" })}
+        title={t("mroom.title")}
+        right={<IconSkull size={18} className="text-[var(--text-faint)]" />}
+        onRightClick={() => setRulesOpen(true)}
+      />
+      <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("mafia.rulesTitle")} color="var(--spy)" rules={useRules(MAFIA_ROOM_RULES)} />
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-8 flex flex-col">
+        <div className="text-center my-6">
+          <div className="w-16 h-16 rounded-2xl bg-[var(--accent)]/15 text-[var(--accent-strong)] flex items-center justify-center mx-auto mb-4">
+            <IconSkull size={30} />
+          </div>
+          <h2 className="font-display text-3xl">{t("mroom.title")}</h2>
+          <p className="text-sm text-[var(--text-dim)] mt-2 max-w-[32ch] mx-auto">{t("mroom.subtitle")}</p>
+        </div>
+
+        {mode === null && (
+          <div className="flex flex-col gap-3">
+            <button onClick={() => setMode("create")} className="w-full bg-[var(--surface)] border border-[var(--border-strong)] rounded-2xl p-5 text-left active:scale-[0.98] transition-transform">
+              <div className="font-display text-xl mb-1">{t("bunker.createRoom")}</div>
+              <div className="text-sm text-[var(--text-dim)]">{t("mroom.createDesc")}</div>
+            </button>
+            <button onClick={() => setMode("join")} className="w-full bg-[var(--surface)] border border-[var(--border-strong)] rounded-2xl p-5 text-left active:scale-[0.98] transition-transform">
+              <div className="font-display text-xl mb-1">{t("bunker.joinByCode")}</div>
+              <div className="text-sm text-[var(--text-dim)]">{t("mroom.joinDesc")}</div>
+            </button>
+            {error && <p className="text-sm text-[var(--danger)] text-center">{error}</p>}
+            <button onClick={() => dispatch({ type: "OPEN_MAFIA_SETUP" })} className="text-sm text-[var(--text-faint)] py-2">
+              {t("mroom.playOnOnePhone")}
+            </button>
+          </div>
+        )}
+
+        {mode === "create" && (
+          <div className="flex flex-col gap-4">
+            {nameField}
+            {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+            <button
+              onClick={() => {
+                mafiaPrimeSpeech();
+                onCreate(name);
+              }}
+              disabled={busy || !name.trim()}
+              className={primaryClass}
+            >
+              {busy ? t("bunker.creating") : t("bunker.create")}
+            </button>
+            <button onClick={() => setMode(null)} className="text-sm text-[var(--text-faint)] py-2">{t("common.back")}</button>
+          </div>
+        )}
+
+        {mode === "join" && (
+          <div className="flex flex-col gap-4">
+            {nameField}
+            <div>
+              <label className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2 block">{t("bunker.roomCode")}</label>
+              <input
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                placeholder="0000"
+                inputMode="numeric"
+                className={inputClass + " font-mono text-2xl tracking-[0.3em] text-center"}
+              />
+            </div>
+            {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+            <button
+              onClick={() => {
+                mafiaPrimeSpeech();
+                onJoin(name, code);
+              }}
+              disabled={busy || !name.trim() || code.length !== 4}
+              className={primaryClass}
+            >
+              {busy ? t("bunker.connecting") : t("bunker.join")}
+            </button>
+            <button onClick={() => setMode(null)} className="text-sm text-[var(--text-faint)] py-2">{t("common.back")}</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MafiaRoomWarningPips({ count }) {
+  return (
+    <span className="flex items-center gap-1" aria-hidden="true">
+      {[0, 1, 2, 3].map((i) => (
+        <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: i < count ? "var(--danger)" : "var(--surface-3)" }} />
+      ))}
+    </span>
+  );
+}
+
+// One row of the room's player list. `role` is only present when this
+// phone is allowed to know it (own role, a revealed one, a mafia teammate).
+function MafiaRoomPlayerRow({ player, children }) {
+  const t = useT();
+  const role = player.role ? MAFIA_ROLES[player.role] : null;
+  return (
+    <div className={"flex items-center gap-3 px-1 py-2.5 " + (player.alive ? "" : "opacity-45")}>
+      <span className="relative w-7 h-7 rounded-full bg-[var(--surface-2)] text-[var(--text-dim)] text-xs font-mono flex items-center justify-center shrink-0">
+        {player.seat + 1}
+        {!player.online && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[var(--danger)]" title={t("mroom.offline")} />}
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className={"text-sm truncate " + (player.alive ? "text-[var(--text)]" : "text-[var(--text-faint)] line-through")}>
+          {player.name}
+          {player.is_me && <span className="text-[var(--text-faint)] no-underline"> · {t("common.you")}</span>}
+        </div>
+        {(player.warnings > 0 || player.no_vote) && (
+          <div className="flex items-center gap-2 mt-0.5">
+            <MafiaRoomWarningPips count={player.warnings} />
+            {player.no_vote && <span className="text-[10px] uppercase tracking-widest" style={{ color: "var(--danger)" }}>{t("mafia.noVoteBadge")}</span>}
+          </div>
+        )}
+      </div>
+      {role && (
+        <span className="flex items-center gap-1.5 text-xs font-medium shrink-0" style={{ color: role.color }}>
+          <role.Icon size={15} />
+          {t(`role.${player.role}.short`)}
+        </span>
+      )}
+      {children}
+    </div>
+  );
+}
+
+function MafiaRoomVoiceCard({ view, act }) {
+  const t = useT();
+  const lang = useLang();
+  const canSpeak = mafiaCanSpeak();
+  const voicePlayer = view.players.find((p) => p.is_voice);
+  const [tested, setTested] = useState(false);
+  function testVoice() {
+    try {
+      const utterance = new window.SpeechSynthesisUtterance(t_lookup("mhost.test", lang));
+      utterance.lang = MAFIA_SPEECH_LANG[lang] || "ru-RU";
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+      setTested(true);
+    } catch (e) {}
+  }
+  return (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-5 py-4">
+      <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2">
+        <IconMic size={14} /> {t("mroom.voiceLabel")}
+      </div>
+      <p className="text-sm">
+        {view.is_voice ? t("mroom.voiceHere") : t("mroom.voiceOn").replace("{name}", voicePlayer ? voicePlayer.name : "—")}
+      </p>
+      {!canSpeak && <p className="text-xs mt-2" style={{ color: "var(--danger)" }}>{t("mroom.voiceUnavailable")}</p>}
+      {view.is_voice && !canSpeak && <p className="text-xs text-[var(--text-faint)] mt-1">{t("mroom.voiceNeedsOther")}</p>}
+      {canSpeak && (
+        <div className="flex flex-wrap gap-2 mt-3">
+          {!view.is_voice && (
+            <button
+              onClick={() => {
+                mafiaPrimeSpeech();
+                act("mafia_set_voice");
+              }}
+              className="text-xs px-3 py-2 rounded-full border border-[var(--accent)]/50 text-[var(--accent-strong)] active:scale-95 transition-transform"
+            >
+              {t("mroom.voiceTake")}
+            </button>
+          )}
+          <button onClick={testVoice} className="text-xs px-3 py-2 rounded-full border border-[var(--border-strong)] text-[var(--text-dim)] active:scale-95 transition-transform">
+            {tested ? t("mroom.voiceTestAgain") : t("mroom.voiceTest")}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MafiaRoomLobby({ room, dispatch }) {
+  const t = useT();
+  const { view, code, act, error, connStatus, handleLeave, handleStart } = room;
+  const settings = view.settings || {};
+  const count = view.players.length;
+  const maxMafia = Math.max(1, Math.floor((Math.max(count, MAFIA_ROOM_MIN_PLAYERS) - 1) / 2));
+  const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const setSetting = (patch) => act("mafia_update_settings", { p_settings: patch });
+  const roleToggles = [
+    { key: "doctor", Icon: IconCross, color: "var(--doctor)", bg: "rgba(94,168,230,.14)" },
+    { key: "sheriff", Icon: IconShield, color: "var(--sheriff)", bg: "rgba(166,126,232,.14)" },
+    { key: "don", Icon: IconCrown, color: "var(--don)", bg: "rgba(214,89,143,.14)" },
+    { key: "maniac", Icon: IconNeedle, color: "var(--maniac)", bg: "rgba(194,69,46,.14)" },
+    { key: "putana", Icon: IconHeart, color: "var(--putana)", bg: "rgba(214,110,194,.14)" },
+  ];
+  const enabledRoles = roleToggles.filter((r) => settings[r.key]).map((r) => t(`role.${r.key}.name`));
+
+  function leave() {
+    handleLeave();
+    dispatch({ type: "GO_HUB" });
+  }
+  function copyCode() {
+    try {
+      navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (e) {}
+  }
+  async function start() {
+    mafiaPrimeSpeech();
+    setStarting(true);
+    await handleStart();
+    setStarting(false);
+  }
+
+  return (
+    <div className="h-full min-h-0 flex flex-col">
+      <TopBar onBack={leave} title={t("mroom.title")} right={<IconSkull size={18} className="text-[var(--text-faint)]" />} onRightClick={() => setRulesOpen(true)} />
+      <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("mafia.rulesTitle")} color="var(--spy)" rules={useRules(MAFIA_ROOM_RULES)} />
+      <ConnStatusBanner status={connStatus} />
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-4 flex flex-col gap-4">
+        <div className="text-center mt-4">
+          <p className="text-xs uppercase tracking-[0.25em] text-[var(--text-faint)] mb-3">{t("bunker.roomCodeLabel")}</p>
+          <button onClick={copyCode} className="font-mono text-6xl tracking-[0.15em] font-semibold active:scale-95 transition-transform">{code}</button>
+          <p className="text-xs text-[var(--text-faint)] mt-2">{copied ? t("bunker.copied") : t("bunker.tapToCopy")}</p>
+          <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
+            <button
+              onClick={() =>
+                shareRoomInvite(code, "mafiaroom", t("mafia.title"), () => {
+                  setLinkCopied(true);
+                  setTimeout(() => setLinkCopied(false), 1500);
+                })
+              }
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-full bg-[var(--surface)] border border-[var(--border-strong)] text-[var(--text-dim)]"
+            >
+              <IconSend size={13} /> {linkCopied ? t("bunker.linkCopied") : t("bunker.shareInviteLink")}
+            </button>
+            <button onClick={() => setQrOpen(true)} className="inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-full bg-[var(--surface)] border border-[var(--border-strong)] text-[var(--text-dim)]">
+              <IconQrCode size={13} /> {t("bunker.qrCode")}
+            </button>
+          </div>
+        </div>
+        <QrCodeModal open={qrOpen} onClose={() => setQrOpen(false)} code={code} game="mafiaroom" gameLabel={t("mafia.title")} />
+
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-4 py-2">
+          <div className="flex items-center justify-between px-1 pt-2">
+            <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">{t("common.players")}</span>
+            <span className="text-xs text-[var(--text-faint)] font-mono">{count}</span>
+          </div>
+          <div className="flex flex-col divide-y divide-[var(--border)]">
+            {view.players.map((player) => (
+              <MafiaRoomPlayerRow key={player.seat} player={player}>
+                {player.is_host && (
+                  <span className="shrink-0 text-[10px] uppercase tracking-widest text-[var(--accent-strong)] bg-[var(--accent)]/10 px-2 py-0.5 rounded-full">{t("mroom.creator")}</span>
+                )}
+              </MafiaRoomPlayerRow>
+            ))}
+          </div>
+        </div>
+
+        <MafiaRoomVoiceCard view={view} act={act} />
+
+        {view.is_host ? (
+          <>
+            <Stepper label={t("mafia.mafiaCount")} value={settings.mafia_count} min={1} max={maxMafia} onChange={(v) => setSetting({ mafia_count: v })} />
+            <Stepper
+              label={t("mafia.speechTime")}
+              value={settings.speech_seconds}
+              min={MIN_MAFIA_SPEECH_SEC}
+              max={MAX_MAFIA_SPEECH_SEC}
+              step={MAFIA_SPEECH_SEC_STEP}
+              suffix={t("alias.seconds")}
+              onChange={(v) => setSetting({ speech_seconds: v })}
+            />
+            <div className="flex flex-col gap-2">
+              {roleToggles.map((r) => (
+                <RoleToggle
+                  key={r.key}
+                  Icon={r.Icon}
+                  color={r.color}
+                  bg={r.bg}
+                  title={t(`role.${r.key}.name`)}
+                  description={t(`role.${r.key}.setupDesc`)}
+                  checked={!!settings[r.key]}
+                  onChange={() => setSetting({ [r.key]: !settings[r.key] })}
+                />
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-5 py-4 text-sm text-[var(--text-dim)]">
+            <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2">{t("mroom.settingsLabel")}</div>
+            <p>
+              {t("mafia.mafiaCount")}: <span className="text-[var(--text)]">{settings.mafia_count}</span> · {t("mafia.speechTime")}:{" "}
+              <span className="text-[var(--text)]">{settings.speech_seconds} {t("alias.seconds")}</span>
+            </p>
+            <p className="mt-1">{enabledRoles.join(", ")}</p>
+          </div>
+        )}
+      </div>
+
+      <div className="px-5 pb-8 pt-2 shrink-0">
+        {error && <p className="text-sm text-[var(--danger)] text-center mb-3">{error}</p>}
+        {view.is_host ? (
+          <button
+            onClick={start}
+            disabled={count < MAFIA_ROOM_MIN_PLAYERS || starting}
+            className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-30 active:scale-[0.98] transition-transform"
+          >
+            <IconPlay size={22} /> {count < MAFIA_ROOM_MIN_PLAYERS ? t("mroom.needPlayers") : t("mroom.start")}
+          </button>
+        ) : (
+          <p className="text-center text-sm text-[var(--text-dim)] py-2">{t("mroom.waitingCreator")}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MafiaRoomTimer({ seconds, total }) {
+  const t = useT();
+  if (seconds === null) return null;
+  const pct = total > 0 ? Math.min(100, Math.max(0, ((total - seconds) / total) * 100)) : 0;
+  const urgent = seconds > 0 && seconds <= 10;
+  return (
+    <div className="rounded-full p-2" style={{ background: `conic-gradient(var(--accent) ${pct * 3.6}deg, var(--surface-2) 0deg)`, transition: "background 0.4s linear" }}>
+      <div className="w-36 h-36 rounded-full bg-[var(--bg)] flex flex-col items-center justify-center border border-[var(--border)]">
+        <span className={"font-mono text-4xl font-semibold tabular-nums " + (urgent ? "pulse" : "")} style={{ color: urgent || seconds === 0 ? "var(--danger)" : "var(--text)" }}>
+          {fmtTime(seconds)}
+        </span>
+        <span className="text-[10px] uppercase tracking-[0.2em] text-[var(--text-faint)] mt-1">{t("spy.timeLeft")}</span>
+      </div>
+    </div>
+  );
+}
+
+function MafiaRoomRoleCard({ view, act }) {
+  const t = useT();
+  const [shown, setShown] = useState(false);
+  const me = view.me;
+  const role = MAFIA_ROLES[me.role];
+  const teammates = me.role === "mafia" || me.role === "don" ? view.players.filter((p) => !p.is_me && (p.role === "mafia" || p.role === "don")).map((p) => p.name) : [];
+  const ready = view.players.filter((p) => p.ready).length;
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center text-center pb-4">
+      {!shown || !role ? (
+        <div key="hidden" className="pop flex flex-col items-center">
+          <div className="w-20 h-20 rounded-full bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center mb-6 text-[var(--text-faint)]">
+            <IconEyeOff size={30} />
+          </div>
+          <h2 className="font-display text-4xl leading-tight mb-3">{t("mafia.rolesDealt")}</h2>
+          <p className="text-sm text-[var(--text-dim)] max-w-[28ch] mb-8">{t("blind.hideWarning")}</p>
+          <button
+            onClick={() => setShown(true)}
+            className="w-full max-w-xs bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+          >
+            <IconEye size={22} /> {t("blind.showRole")}
+          </button>
+        </div>
+      ) : (
+        <div key="shown" className="pop flex flex-col items-center w-full">
+          <span className="text-xs uppercase tracking-[0.3em] text-[var(--text-faint)] mb-2">{t("spy.yourRole")}</span>
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-3" style={{ background: role.bg, color: role.color }}>
+            <role.Icon size={32} />
+          </div>
+          <h3 className="font-display text-5xl leading-none mb-4" style={{ color: role.color }}>{t(`role.${me.role}.name`).toUpperCase()}</h3>
+          <p className="text-sm text-[var(--text-dim)] max-w-[30ch] mb-4">{t(`role.${me.role}.desc`)}</p>
+          {teammates.length > 0 && (
+            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-4 py-3 text-sm mb-2">
+              <span className="text-[var(--text-faint)]">{t("mafia.teammatesLabel")}</span>
+              <span style={{ color: role.color }}>{teammates.join(", ")}</span>
+            </div>
+          )}
+          <button
+            onClick={() => {
+              mafiaPrimeSpeech();
+              setShown(false);
+              if (!me.ready) act("mafia_ready");
+            }}
+            className="mt-6 w-full max-w-xs bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+          >
+            <IconEyeOff size={22} /> {me.ready ? t("mroom.hideRole") : t("mroom.hideAndReady")}
+          </button>
+        </div>
+      )}
+      <p className="text-xs text-[var(--text-faint)] mt-6">
+        {me.ready ? t("mroom.waitingOthers") : t("mroom.lookAndReady")} · {ready}/{view.players.length}
+      </p>
+    </div>
+  );
+}
+
+// What the acting player sees during their role's turn. Deliberately one
+// plain layout for every role, so a glance at a neighbor's phone says
+// nothing about which role is acting.
+function MafiaRoomNightAction({ view, act, seconds }) {
+  const t = useT();
+  const me = view.me;
+  const role = view.phase_role;
+  const mafiaSide = (p) => p.role === "mafia" || p.role === "don";
+  const targets = view.players.filter((p) => {
+    if (!p.alive) return false;
+    if (role === "mafia") return !mafiaSide(p);
+    if (role === "doctor") return true;
+    return !p.is_me;
+  });
+  const pickedName = me.pick !== null && me.pick !== undefined ? mafiaSeatName(view, me.pick) : "";
+  const result = me.result;
+  let answer = null;
+  if (result) {
+    if (result.blocked) answer = t("mroom.resultBlocked");
+    else if (role === "sheriff") answer = t(result.is_mafia ? "mroom.resultMafia" : "mroom.resultNotMafia").replace("{name}", pickedName);
+    else if (role === "don") answer = t(result.is_sheriff ? "mroom.resultSheriff" : "mroom.resultNotSheriff").replace("{name}", pickedName);
+    else answer = t("mroom.resultPicked").replace("{name}", pickedName);
+  }
+
+  return (
+    <div className="flex flex-col pb-4">
+      <div className="text-center mb-4">
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-faint)] mb-1">{t("mroom.yourTurn")} · {seconds !== null ? fmtTime(seconds) : ""}</p>
+        <h2 className="font-display text-3xl leading-tight">{t(`mroom.prompt_${role}`)}</h2>
+      </div>
+      {me.can_act ? (
+        <div className="flex flex-col gap-2">
+          {targets.map((p) => (
+            <MafiaPlayerButton key={p.seat} name={p.name} index={p.seat} onClick={(seat) => act("mafia_night_pick", { p_target: seat })} />
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center text-center mt-6">
+          <div className="w-full bg-[var(--surface)] border border-[var(--border-strong)] rounded-2xl px-4 py-5 text-lg">
+            {answer || t("mroom.resultPicked").replace("{name}", pickedName)}
+          </div>
+          {me.needs_close ? (
+            <button
+              onClick={() => act("mafia_night_close")}
+              className="mt-6 w-full bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text)] font-display text-xl tracking-wide py-4 rounded-2xl active:scale-[0.98] transition-transform"
+            >
+              {t("common.close")}
+            </button>
+          ) : (
+            <p className="text-sm text-[var(--text-dim)] mt-4">{t("mroom.mafiaWaiting")}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MafiaRoomNight({ view }) {
+  const t = useT();
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center text-center pb-4">
+      <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] flex items-center justify-center mb-6 text-[var(--text-faint)]">
+        <IconMoon size={28} />
+      </div>
+      <h2 className="font-display text-4xl leading-tight mb-3">{t("mroom.nightTitle")}</h2>
+      <p className="text-sm text-[var(--text-dim)] max-w-[28ch]">{view.me.alive ? t("mroom.nightHint") : t("mroom.deadHint")}</p>
+    </div>
+  );
+}
+
+function MafiaRoomMorning({ view }) {
+  const t = useT();
+  const night = view.last_night || { victims: [], saved: false, missed: false };
+  return (
+    <div className="flex flex-col items-center text-center pt-2 pb-4">
+      <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] flex items-center justify-center mb-6 text-[var(--accent-strong)]">
+        <IconSun size={28} />
+      </div>
+      <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-faint)] mb-2">{t("mafia.morning")}</p>
+      {night.victims.length > 0 ? (
+        <>
+          <h2 className="font-display text-4xl leading-tight mb-4">
+            {night.victims.length === 1 ? t("mafia.diedSingular") : t("mafia.diedPlural")}{" "}
+            <span style={{ color: "var(--danger)" }}>{night.victims.map((v) => mafiaSeatName(view, v.seat)).join(", ")}</span>
+          </h2>
+          <div className="flex flex-col gap-2 w-full">
+            {night.victims.map((v) => {
+              const role = MAFIA_ROLES[v.role];
+              return (
+                <div key={v.seat} className="flex items-center gap-2 bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-4 py-3" style={{ color: role.color }}>
+                  <role.Icon size={18} />
+                  <span className="font-medium">{mafiaSeatName(view, v.seat)} — {t(`role.${v.role}.name`)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <h2 className="font-display text-4xl leading-tight mb-2">{t("mafia.noOneDied")}</h2>
+      )}
+      {night.victims.length === 0 && night.saved && <p className="text-sm" style={{ color: "var(--doctor)" }}>{t("mafia.doctorSaved")}</p>}
+      {night.missed && <p className="text-sm text-[var(--text-dim)] mt-2">{t("mroom.mafiaMissed")}</p>}
+    </div>
+  );
+}
+
+// Complaints and warnings, shown under the speaker during the day.
+function MafiaRoomComplaints({ view, act }) {
+  const t = useT();
+  const me = view.me;
+  const others = view.players.filter((p) => p.alive && !p.is_me);
+  const complained = me.complained || [];
+  return (
+    <div className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-4 py-3 mt-5 text-left">
+      <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] px-1 pt-1">{t("mafia.warnings")}</div>
+      <p className="text-xs text-[var(--text-faint)] px-1 mt-1 mb-1">{t("mroom.complaintsRule").replace("{n}", view.complaints_needed)}</p>
+      <div className="flex flex-col divide-y divide-[var(--border)]">
+        {others.map((p) => {
+          const mine = complained.includes(p.seat);
+          return (
+            <div key={p.seat} className="flex items-center gap-2 py-2.5 px-1">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm truncate">{p.name}</div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <MafiaRoomWarningPips count={p.warnings} />
+                  {p.no_vote && <span className="text-[10px] uppercase tracking-widest" style={{ color: "var(--danger)" }}>{t("mafia.noVoteBadge")}</span>}
+                  {!p.warned_today && p.complaints > 0 && (
+                    <span className="text-[10px] font-mono text-[var(--text-faint)]">{t("mroom.complaintsCount").replace("{n}", p.complaints).replace("{m}", view.complaints_needed)}</span>
+                  )}
+                </div>
+              </div>
+              {me.alive && !p.warned_today && (
+                <button
+                  onClick={() => act("mafia_complain", { p_target: p.seat })}
+                  className={"text-xs px-3 py-2 rounded-full border shrink-0 active:scale-95 transition-transform " + (mine ? "border-[var(--danger)] text-[var(--danger)]" : "border-[var(--border-strong)] text-[var(--text-dim)]")}
+                >
+                  {mine ? t("mroom.complained") : t("mroom.complain")}
+                </button>
+              )}
+              {view.is_host &&
+                (p.warnings >= 3 ? (
+                  <ConfirmButton
+                    label={<><IconAlertTriangle size={14} /> +1</>}
+                    confirmLabel={t("mafia.confirmRemove")}
+                    onConfirm={() => act("mafia_host_warn", { p_target: p.seat })}
+                    className="h-9 px-2.5 rounded-xl flex items-center gap-1 text-xs font-medium shrink-0 border border-[var(--danger)]/40 text-[var(--danger)] active:scale-95 transition-transform"
+                  />
+                ) : (
+                  <button
+                    onClick={() => act("mafia_host_warn", { p_target: p.seat })}
+                    aria-label={t("mafia.giveWarning")}
+                    className="h-9 px-2.5 rounded-xl flex items-center gap-1 text-xs font-medium shrink-0 border border-[var(--danger)]/40 text-[var(--danger)] active:scale-95 transition-transform"
+                  >
+                    <IconAlertTriangle size={14} /> +1
+                  </button>
+                ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MafiaRoomSpeech({ view, act, seconds }) {
+  const t = useT();
+  const lastWord = view.phase === "lastword";
+  const seat = lastWord ? view.lastword_seat : view.speaker_seat;
+  const mine = view.me.seat === seat;
+  const total = lastWord ? 30 : (view.settings && view.settings.speech_seconds) || 60;
+  return (
+    <div className="flex flex-col items-center text-center pb-4">
+      <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-faint)] mb-1">
+        {lastWord ? t("mafia.lastWord") : `${t("mafia.speaking")} · ${view.spoken}/${view.alive_count}`}
+      </p>
+      <h2 className="font-display text-4xl leading-tight mb-5 max-w-full truncate">{mine ? t("mroom.youSpeak") : mafiaSeatName(view, seat)}</h2>
+      <MafiaRoomTimer seconds={seconds} total={total} />
+      {mine && (
+        <button
+          onClick={() => act("mafia_end_speech")}
+          className="mt-5 w-full max-w-xs bg-[var(--accent)] text-[var(--accent-ink)] font-display text-lg tracking-wide py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+        >
+          <IconSkipForward size={18} /> {t("mroom.doneSpeaking")}
+        </button>
+      )}
+      {view.is_host && !mine && (
+        <ConfirmButton
+          label={t("mroom.skipPlayer")}
+          confirmLabel={t("common.confirm")}
+          onConfirm={() => act("mafia_host_skip")}
+          className="mt-4 text-xs px-3 py-2 rounded-full border border-[var(--border-strong)] text-[var(--text-dim)]"
+        />
+      )}
+      {!lastWord && <MafiaRoomComplaints view={view} act={act} />}
+    </div>
+  );
+}
+
+function MafiaRoomVote({ view, act, seconds }) {
+  const t = useT();
+  const me = view.me;
+  const voted = view.players.filter((p) => p.voted).length;
+  const eligible = view.players.filter((p) => p.alive && !p.no_vote).length;
+  const noVoteNames = view.players.filter((p) => p.alive && p.no_vote).map((p) => p.name);
+  const canVote = me.alive && !me.no_vote && !me.voted;
+  return (
+    <div className="flex flex-col pb-4">
+      <MafiaPhaseHeader
+        Icon={IconVote}
+        color="var(--accent-strong)"
+        bg="rgba(232,181,69,.14)"
+        title={t("mroom.voteTitle")}
+        subtitle={`${t("mroom.votedCount").replace("{n}", voted).replace("{m}", eligible)}${seconds !== null ? " · " + fmtTime(seconds) : ""}`}
+      />
+      {noVoteNames.length > 0 && (
+        <div className="flex items-start gap-2 rounded-2xl px-4 py-3 mb-3 text-sm text-left" style={{ color: "var(--danger)", background: "rgba(226,88,90,.10)" }}>
+          <IconAlertTriangle size={17} className="shrink-0 mt-0.5" />
+          <span>{t("mafia.noVoteNote")}: <span className="font-medium">{noVoteNames.join(", ")}</span></span>
+        </div>
+      )}
+      {canVote ? (
+        <>
+          <button
+            onClick={() => act("mafia_vote", { p_target: null })}
+            className="w-full bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text-dim)] font-display text-lg tracking-wide py-3.5 rounded-2xl active:scale-[0.98] transition-transform mb-3"
+          >
+            {t("mroom.voteNobody")}
+          </button>
+          <div className="flex flex-col gap-2">
+            {view.players.filter((p) => p.alive && !p.is_me).map((p) => (
+              <MafiaPlayerButton key={p.seat} name={p.name} index={p.seat} danger onClick={(seat) => act("mafia_vote", { p_target: seat })} />
+            ))}
+          </div>
+        </>
+      ) : (
+        <p className="text-center text-sm text-[var(--text-dim)] mt-6">
+          {!me.alive ? t("mroom.deadHint") : me.no_vote ? t("mroom.youNoVote") : t("mroom.voteAccepted")}
+        </p>
+      )}
+      {view.is_host && (
+        <div className="flex justify-center mt-5">
+          <ConfirmButton
+            label={t("mroom.finishVote")}
+            confirmLabel={t("common.confirm")}
+            onConfirm={() => act("mafia_host_skip")}
+            className="text-xs px-3 py-2 rounded-full border border-[var(--border-strong)] text-[var(--text-dim)]"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MafiaRoomVoteResult({ view }) {
+  const t = useT();
+  const result = view.vote_result || { exiled: null, tie: false, votes: [] };
+  const reveal = view.phase === "reveal";
+  const exiled = result.exiled !== null && result.exiled !== undefined ? view.players.find((p) => p.seat === result.exiled) : null;
+  const exiledRole = reveal && exiled && exiled.role ? MAFIA_ROLES[exiled.role] : null;
+  return (
+    <div className="flex flex-col items-center text-center pt-2 pb-4">
+      <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] flex items-center justify-center mb-6 text-[var(--accent-strong)]">
+        <IconVote size={28} />
+      </div>
+      <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-faint)] mb-2">{t("mafia.voteResult")}</p>
+      {exiled ? (
+        <h2 className="font-display text-4xl leading-tight mb-4">
+          {t("mafia.exiledName")} <span style={{ color: "var(--accent-strong)" }}>{exiled.name}</span>
+        </h2>
+      ) : (
+        <h2 className="font-display text-4xl leading-tight mb-4">{result.tie ? t("mroom.voteTie") : t("mafia.noExileChosen")}</h2>
+      )}
+      {exiledRole && (
+        <div className="flex items-center gap-2 bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-4 py-3 mb-4" style={{ color: exiledRole.color }}>
+          <exiledRole.Icon size={18} />
+          <span className="font-medium">{t(`role.${exiled.role}.name`)}</span>
+        </div>
+      )}
+      {result.votes.length > 0 && (
+        <div className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-4 py-3 text-left">
+          <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2">{t("mroom.whoVoted")}</div>
+          <div className="flex flex-col gap-1.5 text-sm">
+            {result.votes.map((vote) => (
+              <div key={vote.from} className="flex items-center gap-2">
+                <span className="flex-1 truncate">{mafiaSeatName(view, vote.from)}</span>
+                <span className="text-[var(--text-faint)]">→</span>
+                <span className="flex-1 truncate text-right" style={{ color: vote.to === null ? "var(--text-faint)" : "var(--text)" }}>
+                  {vote.to === null ? t("mroom.voteNobody") : mafiaSeatName(view, vote.to)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MafiaRoomEnd({ view, act, onLeave }) {
+  const t = useT();
+  const winnerStyle = {
+    town: { color: "var(--local)", bg: "rgba(75,184,172,.14)", title: t("mafia.townWinTitle"), desc: t("mafia.townWinDesc") },
+    mafia: { color: "var(--spy)", bg: "rgba(226,88,90,.14)", title: t("mafia.mafiaWinTitle"), desc: t("mafia.mafiaWinDesc") },
+    maniac: { color: "var(--maniac)", bg: "rgba(194,69,46,.14)", title: t("mafia.maniacWinTitle"), desc: t("mafia.maniacWinDesc") },
+  }[view.winner] || { color: "var(--local)", bg: "rgba(75,184,172,.14)", title: t("spy.gameOver"), desc: "" };
+  return (
+    <div className="h-full flex flex-col px-6 pb-8" style={{ paddingTop: "3rem" }}>
+      <div className="flex-1 min-h-0 flex flex-col items-center text-center overflow-y-auto no-scrollbar">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center mb-6 shrink-0" style={{ background: winnerStyle.bg, color: winnerStyle.color }}>
+          <IconTrophy size={30} />
+        </div>
+        <h2 className="font-display text-5xl leading-none mb-3" style={{ color: winnerStyle.color }}>{winnerStyle.title}</h2>
+        <p className="text-sm text-[var(--text-dim)] max-w-[30ch] mb-8">{winnerStyle.desc}</p>
+        <div className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-4 py-2 mb-4 text-left">
+          <div className="flex flex-col divide-y divide-[var(--border)]">
+            {view.players.map((player) => (
+              <MafiaRoomPlayerRow key={player.seat} player={player} />
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-col gap-3 shrink-0 pt-4">
+        {view.is_host ? (
+          <button
+            onClick={() => act("mafia_play_again")}
+            className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+          >
+            <IconRefresh size={20} /> {t("common.playAgain")}
+          </button>
+        ) : (
+          <p className="text-center text-sm text-[var(--text-dim)]">{t("mroom.waitingCreator")}</p>
+        )}
+        <button
+          onClick={onLeave}
+          className="w-full bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text)] font-display text-xl tracking-wide py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+        >
+          <IconHome size={20} /> {t("mroom.toMenu")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MafiaRoomGame({ room, dispatch, hostLine }) {
+  const t = useT();
+  const { view, act, connStatus, deadlineAt, handleLeave } = room;
+  const seconds = useSecondsLeft(deadlineAt);
+  const [listOpen, setListOpen] = useState(false);
+  const me = view.me;
+  const phase = view.phase;
+  const night = phase === "night_start" || phase === "night_wake" || phase === "night_act" || phase === "night_sleep";
+  const myTurn = phase === "night_act" && me.alive && (me.can_act || me.needs_close || (me.pick !== null && me.pick !== undefined));
+
+  function leave() {
+    handleLeave();
+    dispatch({ type: "GO_HUB" });
+  }
+
+  if (listOpen) {
+    return (
+      <div className="h-full min-h-0 flex flex-col">
+        <div className="flex items-center justify-between px-5 pt-4 shrink-0">
+          <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">{t("mafia.playersList")}</span>
+          <button onClick={() => setListOpen(false)} className="w-9 h-9 flex items-center justify-center rounded-full text-[var(--text-dim)] active:bg-[var(--surface-2)]" aria-label={t("common.close")}>
+            <IconX size={20} />
+          </button>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-8 flex flex-col gap-4">
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-4 py-2 mt-2">
+            <div className="flex flex-col divide-y divide-[var(--border)]">
+              {view.players.map((player) => (
+                <MafiaRoomPlayerRow key={player.seat} player={player} />
+              ))}
+            </div>
+          </div>
+          <MafiaRoomVoiceCard view={view} act={act} />
+        </div>
+      </div>
+    );
+  }
+
+  let body = null;
+  if (phase === "roles") body = <MafiaRoomRoleCard view={view} act={act} />;
+  else if (myTurn) body = <MafiaRoomNightAction view={view} act={act} seconds={seconds} />;
+  else if (night) body = <MafiaRoomNight view={view} />;
+  else if (phase === "morning") body = <MafiaRoomMorning view={view} />;
+  else if (phase === "day_speech" || phase === "lastword") body = <MafiaRoomSpeech view={view} act={act} seconds={seconds} />;
+  else if (phase === "vote") body = <MafiaRoomVote view={view} act={act} seconds={seconds} />;
+  else if (phase === "vote_result" || phase === "reveal") body = <MafiaRoomVoteResult view={view} />;
+
+  return (
+    <div className="h-full min-h-0 flex flex-col">
+      <div className="flex items-center justify-between px-5 pt-4 shrink-0">
+        <ConfirmButton label={t("common.finish")} confirmLabel={t("common.confirm")} onConfirm={leave} className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1" />
+        <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">
+          {phase === "roles" ? t("mroom.title") : `${night ? t("mafia.nightLabel") : t("mafia.dayLabel")} ${view.night}`}
+        </span>
+        <button onClick={() => setListOpen(true)} className="w-9 h-9 flex items-center justify-center rounded-full text-[var(--text-dim)] active:bg-[var(--surface-2)]" aria-label={t("mafia.playersList")}>
+          <IconList size={20} />
+        </button>
+      </div>
+      <ConnStatusBanner status={connStatus} />
+      {hostLine && !myTurn && (
+        <div className="mx-5 mt-2 mb-1 flex items-start gap-2 rounded-2xl bg-[var(--surface)] border border-[var(--border)] px-3 py-2.5 text-sm text-[var(--text-dim)] shrink-0">
+          <IconMic size={15} className="shrink-0 mt-0.5 text-[var(--accent-strong)]" />
+          <span>{hostLine}</span>
+        </div>
+      )}
+      {phase === "roles" && view.is_host && (
+        <div className="flex justify-center mt-2 shrink-0">
+          <ConfirmButton
+            label={t("mroom.skipWaiting")}
+            confirmLabel={t("common.confirm")}
+            onConfirm={() => act("mafia_host_skip")}
+            className="text-xs px-3 py-2 rounded-full border border-[var(--border-strong)] text-[var(--text-dim)]"
+          />
+        </div>
+      )}
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pt-3 flex flex-col">{body}</div>
+    </div>
+  );
+}
+
+function MafiaRoomApp({ dispatch }) {
+  const t = useT();
+  const room = useMafiaRoom();
+  const { view, code, connStatus } = room;
+  const hostLine = useMafiaVoice(view, room.act);
+
+  // "game_started" for analytics, once per game per phone.
+  const status = view ? view.status : null;
+  const prevStatusRef = useRef(null);
+  useEffect(() => {
+    if (status === "playing" && prevStatusRef.current === "lobby") trackEvent("game_started", { game: "mafiaroom" });
+    if (status === "ended" && prevStatusRef.current === "playing") trackEvent("game_completed", { game: "mafiaroom", winner: view && view.winner });
+    prevStatusRef.current = status;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
+  if (!code || !view) {
+    if (connStatus === "reconnecting") {
+      return (
+        <div className="h-full min-h-0 flex flex-col">
+          <TopBar onBack={() => dispatch({ type: "GO_HUB" })} title={t("mroom.title")} right={<IconSkull size={18} className="text-[var(--text-faint)]" />} />
+          <div className="flex-1 flex items-center justify-center px-8">
+            <p className="text-sm text-[var(--text-dim)] text-center">{t("conn.reconnecting")}</p>
+          </div>
+        </div>
+      );
+    }
+    return <MafiaRoomMenu dispatch={dispatch} onCreate={room.handleCreate} onJoin={room.handleJoin} busy={room.busy} error={room.error} initialCode={room.inviteCode} />;
+  }
+  if (view.status === "lobby") return <MafiaRoomLobby room={room} dispatch={dispatch} />;
+  if (view.status === "ended") {
+    return (
+      <MafiaRoomEnd
+        view={view}
+        act={room.act}
+        onLeave={() => {
+          room.handleLeave();
+          dispatch({ type: "GO_HUB" });
+        }}
+      />
+    );
+  }
+  return <MafiaRoomGame room={room} dispatch={dispatch} hostLine={hostLine} />;
 }
 
 /* ---------------------------------------------------------------- */
@@ -10197,7 +11758,6 @@ function BunkerGame({ room, roomCode, playerId, dispatch, onReveal, onExile, onO
   const orderedIds = Object.keys(players).sort((a, b) => (players[a].joinedAt || 0) - (players[b].joinedAt || 0));
   const [rulesOpen, setRulesOpen] = useState(false);
 
-  useWakeLock(true);
 
   return (
     <div className="h-full min-h-0 flex flex-col">
@@ -11570,7 +13130,6 @@ function CourtGame({ room, roomCode, playerId, dispatch, onReveal, onVote, onTal
   const orderedIds = Object.keys(players).sort((a, b) => (players[a].joinedAt || 0) - (players[b].joinedAt || 0));
   const [rulesOpen, setRulesOpen] = useState(false);
 
-  useWakeLock(true);
 
   return (
     <div className="h-full min-h-0 flex flex-col">
@@ -11810,6 +13369,10 @@ function App() {
     if (pendingInviteParams) return { ...merged, screen: pendingInviteParams.game };
     return merged;
   });
+
+  // Screen stays on for the whole time any game is open (setup, reveals,
+  // lobbies, rounds) and goes back to normal on the Hub. See useWakeLock.
+  useWakeLock(state.screen !== "hub");
 
   // "game_started" analytics: this is the single choke point every game
   // launch passes through, so wrapping dispatch here (rather than editing
