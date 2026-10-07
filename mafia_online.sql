@@ -110,6 +110,32 @@ end $$;
 -- p_gate: the phase is "the host is talking" and ends as soon as the voice
 -- phone reports the phrase finished (p_seconds is then only the fallback
 -- for a room where no phone can speak).
+-- Per-game facts about each player ("found the mafia twice", "saved one"),
+-- turned into profile statistics when the player claims the result.
+alter table public.mafia_players add column if not exists stats jsonb not null default '{}'::jsonb;
+alter table public.mafia_players add column if not exists claimed boolean not null default false;
+
+alter table public.player_profiles add column if not exists mafia_games integer not null default 0;
+alter table public.player_profiles add column if not exists mafia_wins integer not null default 0;
+alter table public.player_profiles add column if not exists mafia_town_wins integer not null default 0;
+alter table public.player_profiles add column if not exists mafia_mafia_wins integer not null default 0;
+alter table public.player_profiles add column if not exists mafia_maniac_wins integer not null default 0;
+alter table public.player_profiles add column if not exists mafia_survived integer not null default 0;
+alter table public.player_profiles add column if not exists mafia_finds integer not null default 0;
+alter table public.player_profiles add column if not exists mafia_saves integer not null default 0;
+alter table public.player_profiles add column if not exists mafia_kills integer not null default 0;
+alter table public.player_profiles add column if not exists mafia_good_votes integer not null default 0;
+alter table public.player_profiles add column if not exists mafia_roles_mask integer not null default 0;
+alter table public.player_profiles add column if not exists mafia_streak integer not null default 0;
+alter table public.player_profiles add column if not exists mafia_best_streak integer not null default 0;
+
+create or replace function public.mafia__bump(p_code text, p_seat integer, p_key text)
+returns void language sql set search_path = public, pg_temp as $$
+  update mafia_players
+     set stats = jsonb_set(stats, array[p_key], to_jsonb(coalesce((stats->>p_key)::int, 0) + 1))
+   where room_code = p_code and seat = p_seat;
+$$;
+
 -- Earliest moment a "host is speaking" phase may end. The voice phone ends
 -- such a phase as soon as it has finished the sentence, but a phone with no
 -- voice for the language "finishes" in a few milliseconds -- without this
@@ -125,12 +151,16 @@ begin
   if p_key is not null then
     v_seq := mafia__say(p_code, p_key, p_params);
   end if;
+  -- A new game starts with the "look at your role" phase.
+  if p_phase = 'roles' then
+    update mafia_players set stats = '{}'::jsonb, claimed = false where room_code = p_code;
+  end if;
   -- "Host is speaking" phases normally end when the voice phone reports the
   -- sentence as said. This is only how long the room waits if that report
   -- never comes -- long enough for the slow studio voice to finish.
   if p_gate and p_seconds is not null then
     v_seconds := greatest(p_seconds, case p_phase
-      when 'morning' then 36 when 'vote_result' then 22 when 'night_wake' then 22
+      when 'morning' then 48 when 'vote_result' then 22 when 'night_wake' then 22
       when 'night_start' then 20 when 'reveal' then 14 else 10 end);
   end if;
   update mafia_rooms
@@ -213,6 +243,17 @@ begin
   end if;
   if v_maniac is not null and v_maniac is distinct from r.mafia_target then
     if v_maniac = v_doctor then v_saved := true; else v_victims := v_victims || v_maniac; end if;
+  end if;
+
+  -- Statistics: who killed, who saved.
+  if r.mafia_target is not null and r.mafia_target = any (v_victims) then
+    perform mafia__bump(p_code, seat, 'kills') from mafia_players where room_code = p_code and alive and role in ('mafia', 'don');
+  end if;
+  if v_maniac is not null and v_maniac = any (v_victims) then
+    perform mafia__bump(p_code, seat, 'kills') from mafia_players where room_code = p_code and alive and role = 'maniac';
+  end if;
+  if v_saved then
+    perform mafia__bump(p_code, seat, 'saves') from mafia_players where room_code = p_code and alive and role = 'doctor';
   end if;
 
   update mafia_players set alive = false, role_public = not mafia__hide_roles(p_code) where room_code = p_code and seat = any (v_victims);
@@ -368,6 +409,11 @@ begin
   end if;
 
   if v_exiled is not null then
+    -- Statistics: townspeople who voted out a mafia member or the maniac.
+    if exists (select 1 from mafia_players where room_code = p_code and seat = v_exiled and role in ('mafia', 'don', 'maniac')) then
+      perform mafia__bump(p_code, seat, 'good_votes') from mafia_players
+        where room_code = p_code and alive and not no_vote and voted and vote_target = v_exiled and role not in ('mafia', 'don', 'maniac');
+    end if;
     update mafia_players set alive = false where room_code = p_code and seat = v_exiled;
   end if;
   update mafia_players set no_vote = false where room_code = p_code;
@@ -527,6 +573,10 @@ returns jsonb language sql immutable set search_path = public, pg_temp as $$
     'maniac', coalesce((p_settings->>'maniac')::boolean, false),
     'putana', coalesce((p_settings->>'putana')::boolean, false),
     'hide_roles', coalesce((p_settings->>'hide_roles')::boolean, false),
+    -- Players who are out watch the game with all roles open.
+    'ghosts', coalesce((p_settings->>'ghosts')::boolean, true),
+    -- The host tells a short story about the night in the morning.
+    'stories', coalesce((p_settings->>'stories')::boolean, true),
     'speech_seconds', least(300, greatest(15, coalesce((p_settings->>'speech_seconds')::int, 60)))
   );
 $$;
@@ -544,6 +594,8 @@ declare
   v_result jsonb := null;
   v_alive integer;
   v_players jsonb;
+  v_ghost boolean := false;
+  v_ghost_night jsonb := null;
 begin
   select * into r from mafia_rooms where code = p_code;
   select * into me from mafia_players where room_code = p_code and player_id = p_player_id;
@@ -551,6 +603,20 @@ begin
     return jsonb_build_object('error', 'not_in_room');
   end if;
   v_mafia_side := me.role in ('mafia', 'don');
+  -- A player who is out becomes a spectator and sees everything -- but only
+  -- once nothing they say can matter any more: after their last word.
+  v_ghost := r.status = 'playing' and not me.alive and me.role is not null
+             and coalesce((r.settings->>'ghosts')::boolean, true)
+             and not (me.seat = any (coalesce(r.lastword_queue, '{}')))
+             and not (r.phase = 'vote_result' and r.exiled_seat is not distinct from me.seat);
+  if v_ghost and r.phase in ('night_start', 'night_wake', 'night_act', 'night_sleep') then
+    v_ghost_night := jsonb_build_object(
+      'putana', r.putana_target, 'mafia', r.mafia_target, 'don', r.don_target,
+      'maniac', r.maniac_target, 'doctor', r.doctor_target, 'sheriff', r.sheriff_target,
+      'mafia_picks', coalesce((select jsonb_agg(jsonb_build_object('seat', seat, 'target', night_pick) order by seat)
+                                 from mafia_players where room_code = p_code and alive and role in ('mafia', 'don')
+                                  and r.phase = 'night_act' and r.phase_role = 'mafia'), '[]'::jsonb));
+  end if;
   select count(*) into v_alive from mafia_players where room_code = p_code and alive;
 
   if r.status = 'playing' and r.phase = 'night_act' and me.alive then
@@ -582,7 +648,7 @@ begin
            'is_voice', p.player_id = r.voice_id,
            'is_me', p.player_id = p_player_id,
            'role', case when r.status = 'lobby' then null
-                        when p.role_public or r.status = 'ended' or p.player_id = p_player_id
+                        when p.role_public or r.status = 'ended' or p.player_id = p_player_id or v_ghost
                              or (v_mafia_side and p.role in ('mafia', 'don')) then p.role
                         else null end,
            'complaints', (select count(*) from mafia_complaints c
@@ -617,6 +683,8 @@ begin
     'exiled_seat', r.exiled_seat,
     'winner', r.winner,
     'players', v_players,
+    'ghost', v_ghost,
+    'ghost_night', v_ghost_night,
     'me', jsonb_build_object(
       'seat', me.seat,
       'name', me.name,
@@ -631,6 +699,8 @@ begin
       'result', v_result,
       'voted', me.voted,
       'vote_target', me.vote_target,
+      'claimed', me.claimed,
+      'stats', me.stats,
       'complained', coalesce((select jsonb_agg(target_seat order by target_seat) from mafia_complaints
                                where room_code = p_code and day = r.night and from_id = p_player_id), '[]'::jsonb)
     )
@@ -772,7 +842,7 @@ begin
        -- keeps following the defaults (the mafia count grows with the room).
        set settings = coalesce(settings, '{}'::jsonb) || coalesce((
              select jsonb_object_agg(key, value) from jsonb_each(coalesce(p_settings, '{}'::jsonb))
-              where key in ('mafia_count', 'doctor', 'sheriff', 'don', 'maniac', 'putana', 'hide_roles', 'speech_seconds')), '{}'::jsonb),
+              where key in ('mafia_count', 'doctor', 'sheriff', 'don', 'maniac', 'putana', 'hide_roles', 'ghosts', 'stories', 'speech_seconds')), '{}'::jsonb),
            updated_at = now()
      where code = p_code;
   end if;
@@ -888,6 +958,7 @@ begin
        set don_target = p_target, act_done = true,
            don_result = jsonb_build_object('seat', p_target, 'blocked', v_blocked, 'is_sheriff', (not v_blocked) and t.role = 'sheriff')
      where code = p_code;
+    if (not v_blocked) and t.role = 'sheriff' then perform mafia__bump(p_code, me.seat, 'finds'); end if;
   elsif r.phase_role = 'maniac' and t.seat <> me.seat then
     update mafia_rooms set maniac_target = p_target, act_done = true where code = p_code;
   elsif r.phase_role = 'doctor' then
@@ -897,6 +968,7 @@ begin
        set sheriff_target = p_target, act_done = true,
            sheriff_result = jsonb_build_object('seat', p_target, 'blocked', v_blocked, 'is_mafia', (not v_blocked) and t.role in ('mafia', 'don'))
      where code = p_code;
+    if (not v_blocked) and t.role in ('mafia', 'don') then perform mafia__bump(p_code, me.seat, 'finds'); end if;
   end if;
   return mafia__view(p_code, p_player_id);
 end $$;
@@ -1086,6 +1158,61 @@ begin
   return mafia__view(p_code, p_player_id);
 end $$;
 
+-- After a game: adds this player's result to their profile (statistics and
+-- achievements). Once per game per player; the numbers come from what the
+-- server itself recorded, the phone only says whose profile it is.
+create or replace function public.mafia_claim_result(p_code text, p_player_id text, p_secret text, p_profile_id text, p_name text)
+returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  r mafia_rooms;
+  me mafia_players;
+  v_side text;
+  v_won boolean;
+  v_bit integer;
+  v_name text;
+begin
+  me := mafia__open(p_code, p_player_id, p_secret, null);
+  if me.player_id is null then return jsonb_build_object('error', 'not_in_room'); end if;
+  select * into r from mafia_rooms where code = p_code;
+  if r.status <> 'ended' or me.role is null or r.winner is null then return jsonb_build_object('error', 'not_finished'); end if;
+  if me.claimed then return jsonb_build_object('ok', true, 'already', true); end if;
+  if p_profile_id is null or length(p_profile_id) not between 5 and 80 or p_profile_id !~ '^(tg|anon):[A-Za-z0-9_-]+$' then
+    return jsonb_build_object('error', 'bad_request');
+  end if;
+
+  v_side := case when me.role in ('mafia', 'don') then 'mafia' when me.role = 'maniac' then 'maniac' else 'town' end;
+  v_won := v_side = r.winner;
+  v_bit := case me.role when 'civilian' then 1 when 'mafia' then 2 when 'don' then 4 when 'doctor' then 8
+                        when 'sheriff' then 16 when 'maniac' then 32 when 'putana' then 64 else 0 end;
+  v_name := nullif(moderate_display_name(coalesce(p_name, me.name)), '');
+
+  update mafia_players set claimed = true where room_code = p_code and player_id = p_player_id;
+  insert into player_profiles as pp (id, display_name, last_played_date,
+      mafia_games, mafia_wins, mafia_town_wins, mafia_mafia_wins, mafia_maniac_wins, mafia_survived,
+      mafia_finds, mafia_saves, mafia_kills, mafia_good_votes, mafia_roles_mask, mafia_streak, mafia_best_streak)
+  values (p_profile_id, v_name, current_date,
+      1, v_won::int, (v_won and v_side = 'town')::int, (v_won and v_side = 'mafia')::int, (v_won and v_side = 'maniac')::int, me.alive::int,
+      coalesce((me.stats->>'finds')::int, 0), coalesce((me.stats->>'saves')::int, 0), coalesce((me.stats->>'kills')::int, 0),
+      coalesce((me.stats->>'good_votes')::int, 0), v_bit, v_won::int, v_won::int)
+  on conflict (id) do update set
+      display_name = coalesce(pp.display_name, excluded.display_name),
+      mafia_games = pp.mafia_games + 1,
+      mafia_wins = pp.mafia_wins + excluded.mafia_wins,
+      mafia_town_wins = pp.mafia_town_wins + excluded.mafia_town_wins,
+      mafia_mafia_wins = pp.mafia_mafia_wins + excluded.mafia_mafia_wins,
+      mafia_maniac_wins = pp.mafia_maniac_wins + excluded.mafia_maniac_wins,
+      mafia_survived = pp.mafia_survived + excluded.mafia_survived,
+      mafia_finds = pp.mafia_finds + excluded.mafia_finds,
+      mafia_saves = pp.mafia_saves + excluded.mafia_saves,
+      mafia_kills = pp.mafia_kills + excluded.mafia_kills,
+      mafia_good_votes = pp.mafia_good_votes + excluded.mafia_good_votes,
+      mafia_roles_mask = pp.mafia_roles_mask | excluded.mafia_roles_mask,
+      mafia_streak = case when excluded.mafia_wins = 1 then pp.mafia_streak + 1 else 0 end,
+      mafia_best_streak = greatest(pp.mafia_best_streak, case when excluded.mafia_wins = 1 then pp.mafia_streak + 1 else 0 end),
+      updated_at = now();
+  return jsonb_build_object('ok', true, 'won', v_won, 'side', v_side, 'role', me.role, 'survived', me.alive, 'stats', me.stats);
+end $$;
+
 ------------------------------------------------------------------------
 -- Who may call what
 ------------------------------------------------------------------------
@@ -1109,6 +1236,7 @@ revoke execute on function
   public.mafia__add_warning(text, integer, text),
   public.mafia__clean_settings(jsonb, integer),
   public.mafia__hide_roles(text),
+  public.mafia__bump(text, integer, text),
   public.mafia__view(text, text),
   public.mafia__open(text, text, text, boolean)
 from public, anon, authenticated;
@@ -1130,5 +1258,6 @@ grant execute on function
   public.mafia_host_warn(text, text, text, integer),
   public.mafia_host_skip(text, text, text),
   public.mafia_set_voice(text, text, text),
-  public.mafia_play_again(text, text, text)
+  public.mafia_play_again(text, text, text),
+  public.mafia_claim_result(text, text, text, text, text)
 to anon, authenticated;
