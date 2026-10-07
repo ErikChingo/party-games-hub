@@ -982,6 +982,28 @@ function trackEvent(name, data) {
       window.va("event", { name, data: data || {} });
     }
   } catch (e) {}
+  logAppEvent(name, data);
+}
+// The same events, kept in our own database too (table app_events, written
+// only through the log_event function) so the owner's statistics page
+// (?stats=1) can show which games people actually play. Fire-and-forget:
+// a failed or blocked request never affects the app.
+function logAppEvent(name, data) {
+  try {
+    const { game, ...rest } = data || {};
+    let platform = "web";
+    if (isInsideTelegram()) platform = "telegram";
+    else if (typeof window.matchMedia === "function" && window.matchMedia("(display-mode: standalone)").matches) platform = "pwa";
+    const request = supabaseClient.rpc("log_event", {
+      p_name: name,
+      p_game: typeof game === "string" ? game : null,
+      p_player_id: getPlayerId(),
+      p_lang: HATSIT_LANGS.includes(hatsitSettings.language) ? hatsitSettings.language : null,
+      p_platform: platform,
+      p_extra: Object.keys(rest).length > 0 ? rest : null,
+    });
+    if (request && typeof request.then === "function") request.then(() => {}, () => {});
+  } catch (e) {}
 }
 
 /* ---------------------------------------------------------------- */
@@ -1430,7 +1452,10 @@ const LEADERBOARD_COLUMNS = {
   countdown: "countdown_best",
   bunker: "bunker_played",
   court: "court_played",
+  mafia: "mafia_wins",
 };
+// What getPlayerTitle() needs to know about every leaderboard row.
+const TITLE_PROFILE_FIELDS = ["wordless_best", "countdown_best", "streak_longest", "selected_title", "mafia_wins", "mafia_mafia_wins", "mafia_finds", "mafia_saves"];
 // Drives both the ProfilePanel leaderboard tab grid and which column
 // fetchLeaderboard() above reads -- one list to keep in sync instead of two.
 const LEADERBOARD_TABS = [
@@ -1438,6 +1463,7 @@ const LEADERBOARD_TABS = [
   { key: "countdown", labelKey: "leaderboard.countdownTab" },
   { key: "bunker", labelKey: "leaderboard.bunkerTab" },
   { key: "court", labelKey: "leaderboard.courtTab" },
+  { key: "mafia", labelKey: "leaderboard.mafiaTab" },
 ];
 async function fetchLeaderboard(game, limit = 20) {
   const column = LEADERBOARD_COLUMNS[game] || "wordless_best";
@@ -1451,7 +1477,7 @@ async function fetchLeaderboard(game, limit = 20) {
     // their auto-highest one) shows correctly on other people's screens.
     const { data, error } = await supabaseClient
       .from("player_profiles")
-      .select(`id, display_name, wordless_best, countdown_best, streak_longest, selected_title, ${column}`)
+      .select(["id", "display_name", ...new Set([...TITLE_PROFILE_FIELDS, column])].join(", "))
       .gt(column, 0)
       .order(column, { ascending: false })
       .limit(limit);
@@ -1461,10 +1487,7 @@ async function fetchLeaderboard(game, limit = 20) {
         id: r.id,
         name: r.display_name,
         value: r[column],
-        wordless_best: r.wordless_best,
-        countdown_best: r.countdown_best,
-        streak_longest: r.streak_longest,
-        selected_title: r.selected_title,
+        ...Object.fromEntries(TITLE_PROFILE_FIELDS.map((field) => [field, r[field]])),
       })
     );
   } catch (e) {
@@ -1789,6 +1812,15 @@ function useGameRoom(config) {
       if (!isHostChannel) session.persist(code, false, null);
     });
 
+    // The host holds the whole game. When they leave or close the page the
+    // guests would otherwise stare at a frozen room with no explanation;
+    // the next state broadcast (host is back) clears this again.
+    if (!isHostChannel) {
+      channel.on("broadcast", { event: gameKey + "_host_left" }, () => {
+        if (initializedRef.current) setConnStatus("host_left");
+      });
+    }
+
     // Only the Host resolves join/action requests into authoritative state
     // and rebroadcasts it — every other client just renders what it gets.
     if (isHostChannel) {
@@ -1860,9 +1892,23 @@ function useGameRoom(config) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Tells the guests when the host goes away (back to the Hub, or the page
+  // is closed or reloaded).
+  function announceHostLeft() {
+    try {
+      if (isHostRef.current && channelRef.current) channelRef.current.send({ type: "broadcast", event: gameKey + "_host_left", payload: {} });
+    } catch (e) {}
+  }
+  useEffect(() => {
+    window.addEventListener("pagehide", announceHostLeft);
+    return () => window.removeEventListener("pagehide", announceHostLeft);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     return () => {
       if (joinTimeoutRef.current) clearTimeout(joinTimeoutRef.current);
+      announceHostLeft();
       if (channelRef.current) {
         supabaseClient.removeChannel(channelRef.current);
         channelRef.current = null;
@@ -2226,6 +2272,25 @@ const I18N = {
   "mroom.hideRoles": { ru: "Скрытые роли", en: "Hidden roles", hy: "Թաքնված դերեր" },
   "mroom.hideRolesDesc": { ru: "Ведущий не называет роль выбывшего. Все роли откроются только в конце игры", en: "The host doesn't say the role of a player who is out. All roles are shown only when the game ends", hy: "Վարողը չի ասում դուրս եկած խաղացողի դերը։ Բոլոր դերերը բացվում են միայն խաղի վերջում" },
   "mroom.hideRolesOn": { ru: "Скрытые роли: роли выбывших откроются в конце игры", en: "Hidden roles: the roles of players who are out are shown at the end", hy: "Թաքնված դերեր. դուրս եկածների դերերը կբացվեն խաղի վերջում" },
+  "mroom.ghosts": { ru: "Зрители", en: "Spectators", hy: "Հանդիսատեսներ" },
+  "mroom.ghostsDesc": { ru: "Выбывшие игроки видят все роли и ночные ходы", en: "Players who are out see every role and the night moves", hy: "Դուրս եկած խաղացողները տեսնում են բոլոր դերերը և գիշերային քայլերը" },
+  "mroom.ghostsOff": { ru: "Выбывшие не видят роли", en: "Players who are out don't see the roles", hy: "Դուրս եկածները դերերը չեն տեսնում" },
+  "mroom.stories": { ru: "Истории ведущего", en: "Host's stories", hy: "Վարողի պատմությունները" },
+  "mroom.storiesDesc": { ru: "Утром ведущий коротко рассказывает, что случилось ночью", en: "In the morning the host briefly tells what happened at night", hy: "Առավոտյան վարողը կարճ պատմում է, թե ինչ է եղել գիշերը" },
+  "mroom.ghostBadge": { ru: "Вы зритель", en: "You are a spectator", hy: "Դուք հանդիսատես եք" },
+  "mroom.ghostHint": { ru: "Вы выбыли и видите все роли. Не подсказывайте живым игрокам.", en: "You are out and can see every role. Don't give hints to the living players.", hy: "Դուք դուրս եք եկել և տեսնում եք բոլոր դերերը։ Մի հուշեք ողջ խաղացողներին։" },
+  "mroom.ghostNightTitle": { ru: "Ночь глазами зрителя", en: "The night, as a spectator", hy: "Գիշերը՝ հանդիսատեսի աչքերով" },
+  "mroom.ghostThinking": { ru: "выбирает…", en: "choosing…", hy: "ընտրում է…" },
+  "mroom.ghostNotYet": { ru: "ещё не ходил", en: "hasn't moved yet", hy: "դեռ չի քայլել" },
+  "mroom.ghostMissed": { ru: "промах", en: "missed", hy: "վրիպում" },
+  "mroom.youWon": { ru: "Вы победили!", en: "You won!", hy: "Դուք հաղթեցիք։" },
+  "mroom.youLost": { ru: "Вы проиграли", en: "You lost", hy: "Դուք պարտվեցիք" },
+  "mroom.yourRoleWas": { ru: "Ваша роль: {role}", en: "Your role: {role}", hy: "Ձեր դերը՝ {role}" },
+  "mroom.statFinds": { ru: "Удачных проверок: {n}", en: "Good checks: {n}", hy: "Հաջող ստուգումներ՝ {n}" },
+  "mroom.statSaves": { ru: "Спасено: {n}", en: "Saved: {n}", hy: "Փրկված՝ {n}" },
+  "mroom.statKills": { ru: "Убийств: {n}", en: "Kills: {n}", hy: "Սպանություններ՝ {n}" },
+  "mroom.statVotes": { ru: "Верных голосов: {n}", en: "Right votes: {n}", hy: "Ճիշտ ձայներ՝ {n}" },
+  "mroom.savedToProfile": { ru: "Результат записан в профиль", en: "Result saved to your profile", hy: "Արդյունքը գրանցվել է պրոֆիլում" },
   "mroom.voteConfirm": { ru: "Проголосовать: {name}", en: "Vote: {name}", hy: "Քվեարկել՝ {name}" },
   "mroom.votePick": { ru: "Выберите игрока и подтвердите", en: "Pick a player, then confirm", hy: "Ընտրեք խաղացողին և հաստատեք" },
   "mroom.voiceNeedsOther": { ru: "Пусть один игрок откроет комнату в обычном браузере (Chrome или Safari) и нажмёт «Голос на этом телефоне».", en: "Have one player open the room in a regular browser (Chrome or Safari) and tap “Voice on this phone”.", hy: "Թող խաղացողներից մեկը բացի սենյակը սովորական դիտարկիչում (Chrome կամ Safari) և սեղմի «Ձայնը այս հեռախոսում»։" },
@@ -2489,7 +2554,16 @@ const I18N = {
   "bunker.roundLabel": { ru: "Раунд {n}:", en: "Round {n}:", hy: "Փուլ {n}՝" },
   "bunker.exiledPlural": { ru: "изгнан(ы) {names}", en: "exiled: {names}", hy: "հեռացվեց(ին)՝ {names}" },
   "bunker.noOneVoted": { ru: "никто не набрал голосов", en: "no one got enough votes", hy: "ոչ ոք բավարար ձայներ չհավաքեց" },
-  "bunker.tieNote": { ru: " (ничья на границе — исключены все)", en: " (a tie on the cutoff — everyone tied was excluded)", hy: " (հավասարություն սահմանագծին — բոլորը հեռացվեցին)" },
+  "bunker.tieNote": { ru: " (ничья — набравшие поровну остались, проголосуйте ещё раз)", en: " (a tie — those tied stay, vote again)", hy: " (ոչ-ոքի — հավասար ձայն հավաքածները մնում են, քվեարկեք նորից)" },
+  "bunker.noOneExiled": { ru: "никто не исключён", en: "no one was excluded", hy: "ոչ ոք չի հեռացվել" },
+  "bunker.finalTitle": { ru: "Бункер закрыт", en: "The bunker is sealed", hy: "Բունկերը փակված է" },
+  "bunker.finalIn": { ru: "В бункере остались:", en: "Inside the bunker:", hy: "Բունկերում մնացին՝" },
+  "bunker.finalOut": { ru: "Остались снаружи:", en: "Left outside:", hy: "Դրսում մնացին՝" },
+  "bunker.newGame": { ru: "Новая игра", en: "New game", hy: "Նոր խաղ" },
+  "bunker.confirmNewGame": { ru: "Точно начать заново?", en: "Start over for sure?", hy: "Իսկապե՞ս սկսել նորից" },
+  "bunker.waitHostNewGame": { ru: "Хост может начать новую игру.", en: "The host can start a new game.", hy: "Հոսթը կարող է սկսել նոր խաղ։" },
+  "bunker.seeTable": { ru: "Все условия — на вкладке «Общий стол»", en: "Full details are on the “Shared table” tab", hy: "Բոլոր պայմանները՝ «Ընդհանուր սեղան» ներդիրում" },
+  "bunker.slotsShort": { ru: "мест: {n} из {m}", en: "spots: {n} of {m}", hy: "տեղեր՝ {n}՝ {m}-ից" },
   "bunker.roundExclude": { ru: "Раунд {round} · исключить {count}", en: "Round {round} · exclude {count}", hy: "Փուլ {round} · հեռացնել {count}" },
   "bunker.exiledObserveOnly": { ru: "Вы выбыли и можете только наблюдать за голосованием.", en: "You've been exiled and can only observe the voting.", hy: "Դուք հեռացվել եք և կարող եք միայն դիտել քվեարկությունը։" },
   "bunker.endVoting": { ru: "Завершить голосование", en: "End voting", hy: "Ավարտել քվեարկությունը" },
@@ -2504,6 +2578,7 @@ const I18N = {
   "bunker.dossierNotReady": { ru: "Досье ещё не готово", en: "Dossier not ready yet", hy: "Դոսյեն դեռ պատրաստ չէ" },
   "bunker.myDossierTab": { ru: "Моё досье", en: "My dossier", hy: "Իմ դոսյեն" },
   "bunker.commonTableTab": { ru: "Общий стол", en: "Common table", hy: "Ընդհանուր սեղան" },
+  "conn.hostLeft": { ru: "Хост вышел из комнаты. Игра продолжится, когда он вернётся.", en: "The host left the room. The game continues when they are back.", hy: "Հոսթը դուրս է եկել սենյակից։ Խաղը կշարունակվի, երբ նա վերադառնա։" },
   "conn.offline": { ru: "Нет соединения — переподключаемся…", en: "No connection — reconnecting…", hy: "Կապ չկա — վերակապակցվում ենք…" },
   "conn.reconnecting": { ru: "Переподключение к комнате…", en: "Reconnecting to the room…", hy: "Վերակապակցում ենք սենյակին…" },
   "common.joinDiscord": { ru: "Присоединиться к Discord / Найти игроков", en: "Join Discord / Find players", hy: "Միանալ Discord-ին / Գտնել խաղացողների" },
@@ -2537,7 +2612,8 @@ const I18N = {
   "court.needMinParticipants": { ru: "Нужно минимум 4 участника (сейчас {n})", en: "Need at least 4 participants (currently {n})", hy: "Անհրաժեշտ է առնվազն 4 մասնակից (այժմ՝ {n})" },
   "court.waitingJudge": { ru: "Ожидание Судьи…", en: "Waiting for the Judge…", hy: "Սպասում ենք Դատավորին…" },
   "court.role.judge": { ru: "Судья", en: "Judge", hy: "Դատավոր" },
-  "court.role.guilty": { ru: "Виновный", en: "The Accused", hy: "Մեղավոր" },
+  "court.role.guilty": { ru: "Обвиняемый", en: "The Accused", hy: "Մեղադրյալ" },
+  "court.seeTable": { ru: "Обстоятельства дела — на вкладке «Общий стол»", en: "The details of the case are on the “Shared table” tab", hy: "Գործի հանգամանքները՝ «Ընդհանուր սեղան» ներդիրում" },
   "court.role.victim": { ru: "Пострадавший", en: "The Victim", hy: "Տուժող" },
   "court.role.secretary": { ru: "Секретарь суда", en: "Court Secretary", hy: "Դատարանի քարտուղար" },
   "court.role.juror": { ru: "Присяжный", en: "Juror", hy: "Երդվյալ ատենակալ" },
@@ -2667,6 +2743,61 @@ const I18N = {
   "leaderboard.wordlessTab": { ru: "Без слов", en: "Wordless", hy: "Անխոս" },
   "leaderboard.countdownTab": { ru: "Обратный отсчёт", en: "Countdown", hy: "Հետհաշվարկ" },
   "leaderboard.bunkerTab": { ru: "Бункер", en: "Bunker", hy: "Բունկեր" },
+  "achievements.mafiaFirst.title": { ru: "Первая ночь", en: "First night", hy: "Առաջին գիշեր" },
+  "achievements.mafiaFirst.desc": { ru: "Сыграйте партию в онлайн-Мафию", en: "Play a game of online Mafia", hy: "Խաղացեք օնլայն Մաֆիայի մեկ խաղ" },
+  "achievements.mafia10.title": { ru: "Завсегдатай", en: "Regular", hy: "Մշտական հյուր" },
+  "achievements.mafia10.desc": { ru: "Сыграйте 10 партий в Мафию", en: "Play 10 Mafia games", hy: "Խաղացեք Մաֆիայի 10 խաղ" },
+  "achievements.mafia50.title": { ru: "Ветеран города", en: "City veteran", hy: "Քաղաքի վետերան" },
+  "achievements.mafia50.desc": { ru: "Сыграйте 50 партий в Мафию", en: "Play 50 Mafia games", hy: "Խաղացեք Մաֆիայի 50 խաղ" },
+  "achievements.mafiaWin1.title": { ru: "Первая победа", en: "First win", hy: "Առաջին հաղթանակ" },
+  "achievements.mafiaWin1.desc": { ru: "Победите в онлайн-Мафии", en: "Win a game of online Mafia", hy: "Հաղթեք օնլայն Մաֆիայում" },
+  "achievements.mafiaWin10.title": { ru: "Победитель", en: "Winner", hy: "Հաղթող" },
+  "achievements.mafiaWin10.desc": { ru: "Победите в Мафии 10 раз", en: "Win 10 Mafia games", hy: "Հաղթեք Մաֆիայում 10 անգամ" },
+  "achievements.mafiaWin25.title": { ru: "Легенда города", en: "City legend", hy: "Քաղաքի լեգենդ" },
+  "achievements.mafiaWin25.desc": { ru: "Победите в Мафии 25 раз", en: "Win 25 Mafia games", hy: "Հաղթեք Մաֆիայում 25 անգամ" },
+  "achievements.mafiaTown5.title": { ru: "Честный гражданин", en: "Honest citizen", hy: "Ազնիվ քաղաքացի" },
+  "achievements.mafiaTown5.desc": { ru: "5 побед за мирных жителей", en: "Win 5 games as a townsperson", hy: "5 հաղթանակ խաղաղ բնակիչների կողմից" },
+  "achievements.mafiaGodfather.title": { ru: "Крёстный отец", en: "Godfather", hy: "Կնքահայր" },
+  "achievements.mafiaGodfather.desc": { ru: "5 побед за мафию", en: "Win 5 games as the mafia", hy: "5 հաղթանակ մաֆիայի կողմից" },
+  "achievements.mafiaManiac1.title": { ru: "Одиночка", en: "Lone wolf", hy: "Միայնակ գայլ" },
+  "achievements.mafiaManiac1.desc": { ru: "Победите в роли маньяка", en: "Win a game as the maniac", hy: "Հաղթեք մոլագարի դերում" },
+  "achievements.mafiaSheriff1.title": { ru: "Комиссар", en: "Detective", hy: "Քննիչ" },
+  "achievements.mafiaSheriff1.desc": { ru: "Найдите врага ночной проверкой", en: "Find an enemy with a night check", hy: "Գիշերային ստուգմամբ գտեք թշնամուն" },
+  "achievements.mafiaSheriff10.title": { ru: "Гроза мафии", en: "Mafia's nightmare", hy: "Մաֆիայի սարսափ" },
+  "achievements.mafiaSheriff10.desc": { ru: "10 удачных ночных проверок", en: "10 successful night checks", hy: "10 հաջող գիշերային ստուգում" },
+  "achievements.mafiaDoctor1.title": { ru: "Ангел-хранитель", en: "Guardian angel", hy: "Պահապան հրեշտակ" },
+  "achievements.mafiaDoctor1.desc": { ru: "Спасите игрока в роли доктора", en: "Save a player as the doctor", hy: "Փրկեք խաղացողի՝ բժշկի դերում" },
+  "achievements.mafiaDoctor10.title": { ru: "Главврач", en: "Chief physician", hy: "Գլխավոր բժիշկ" },
+  "achievements.mafiaDoctor10.desc": { ru: "Спасите 10 игроков", en: "Save 10 players", hy: "Փրկեք 10 խաղացողի" },
+  "achievements.mafiaKiller5.title": { ru: "Меткий выстрел", en: "Sharpshooter", hy: "Դիպուկ կրակոց" },
+  "achievements.mafiaKiller5.desc": { ru: "5 ночных убийств за мафию или маньяка", en: "5 night kills as the mafia or the maniac", hy: "5 գիշերային սպանություն մաֆիայի կամ մոլագարի դերում" },
+  "achievements.mafiaKiller25.title": { ru: "Синдикат", en: "The Syndicate", hy: "Սինդիկատ" },
+  "achievements.mafiaKiller25.desc": { ru: "25 ночных убийств", en: "25 night kills", hy: "25 գիշերային սպանություն" },
+  "achievements.mafiaVotes10.title": { ru: "Глас народа", en: "Voice of the people", hy: "Ժողովրդի ձայն" },
+  "achievements.mafiaVotes10.desc": { ru: "10 раз выгоните мафию голосованием", en: "Vote the mafia out 10 times", hy: "10 անգամ քվեարկությամբ վտարեք մաֆիային" },
+  "achievements.mafiaSurvivor5.title": { ru: "Живучий", en: "Survivor", hy: "Դիմացկուն" },
+  "achievements.mafiaSurvivor5.desc": { ru: "Доживите до конца 5 партий", en: "Stay alive to the end of 5 games", hy: "Ողջ մնացեք մինչև 5 խաղի ավարտը" },
+  "achievements.mafiaSurvivor20.title": { ru: "Неуязвимый", en: "Untouchable", hy: "Անխոցելի" },
+  "achievements.mafiaSurvivor20.desc": { ru: "Доживите до конца 20 партий", en: "Stay alive to the end of 20 games", hy: "Ողջ մնացեք մինչև 20 խաղի ավարտը" },
+  "achievements.mafiaStreak3.title": { ru: "На волне", en: "On a roll", hy: "Ալիքի վրա" },
+  "achievements.mafiaStreak3.desc": { ru: "3 победы в Мафии подряд", en: "Win 3 Mafia games in a row", hy: "3 հաղթանակ Մաֆիայում անընդմեջ" },
+  "achievements.mafiaStreak5.title": { ru: "Неудержимый", en: "Unstoppable", hy: "Անկասելի" },
+  "achievements.mafiaStreak5.desc": { ru: "5 побед в Мафии подряд", en: "Win 5 Mafia games in a row", hy: "5 հաղթանակ Մաֆիայում անընդմեջ" },
+  "achievements.mafiaAllRoles.title": { ru: "Мастер перевоплощения", en: "Master of disguise", hy: "Կերպարանափոխման վարպետ" },
+  "achievements.mafiaAllRoles.desc": { ru: "Сыграйте мирным, мафией, доктором и шерифом", en: "Play as a civilian, mafia, doctor and sheriff", hy: "Խաղացեք խաղաղ բնակչի, մաֆիայի, բժշկի և շերիֆի դերերում" },
+  "achievements.groupGeneral": { ru: "Общие", en: "General", hy: "Ընդհանուր" },
+  "achievements.groupMafia": { ru: "Мафия онлайн", en: "Online Mafia", hy: "Օնլայն Մաֆիա" },
+  "profile.mafiaTitle": { ru: "Мафия онлайн", en: "Online Mafia", hy: "Օնլայն Մաֆիա" },
+  "profile.mafiaGames": { ru: "Партий", en: "Games", hy: "Խաղեր" },
+  "profile.mafiaWins": { ru: "Побед", en: "Wins", hy: "Հաղթանակներ" },
+  "profile.mafiaStreak": { ru: "Лучшая серия", en: "Best streak", hy: "Լավագույն շարք" },
+  "profile.mafiaTownWins": { ru: "За мирных", en: "As town", hy: "Խաղաղների կողմից" },
+  "profile.mafiaMafiaWins": { ru: "За мафию", en: "As mafia", hy: "Մաֆիայի կողմից" },
+  "profile.mafiaSurvived": { ru: "Выжил", en: "Survived", hy: "Ողջ մնացել" },
+  "profile.mafiaFinds": { ru: "Удачных проверок", en: "Good checks", hy: "Հաջող ստուգումներ" },
+  "profile.mafiaSaves": { ru: "Спасено", en: "Saved", hy: "Փրկված" },
+  "profile.mafiaKills": { ru: "Убийств", en: "Kills", hy: "Սպանություններ" },
+  "leaderboard.mafiaTab": { ru: "Мафия", en: "Mafia", hy: "Մաֆիա" },
   "leaderboard.courtTab": { ru: "Суд", en: "Court", hy: "Դատարան" },
   "leaderboard.you": { ru: "Вы", en: "You", hy: "Դուք" },
   "leaderboard.yourRank": { ru: "Ваше место: {n}", en: "Your rank: {n}", hy: "Ձեր տեղը՝ {n}" },
@@ -3252,6 +3383,31 @@ const ACHIEVEMENTS = [
   { id: "streak_3", Icon: IconFlame, titleKey: "achievements.streak3.title", descKey: "achievements.streak3.desc", check: (p) => (p.streak_longest || 0) >= 3 },
   { id: "streak_7", Icon: IconFlame, titleKey: "achievements.streak7.title", descKey: "achievements.streak7.desc", check: (p) => (p.streak_longest || 0) >= 7 },
   { id: "streak_30", Icon: IconFlame, titleKey: "achievements.streak30.title", descKey: "achievements.streak30.desc", check: (p) => (p.streak_longest || 0) >= 30 },
+  // Online Mafia. The numbers come from the server, which records each
+  // game's facts itself (see mafia_claim_result in supabase/mafia_online.sql);
+  // mafia_roles_mask bits: civilian 1, mafia 2, don 4, doctor 8, sheriff 16,
+  // maniac 32, putana 64.
+  { id: "mafia_first", group: "mafia", Icon: IconMoon, titleKey: "achievements.mafiaFirst.title", descKey: "achievements.mafiaFirst.desc", check: (p) => (p.mafia_games || 0) >= 1 },
+  { id: "mafia_10", group: "mafia", Icon: IconUsers, titleKey: "achievements.mafia10.title", descKey: "achievements.mafia10.desc", check: (p) => (p.mafia_games || 0) >= 10 },
+  { id: "mafia_50", group: "mafia", Icon: IconMedal, titleKey: "achievements.mafia50.title", descKey: "achievements.mafia50.desc", check: (p) => (p.mafia_games || 0) >= 50 },
+  { id: "mafia_win_1", group: "mafia", Icon: IconTrophy, titleKey: "achievements.mafiaWin1.title", descKey: "achievements.mafiaWin1.desc", check: (p) => (p.mafia_wins || 0) >= 1 },
+  { id: "mafia_win_10", group: "mafia", Icon: IconTrophy, titleKey: "achievements.mafiaWin10.title", descKey: "achievements.mafiaWin10.desc", check: (p) => (p.mafia_wins || 0) >= 10 },
+  { id: "mafia_win_25", group: "mafia", Icon: IconCrown, titleKey: "achievements.mafiaWin25.title", descKey: "achievements.mafiaWin25.desc", check: (p) => (p.mafia_wins || 0) >= 25 },
+  { id: "mafia_town_5", group: "mafia", Icon: IconShield, titleKey: "achievements.mafiaTown5.title", descKey: "achievements.mafiaTown5.desc", check: (p) => (p.mafia_town_wins || 0) >= 5 },
+  { id: "mafia_godfather", group: "mafia", Icon: IconSkull, titleKey: "achievements.mafiaGodfather.title", descKey: "achievements.mafiaGodfather.desc", check: (p) => (p.mafia_mafia_wins || 0) >= 5 },
+  { id: "mafia_maniac_1", group: "mafia", Icon: IconNeedle, titleKey: "achievements.mafiaManiac1.title", descKey: "achievements.mafiaManiac1.desc", check: (p) => (p.mafia_maniac_wins || 0) >= 1 },
+  { id: "mafia_sheriff_1", group: "mafia", Icon: IconSearch, titleKey: "achievements.mafiaSheriff1.title", descKey: "achievements.mafiaSheriff1.desc", check: (p) => (p.mafia_finds || 0) >= 1 },
+  { id: "mafia_sheriff_10", group: "mafia", Icon: IconEye, titleKey: "achievements.mafiaSheriff10.title", descKey: "achievements.mafiaSheriff10.desc", check: (p) => (p.mafia_finds || 0) >= 10 },
+  { id: "mafia_doctor_1", group: "mafia", Icon: IconCross, titleKey: "achievements.mafiaDoctor1.title", descKey: "achievements.mafiaDoctor1.desc", check: (p) => (p.mafia_saves || 0) >= 1 },
+  { id: "mafia_doctor_10", group: "mafia", Icon: IconHeart, titleKey: "achievements.mafiaDoctor10.title", descKey: "achievements.mafiaDoctor10.desc", check: (p) => (p.mafia_saves || 0) >= 10 },
+  { id: "mafia_killer_5", group: "mafia", Icon: IconTarget, titleKey: "achievements.mafiaKiller5.title", descKey: "achievements.mafiaKiller5.desc", check: (p) => (p.mafia_kills || 0) >= 5 },
+  { id: "mafia_killer_25", group: "mafia", Icon: IconBriefcase, titleKey: "achievements.mafiaKiller25.title", descKey: "achievements.mafiaKiller25.desc", check: (p) => (p.mafia_kills || 0) >= 25 },
+  { id: "mafia_votes_10", group: "mafia", Icon: IconVote, titleKey: "achievements.mafiaVotes10.title", descKey: "achievements.mafiaVotes10.desc", check: (p) => (p.mafia_good_votes || 0) >= 10 },
+  { id: "mafia_survivor_5", group: "mafia", Icon: IconUmbrella, titleKey: "achievements.mafiaSurvivor5.title", descKey: "achievements.mafiaSurvivor5.desc", check: (p) => (p.mafia_survived || 0) >= 5 },
+  { id: "mafia_survivor_20", group: "mafia", Icon: IconAnchor, titleKey: "achievements.mafiaSurvivor20.title", descKey: "achievements.mafiaSurvivor20.desc", check: (p) => (p.mafia_survived || 0) >= 20 },
+  { id: "mafia_streak_3", group: "mafia", Icon: IconFlame, titleKey: "achievements.mafiaStreak3.title", descKey: "achievements.mafiaStreak3.desc", check: (p) => (p.mafia_best_streak || 0) >= 3 },
+  { id: "mafia_streak_5", group: "mafia", Icon: IconRocket, titleKey: "achievements.mafiaStreak5.title", descKey: "achievements.mafiaStreak5.desc", check: (p) => (p.mafia_best_streak || 0) >= 5 },
+  { id: "mafia_all_roles", group: "mafia", Icon: IconMasks, titleKey: "achievements.mafiaAllRoles.title", descKey: "achievements.mafiaAllRoles.desc", check: (p) => ((p.mafia_roles_mask || 0) & 27) === 27 },
 ];
 function computeUnlockedAchievementIds(profile) {
   if (!profile) return [];
@@ -3276,12 +3432,17 @@ function computeUnlockedAchievementIds(profile) {
 /* ---------------------------------------------------------------- */
 const PLAYER_TITLES = [
   { achievementId: "streak_30", color: "#f6cf72", icon: "👑", rare: true, label: { ru: "Бесконечный", en: "Eternal", hy: "Անվերջ" } },
+  { achievementId: "mafia_win_25", color: "#e2585a", icon: "🎩", rare: true, label: { ru: "Легенда города", en: "City Legend", hy: "Քաղաքի լեգենդ" } },
   { achievementId: "streak_7", color: "#4bb8ac", icon: "🛡️", rare: false, label: { ru: "Преданный", en: "Devoted", hy: "Նվիրված" } },
+  { achievementId: "mafia_godfather", color: "#d6598f", icon: "🕴️", rare: false, label: { ru: "Крёстный отец", en: "Godfather", hy: "Կնքահայր" } },
+  { achievementId: "mafia_sheriff_10", color: "#a67ee8", icon: "⭐", rare: false, label: { ru: "Гроза мафии", en: "Mafia's Nightmare", hy: "Մաֆիայի սարսափ" } },
+  { achievementId: "mafia_doctor_10", color: "#5ea8e6", icon: "💉", rare: false, label: { ru: "Главврач", en: "Chief Physician", hy: "Գլխավոր բժիշկ" } },
   { achievementId: "wordless_10", color: "#a67ee8", icon: "🤫", rare: false, label: { ru: "Мастер тишины", en: "Silence Master", hy: "Լռության վարպետ" } },
   { achievementId: "countdown_10", color: "#e0954a", icon: "⚡", rare: false, label: { ru: "Несгибаемый", en: "Unyielding", hy: "Անդրդվելի" } },
   { achievementId: "streak_3", color: "#5ea8e6", icon: "📅", rare: false, label: { ru: "Постоянный", en: "Consistent", hy: "Հաստատուն" } },
   { achievementId: "wordless_5", color: "#8dd44c", icon: "🤐", rare: false, label: { ru: "Молчун", en: "Quiet One", hy: "Լռակյաց" } },
   { achievementId: "countdown_5", color: "#d6598f", icon: "🪨", rare: false, label: { ru: "Стойкий", en: "Steadfast", hy: "Կայուն" } },
+  { achievementId: "mafia_win_1", color: "#4bb8ac", icon: "🎭", rare: false, label: { ru: "Игрок Мафии", en: "Mafia Player", hy: "Մաֆիայի խաղացող" } },
   { achievementId: "first_steps", color: "#e8b545", icon: "🌱", rare: false, label: { ru: "Новичок", en: "Newcomer", hy: "Սկսնակ" } },
 ];
 // Returns the { color, label } tier for the given profile row, or null if
@@ -3894,6 +4055,16 @@ let pendingReconnectScreen = (() => {
 // and tapping the tile again later in the same tab doesn't keep re-using
 // a stale invite code. App() reads this (without clearing it) to decide
 // whether to jump straight to the Bunker/Court screen on first load.
+// hatsit.vercel.app/?stats=1 opens the owner's statistics page (it asks for
+// the password set with set_stats_password() in Supabase).
+const pendingOwnerStats = (() => {
+  try {
+    return new URLSearchParams(window.location.search).get("stats") === "1";
+  } catch (e) {
+    return false;
+  }
+})();
+
 let pendingInviteParams = (() => {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -5694,7 +5865,19 @@ function ProfilePanel({ onClose, initialTab }) {
   const countdownBest = (profile && profile.countdown_best) || 0;
   const bunkerPlayed = (profile && profile.bunker_played) || 0;
   const courtPlayed = (profile && profile.court_played) || 0;
-  const hasAnyStats = wordlessBest > 0 || countdownBest > 0 || bunkerPlayed > 0 || courtPlayed > 0;
+  const mafiaGames = (profile && profile.mafia_games) || 0;
+  const hasAnyStats = wordlessBest > 0 || countdownBest > 0 || bunkerPlayed > 0 || courtPlayed > 0 || mafiaGames > 0;
+  const mafiaTiles = [
+    ["profile.mafiaGames", mafiaGames],
+    ["profile.mafiaWins", (profile && profile.mafia_wins) || 0],
+    ["profile.mafiaStreak", (profile && profile.mafia_best_streak) || 0],
+    ["profile.mafiaTownWins", (profile && profile.mafia_town_wins) || 0],
+    ["profile.mafiaMafiaWins", (profile && profile.mafia_mafia_wins) || 0],
+    ["profile.mafiaSurvived", (profile && profile.mafia_survived) || 0],
+    ["profile.mafiaFinds", (profile && profile.mafia_finds) || 0],
+    ["profile.mafiaSaves", (profile && profile.mafia_saves) || 0],
+    ["profile.mafiaKills", (profile && profile.mafia_kills) || 0],
+  ];
   const myTitle = getPlayerTitle(profile);
 
   return (
@@ -5865,13 +6048,40 @@ function ProfilePanel({ onClose, initialTab }) {
                   </div>
                 )}
 
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2.5">{t("profile.achievementsTitle")}</div>
-                  <div className="grid grid-cols-3 gap-2.5">
-                    {ACHIEVEMENTS.map((a) => (
-                      <AchievementBadge key={a.id} achievement={a} unlocked={unlockedIds.has(a.id)} t={t} />
-                    ))}
+                {mafiaGames > 0 && (
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2.5">{t("profile.mafiaTitle")}</div>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      {mafiaTiles.map(([labelKey, value]) => (
+                        <div key={labelKey} className="bg-[var(--surface-2)] rounded-2xl p-3 text-center">
+                          <div className="font-display text-2xl leading-none mb-1.5" style={{ color: "var(--accent-strong)" }}>{value}</div>
+                          <div className="text-[10px] uppercase tracking-wide text-[var(--text-faint)] leading-tight">{t(labelKey)}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                )}
+
+                <div>
+                  <div className="flex items-baseline justify-between mb-2.5">
+                    <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">{t("profile.achievementsTitle")}</div>
+                    <div className="text-xs text-[var(--text-faint)] font-mono">{unlockedIds.size}/{ACHIEVEMENTS.length}</div>
+                  </div>
+                  {[
+                    ["achievements.groupGeneral", ACHIEVEMENTS.filter((a) => !a.group)],
+                    ["achievements.groupMafia", ACHIEVEMENTS.filter((a) => a.group === "mafia")],
+                  ].map(([groupKey, list]) => (
+                    <div key={groupKey} className="mb-4 last:mb-0">
+                      <div className="text-[11px] text-[var(--text-dim)] mb-2">
+                        {t(groupKey)} · {list.filter((a) => unlockedIds.has(a.id)).length}/{list.length}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2.5">
+                        {list.map((a) => (
+                          <AchievementBadge key={a.id} achievement={a} unlocked={unlockedIds.has(a.id)} t={t} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ) : (
@@ -6494,7 +6704,305 @@ function hubGameOrder(games) {
 // the router. Every component here is called the same way, `<Component
 // state={state} dispatch={dispatch} />`; the online games (Bunker, Court)
 // simply ignore the `state` prop since their own state lives in Supabase.
+/* ---------------------------------------------------------------- */
+/* Owner's statistics page (?stats=1).                                */
+/*                                                                    */
+/* Not linked from anywhere in the app and useless without the        */
+/* password: the numbers come from the admin_stats() function, which  */
+/* checks the password on the server (supabase/app_stats.sql). Texts  */
+/* are in Russian only on purpose -- this page has exactly one reader. */
+/* ---------------------------------------------------------------- */
+const OWNER_STATS_PASSWORD_KEY = "hatsit_owner_stats_pw_v1";
+const OWNER_STATS_GAME_NAMES = {
+  spy: "Шпион", alias: "Алиас", croc: "Крокодил", wordless: "Без слов", countdown: "Обратный отсчёт",
+  telephone: "Испорченный телефон", mafia: "Мафия (один телефон)", mafiaroom: "Мафия онлайн", bunker: "Бункер", court: "Суд",
+};
+function ownerStatsDay(day) {
+  const parts = String(day || "").split("-");
+  return parts.length === 3 ? `${parseInt(parts[2], 10)}.${parts[1]}` : String(day || "");
+}
+
+// One measure per chart (never two scales on one plot): a row of thin bars
+// for the last 14 days. Tap or hover a bar to read its exact value.
+function OwnerStatsBars({ title, days, field }) {
+  const [picked, setPicked] = useState(null);
+  const values = days.map((d) => Number(d[field]) || 0);
+  const max = Math.max(1, ...values);
+  const total = values.reduce((sum, v) => sum + v, 0);
+  const shown = picked !== null ? picked : days.length - 1;
+  return (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-4 py-4">
+      <div className="flex items-baseline justify-between gap-3 mb-1">
+        <div className="text-sm font-medium">{title}</div>
+        <div className="text-xs text-[var(--text-faint)] shrink-0">за 14 дней: {total}</div>
+      </div>
+      <div className="text-xs text-[var(--text-dim)] mb-3">
+        {days[shown] ? `${ownerStatsDay(days[shown].day)}: ` : ""}
+        <span className="text-[var(--text)] font-medium">{values[shown] || 0}</span>
+      </div>
+      <div className="flex items-end gap-[2px] h-24 border-b border-[var(--border)]" onMouseLeave={() => setPicked(null)}>
+        {days.map((d, i) => (
+          <button
+            key={d.day}
+            type="button"
+            onClick={() => setPicked(i)}
+            onMouseEnter={() => setPicked(i)}
+            aria-label={`${ownerStatsDay(d.day)}: ${values[i]}`}
+            className="flex-1 h-full flex items-end"
+          >
+            <span
+              className="block w-full rounded-t-[4px]"
+              style={{
+                height: values[i] > 0 ? `${Math.max(4, Math.round((values[i] / max) * 100))}%` : "0%",
+                background: "var(--accent)",
+                opacity: i === shown ? 1 : 0.55,
+              }}
+            />
+          </button>
+        ))}
+      </div>
+      <div className="flex justify-between text-[10px] text-[var(--text-faint)] mt-1.5">
+        <span>{days[0] ? ownerStatsDay(days[0].day) : ""}</span>
+        <span>макс. {max === 1 && total === 0 ? 0 : max}</span>
+        <span>{days.length > 0 ? ownerStatsDay(days[days.length - 1].day) : ""}</span>
+      </div>
+    </div>
+  );
+}
+
+function OwnerStatsTile({ label, value, note }) {
+  return (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4">
+      <div className="font-display text-3xl leading-none mb-1.5" style={{ color: "var(--accent-strong)" }}>{value}</div>
+      <div className="text-[11px] uppercase tracking-wide text-[var(--text-faint)] leading-tight">{label}</div>
+      {note ? <div className="text-[11px] text-[var(--text-dim)] mt-1.5 leading-tight">{note}</div> : null}
+    </div>
+  );
+}
+
+function OwnerStats({ dispatch }) {
+  const [password, setPassword] = useState("");
+  const [data, setData] = useState(null);
+  const [status, setStatus] = useState("idle"); // idle | loading | forbidden | not_configured | failed
+  const [showTable, setShowTable] = useState(false);
+
+  async function load(value) {
+    if (!value) return;
+    setStatus("loading");
+    try {
+      const { data: result, error } = await supabaseClient.rpc("admin_stats", { p_password: value });
+      if (error) throw error;
+      if (result && result.ok) {
+        setData(result);
+        setStatus("idle");
+        try {
+          sessionStorage.setItem(OWNER_STATS_PASSWORD_KEY, value);
+        } catch (e) {}
+        return;
+      }
+      setData(null);
+      setStatus(result && result.error === "not_configured" ? "not_configured" : "forbidden");
+    } catch (e) {
+      setStatus("failed");
+    }
+  }
+  // Coming back within the same browser session: no need to type it again.
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(OWNER_STATS_PASSWORD_KEY);
+      if (saved) {
+        setPassword(saved);
+        load(saved);
+      }
+    } catch (e) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const header = <TopBar onBack={() => dispatch({ type: "GO_HUB" })} title="Статистика" right={<IconBarChart size={18} className="text-[var(--text-faint)]" />} />;
+
+  if (!data) {
+    return (
+      <div className="h-full min-h-0 flex flex-col">
+        {header}
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-8 flex flex-col gap-4">
+          <p className="text-sm text-[var(--text-dim)]">Страница владельца сайта. Введите пароль статистики.</p>
+          <form
+            className="flex flex-col gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              load(password);
+            }}
+          >
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Пароль"
+              autoComplete="current-password"
+              className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-4 py-3.5 text-[var(--text)] outline-none focus:border-[var(--accent)]"
+            />
+            <button
+              type="submit"
+              disabled={!password || status === "loading"}
+              className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl disabled:opacity-30 active:scale-[0.98] transition-transform"
+            >
+              {status === "loading" ? "Загрузка…" : "Показать"}
+            </button>
+          </form>
+          {status === "forbidden" && <p className="text-sm text-[var(--danger)]">Неверный пароль.</p>}
+          {status === "failed" && <p className="text-sm text-[var(--danger)]">Не удалось загрузить. Проверьте интернет и попробуйте ещё раз.</p>}
+          {status === "not_configured" && (
+            <div className="text-sm text-[var(--text-dim)] bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4">
+              <p className="mb-2 text-[var(--text)]">Пароль ещё не задан.</p>
+              <p className="mb-2">Откройте Supabase → SQL Editor и выполните одну строку, подставив свой пароль (не короче 8 символов):</p>
+              <code className="block text-xs bg-[var(--surface-2)] rounded-xl p-3 break-all">select set_stats_password('ваш пароль');</code>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const totals = data.totals || {};
+  const days = data.days || [];
+  const games = data.games || [];
+  const maxStarted = Math.max(1, ...games.map((g) => Number(g.started) || 0));
+  const split = data.split || {};
+  const splitText = (obj, names) => {
+    const entries = Object.entries(obj || {}).sort((a, b) => b[1] - a[1]);
+    return entries.length > 0 ? entries.map(([key, n]) => `${names[key] || "не определено"} — ${n}`).join(" · ") : "нет данных";
+  };
+  const trend = (totals.new_7d || 0) - (totals.new_prev_7d || 0);
+  const since = totals.events_since ? ownerStatsDay(String(totals.events_since).slice(0, 10)) : null;
+
+  return (
+    <div className="h-full min-h-0 flex flex-col">
+      {header}
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-10 flex flex-col gap-4">
+        <p className="text-xs text-[var(--text-faint)]">
+          {since ? `Игры и открытия сайта считаются с ${since}; до этой даты их в базе нет.` : "Игры и открытия сайта начнут считаться с этого обновления — пока здесь пусто."}{" "}
+          Посетители и оценки — за всё время.
+        </p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <OwnerStatsTile label="Всего посетителей" value={totals.profiles || 0} />
+          <OwnerStatsTile
+            label="Новых за 7 дней"
+            value={totals.new_7d || 0}
+            note={`неделей раньше: ${totals.new_prev_7d || 0} (${trend > 0 ? "+" : ""}${trend})`}
+          />
+          <OwnerStatsTile label="Активных за 7 дней" value={totals.active_7d || 0} />
+          <OwnerStatsTile label="Игр начато за 7 дней" value={totals.games_started_7d || 0} note={`доиграно: ${totals.games_completed_7d || 0}`} />
+          <OwnerStatsTile label="Вернулись на 2-й день" value={totals.came_back || 0} note={`на 3-й день: ${totals.came_back_3 || 0}`} />
+          <OwnerStatsTile label="Оценок" value={totals.feedback || 0} note={`средняя: ${totals.rating === null || totals.rating === undefined ? "—" : totals.rating}`} />
+          <OwnerStatsTile label="Играли в Мафию онлайн" value={totals.mafia_players || 0} note={`комнат за 2 часа: ${totals.mafia_rooms_now || 0}`} />
+          <OwnerStatsTile label="Указали имя" value={totals.named || 0} />
+        </div>
+
+        <OwnerStatsBars title="Новые посетители по дням" days={days} field="new" />
+        <OwnerStatsBars title="Открытий сайта по дням" days={days} field="opens" />
+        <OwnerStatsBars title="Запущено игр по дням" days={days} field="started" />
+
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-4 py-4">
+          <div className="text-sm font-medium mb-1">Игры за 7 дней</div>
+          <p className="text-[11px] text-[var(--text-faint)] mb-3">В Бункере и Суде запуск считается у каждого участника, в остальных играх — один раз на партию.</p>
+          {games.length === 0 ? (
+            <p className="text-sm text-[var(--text-dim)]">Пока нет данных.</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {games.map((g) => (
+                <div key={g.game}>
+                  <div className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="truncate">{OWNER_STATS_GAME_NAMES[g.game] || g.game}</span>
+                    <span className="shrink-0 text-[var(--text-dim)]">
+                      <span className="text-[var(--text)] font-medium">{g.started}</span> начато · {g.completed} доиграно · {g.players} игр.
+                    </span>
+                  </div>
+                  <div className="h-2 mt-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${Math.round(((Number(g.started) || 0) / maxStarted) * 100)}%`, background: "var(--accent)" }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-4 py-4 text-sm">
+          <div className="font-medium mb-2">Откуда заходят (7 дней)</div>
+          <p className="text-[var(--text-dim)] mb-1">{splitText(split.platform, { web: "Сайт", telegram: "Telegram", pwa: "Установленное приложение" })}</p>
+          <p className="text-[var(--text-dim)]">Язык: {splitText(split.lang, { ru: "русский", en: "английский", hy: "армянский" })}</p>
+        </div>
+
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-4 py-4">
+          <div className="text-sm font-medium mb-3">Оценки</div>
+          {(data.feedback || []).length === 0 ? (
+            <p className="text-sm text-[var(--text-dim)]">Оценок пока нет.</p>
+          ) : (
+            <div className="flex flex-col gap-1.5 text-sm mb-4">
+              {(data.feedback || []).map((f) => (
+                <div key={f.game} className="flex justify-between gap-3">
+                  <span className="truncate">{OWNER_STATS_GAME_NAMES[f.game] || f.game}</span>
+                  <span className="shrink-0 text-[var(--text-dim)]">
+                    {f.n} · средняя <span className="text-[var(--text)] font-medium">{f.rating}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-col gap-2">
+            {(data.comments || []).filter((c) => c.comment).map((c, i) => (
+              <div key={i} className="bg-[var(--surface-2)] rounded-2xl px-3 py-2.5 text-sm">
+                <div className="text-[11px] text-[var(--text-faint)] mb-1">
+                  {OWNER_STATS_GAME_NAMES[c.game] || c.game} · {c.rating}/5 · {ownerStatsDay(String(c.created_at).slice(0, 10))}
+                </div>
+                <div className="break-words">{c.comment}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button type="button" onClick={() => setShowTable((v) => !v)} className="text-sm text-[var(--text-dim)] underline decoration-dotted underline-offset-2 self-start">
+          {showTable ? "Скрыть таблицу по дням" : "Показать таблицу по дням"}
+        </button>
+        {showTable && (
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-4 py-3 overflow-x-auto">
+            <table className="w-full text-xs text-right">
+              <thead>
+                <tr className="text-[var(--text-faint)]">
+                  <th className="text-left font-normal py-1">День</th>
+                  <th className="font-normal">Новых</th>
+                  <th className="font-normal">Активных</th>
+                  <th className="font-normal">Открытий</th>
+                  <th className="font-normal">Начато</th>
+                  <th className="font-normal">Доиграно</th>
+                </tr>
+              </thead>
+              <tbody>
+                {days.slice().reverse().map((d) => (
+                  <tr key={d.day} className="border-t border-[var(--border)]">
+                    <td className="text-left py-1">{ownerStatsDay(d.day)}</td>
+                    <td>{d.new}</td>
+                    <td>{d.active}</td>
+                    <td>{d.opens}</td>
+                    <td>{d.started}</td>
+                    <td>{d.completed}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <button type="button" onClick={() => load(password)} className="w-full bg-[var(--surface-2)] border border-[var(--border-strong)] rounded-2xl py-3 text-sm">
+          {status === "loading" ? "Обновляю…" : "Обновить"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const SCREEN_COMPONENTS = {
+  ownerstats: OwnerStats,
   "spy-setup": SpySetup,
   "spy-reveal": SpyReveal,
   "spy-playing": SpyPlaying,
@@ -10201,24 +10709,108 @@ let mafiaSayToken = { cancelled: false, stop: null };
 
 // Says the sentences in order: studio voice when its audio is ready in
 // time, the phone's own voice otherwise. Resolves when all are done.
+//
+// A part is normally a string. It can also be { lazy, fallback }: `lazy` is
+// a promise of the sentences to say (the host's morning story, still being
+// written when the host starts talking) and `fallback` the plain sentences
+// to use if the story or its audio doesn't arrive in time.
 function mafiaSay(parts, lang) {
   const token = mafiaSayToken;
-  const texts = (parts || []).filter(Boolean);
+  const list = (parts || []).filter(Boolean);
   // Ask for every sentence now: while the first one plays, the ones with
   // names in them have time to arrive.
-  const pending = texts.map((text) => mafiaStudioFetch(text, lang));
+  list.forEach((part) => {
+    if (typeof part === "string") mafiaStudioFetch(part, lang);
+    else {
+      (part.fallback || []).forEach((text) => mafiaStudioFetch(text, lang));
+      part.lazy.then((texts) => (texts || []).forEach((text) => mafiaStudioFetch(text, lang)), () => {});
+    }
+  });
+  const wait = (promise, ms) => Promise.race([promise, new Promise((resolve) => setTimeout(() => resolve(null), ms))]);
+  const sayOne = async (text) => {
+    if (token.cancelled) return;
+    const url = await wait(mafiaStudioFetch(text, lang), MAFIA_VOICE_WAIT_MS);
+    if (token.cancelled) return;
+    if (url && (await mafiaPlayStudio(url, token))) return;
+    if (token.cancelled) return;
+    await mafiaSpeakLocal(text, lang, token);
+  };
   const run = async () => {
-    for (let i = 0; i < texts.length; i++) {
+    for (const part of list) {
       if (token.cancelled) return;
-      const url = await Promise.race([pending[i], new Promise((resolve) => setTimeout(() => resolve(null), MAFIA_VOICE_WAIT_MS))]);
+      if (typeof part === "string") {
+        await sayOne(part);
+        continue;
+      }
+      let texts = await wait(part.lazy.catch(() => null), MAFIA_STORY_WAIT_MS);
       if (token.cancelled) return;
-      if (url && (await mafiaPlayStudio(url, token))) continue;
-      if (token.cancelled) return;
-      await mafiaSpeakLocal(texts[i], lang, token);
+      // With the studio voice on, a story is only worth telling in that
+      // voice: if its audio isn't ready, say the plain sentences instead
+      // (theirs is). Without it the phone reads the story itself.
+      if (texts && texts.length > 0 && mafiaStudioState === "ok") {
+        const ready = await wait(mafiaStudioFetch(texts[0], lang), MAFIA_VOICE_WAIT_MS);
+        if (token.cancelled) return;
+        if (!ready) texts = null;
+      }
+      for (const text of texts && texts.length > 0 ? texts : part.fallback || []) await sayOne(text);
     }
   };
   mafiaSayChain = mafiaSayChain.then(run, run);
   return mafiaSayChain;
+}
+
+/* ---- The host's morning story (written by Gemini, /api/mafia-story) ---- */
+const MAFIA_STORY_API = "/api/mafia-story";
+// The story is requested the moment the night's result is known and has the
+// length of the "Morning comes..." sentence to arrive.
+const MAFIA_STORY_TIMEOUT_MS = 7000;
+const MAFIA_STORY_WAIT_MS = 1500;
+
+// Resolves to the story text, or null. Checked again here even though the
+// server checks it too: it must name every victim and nobody else, so a
+// wrong story can never mislead the table about who died.
+function mafiaFetchStory(entry, view, lang) {
+  try {
+    if (typeof window.fetch !== "function" || !entry || !view) return Promise.resolve(null);
+    const params = entry.params || {};
+    const victims = (params.victims || []).map((v) => mafiaSeatName(view, v.seat)).filter(Boolean);
+    const others = (view.players || []).map((p) => p.name).filter((name) => name && !victims.includes(name));
+    const request = window
+      .fetch(MAFIA_STORY_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lang, victims, saved: !!params.saved, missed: !!params.missed, night: view.night || 1 }),
+      })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        const text = data && typeof data.text === "string" ? data.text.trim() : "";
+        if (text.length < 12 || text.length > 160) return null;
+        const lower = text.toLocaleLowerCase();
+        if (!victims.every((name) => lower.includes(name.toLocaleLowerCase()))) return null;
+        if (others.some((name) => name.length >= 3 && lower.includes(name.toLocaleLowerCase()))) return null;
+        return text;
+      })
+      .catch(() => null);
+    return Promise.race([request, new Promise((resolve) => setTimeout(() => resolve(null), MAFIA_STORY_TIMEOUT_MS))]);
+  } catch (e) {
+    return Promise.resolve(null);
+  }
+}
+
+// The morning announcement with a story in it: the fixed opening, then the
+// story (and the roles of whoever died), or the plain sentences if the
+// story doesn't make it.
+function mafiaMorningWithStory(entry, view, lang) {
+  const plain = mafiaHostParts(entry, view, lang);
+  const line = (key) => t_lookup("mhost." + key, lang);
+  const victims = ((entry.params || {}).victims || []).filter((v) => v.role);
+  const roleParts = [];
+  victims.forEach((v) => {
+    if (victims.length > 1) roleParts.push(line("nameOnly").replace("{name}", mafiaSeatName(view, v.seat)));
+    roleParts.push(line("rolePart").replace("{role}", t_lookup(`role.${v.role}.name`, lang)));
+  });
+  const lazy = mafiaFetchStory(entry, view, lang).then((story) => (story ? [story, ...roleParts] : null));
+  return [plain[0], { lazy, fallback: plain.slice(1) }];
 }
 
 // Silences the host at once and drops whatever was still waiting to be said.
@@ -10466,7 +11058,9 @@ function useMafiaRoom() {
     const current = codeRef.current;
     if (!current) return null;
     const { data, requestId } = await rpc(fn, { p_code: current, ...(args || {}) });
-    if (data && !data.error) {
+    // Most functions answer with the room view; a few (claiming the result)
+    // answer with something else, which must not replace the view.
+    if (data && !data.error && Array.isArray(data.players)) {
       applyView(data, requestId);
       ping();
     }
@@ -10643,7 +11237,9 @@ function useMafiaVoice(view, act) {
     fresh.forEach((entry) => {
       // A phone that cannot make a sound at all finishes at once; the
       // server still keeps each screen up for its minimum time.
-      mafiaSay(mafiaHostParts(entry, viewRef.current, lang), lang).then(() => {
+      const current = viewRef.current;
+      const withStory = entry.key === "morning" && current && current.settings && current.settings.stories !== false;
+      mafiaSay(withStory ? mafiaMorningWithStory(entry, current, lang) : mafiaHostParts(entry, current, lang), lang).then(() => {
         if (!token.cancelled) reportDone(entry.seq);
       });
       mafiaStudioPrefetch(mafiaVoiceLookahead(entry, viewRef.current, lang), lang, true);
@@ -11074,6 +11670,24 @@ function MafiaRoomLobby({ room, dispatch }) {
               checked={!!settings.hide_roles}
               onChange={() => setSetting({ hide_roles: !settings.hide_roles })}
             />
+            <RoleToggle
+              Icon={IconEye}
+              color="var(--accent-strong)"
+              bg="rgba(232,181,69,.14)"
+              title={t("mroom.ghosts")}
+              description={t("mroom.ghostsDesc")}
+              checked={settings.ghosts !== false}
+              onChange={() => setSetting({ ghosts: settings.ghosts === false })}
+            />
+            <RoleToggle
+              Icon={IconBookOpen}
+              color="var(--accent-strong)"
+              bg="rgba(232,181,69,.14)"
+              title={t("mroom.stories")}
+              description={t("mroom.storiesDesc")}
+              checked={settings.stories !== false}
+              onChange={() => setSetting({ stories: settings.stories === false })}
+            />
           </>
         ) : (
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-5 py-4 text-sm text-[var(--text-dim)]">
@@ -11084,6 +11698,8 @@ function MafiaRoomLobby({ room, dispatch }) {
             </p>
             <p className="mt-1">{enabledRoles.join(", ")}</p>
             {settings.hide_roles && <p className="mt-1 text-[var(--accent-strong)]">{t("mroom.hideRolesOn")}</p>}
+            {settings.ghosts === false && <p className="mt-1">{t("mroom.ghostsOff")}</p>}
+            {settings.stories !== false && <p className="mt-1">{t("mroom.stories")}</p>}
           </div>
         )}
       </div>
@@ -11245,6 +11861,80 @@ function MafiaRoomNight({ view }) {
       </div>
       <h2 className="font-display text-4xl leading-tight mb-3">{t("mroom.nightTitle")}</h2>
       <p className="text-sm text-[var(--text-dim)] max-w-[28ch]">{view.me.alive ? t("mroom.nightHint") : t("mroom.deadHint")}</p>
+    </div>
+  );
+}
+
+// What a spectator (a player who is out) sees at night: who is awake and
+// whom each role has picked, as it happens.
+function MafiaRoomGhostNight({ view }) {
+  const t = useT();
+  const night = view.ghost_night || {};
+  const name = (seat) => mafiaSeatName(view, seat);
+  const rows = ["putana", "mafia", "don", "maniac", "doctor", "sheriff"]
+    .map((role) => {
+      const actors = view.players.filter((p) => p.alive && (role === "mafia" ? p.role === "mafia" || p.role === "don" : p.role === role));
+      return { role, actors };
+    })
+    .filter((row) => row.actors.length > 0);
+  const picks = night.mafia_picks || [];
+  return (
+    <div className="flex flex-col pb-4">
+      <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-faint)] text-center mb-3">{t("mroom.ghostNightTitle")}</p>
+      <div className="flex flex-col gap-2">
+        {rows.map(({ role, actors }) => {
+          const style = MAFIA_ROLES[role];
+          const active = view.phase_role === role && view.phase !== "night_start";
+          const target = night[role];
+          const chosen = target !== null && target !== undefined;
+          let status;
+          if (role === "mafia" && view.phase === "night_act" && active && !chosen) {
+            status = actors.map((a) => {
+              const pick = picks.find((x) => x.seat === a.seat);
+              return `${a.name}: ${pick && pick.target !== null && pick.target !== undefined ? name(pick.target) : t("mroom.ghostThinking")}`;
+            }).join(" · ");
+          } else if (chosen) status = "→ " + name(target);
+          else if (active) status = t("mroom.ghostThinking");
+          else status = t("mroom.ghostNotYet");
+          return (
+            <div
+              key={role}
+              className={"rounded-2xl px-4 py-3 border " + (active ? "bg-[var(--surface)] border-[var(--border-strong)]" : "bg-[var(--surface)]/50 border-[var(--border)]")}
+            >
+              <div className="flex items-center gap-2 text-sm font-medium" style={{ color: style.color }}>
+                <style.Icon size={16} />
+                <span>{t(`role.${role}.name`)}</span>
+                <span className="text-[var(--text-faint)] font-normal truncate">· {actors.map((a) => a.name).join(", ")}</span>
+              </div>
+              <div className="text-sm text-[var(--text-dim)] mt-1">{status}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Shown under every screen while spectating: a reminder of what this view
+// is, and the table with every role open.
+function MafiaRoomGhostPanel({ view }) {
+  const t = useT();
+  return (
+    <div className="mt-2 mb-4">
+      <div className="flex items-start gap-2 rounded-2xl px-4 py-3 mb-3 text-sm" style={{ background: "rgba(232,181,69,.10)" }}>
+        <IconEye size={17} className="shrink-0 mt-0.5 text-[var(--accent-strong)]" />
+        <span>
+          <span className="font-medium text-[var(--accent-strong)]">{t("mroom.ghostBadge")}.</span>{" "}
+          <span className="text-[var(--text-dim)]">{t("mroom.ghostHint")}</span>
+        </span>
+      </div>
+      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-4 py-2">
+        <div className="flex flex-col divide-y divide-[var(--border)]">
+          {view.players.map((player) => (
+            <MafiaRoomPlayerRow key={player.seat} player={player} />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -11509,14 +12199,70 @@ function MafiaRoomEnd({ view, act, onLeave }) {
     mafia: { color: "var(--spy)", bg: "rgba(226,88,90,.14)", title: t("mafia.mafiaWinTitle"), desc: t("mafia.mafiaWinDesc") },
     maniac: { color: "var(--maniac)", bg: "rgba(194,69,46,.14)", title: t("mafia.maniacWinTitle"), desc: t("mafia.maniacWinDesc") },
   }[view.winner] || { color: "var(--local)", bg: "rgba(75,184,172,.14)", title: t("spy.gameOver"), desc: "" };
+  const me = view.me || {};
+  const mySide = me.role === "mafia" || me.role === "don" ? "mafia" : me.role === "maniac" ? "maniac" : "town";
+  const iWon = !!me.role && !!view.winner && mySide === view.winner;
+  const myStats = me.stats || {};
+  const statChips = [
+    ["mroom.statFinds", myStats.finds],
+    ["mroom.statSaves", myStats.saves],
+    ["mroom.statKills", myStats.kills],
+    ["mroom.statVotes", myStats.good_votes],
+  ].filter(([, n]) => n > 0);
+  const [newAchievements, setNewAchievements] = useState([]);
+  const [saved, setSaved] = useState(!!me.claimed);
+  // The server adds this game to the player's profile once; whatever that
+  // unlocks is celebrated right here.
+  useEffect(() => {
+    if (!me.role || !view.winner || me.claimed) return undefined;
+    let cancelled = false;
+    (async () => {
+      const result = await act("mafia_claim_result", { p_profile_id: getPlayerId(), p_name: getPlayerName() });
+      if (cancelled || !result || !result.ok) return;
+      setSaved(true);
+      if (result.already) return;
+      const profile = await fetchMyProfile();
+      if (cancelled || !profile) return;
+      const fresh = detectNewlyUnlockedAchievements(profile);
+      if (fresh.length > 0) {
+        setNewAchievements(fresh);
+        fresh.forEach((a) => trackEvent("achievement_unlocked", { game: "mafiaroom", id: a.id }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.seq]);
   return (
     <div className="h-full flex flex-col px-6 pb-8" style={{ paddingTop: "3rem" }}>
+      {newAchievements.length > 0 && (
+        <AchievementUnlockToast achievement={newAchievements[0]} onDone={() => setNewAchievements((prev) => prev.slice(1))} />
+      )}
       <div className="flex-1 min-h-0 flex flex-col items-center text-center overflow-y-auto no-scrollbar">
         <div className="w-16 h-16 rounded-full flex items-center justify-center mb-6 shrink-0" style={{ background: winnerStyle.bg, color: winnerStyle.color }}>
           <IconTrophy size={30} />
         </div>
         <h2 className="font-display text-5xl leading-none mb-3" style={{ color: winnerStyle.color }}>{winnerStyle.title}</h2>
-        <p className="text-sm text-[var(--text-dim)] max-w-[30ch] mb-8">{winnerStyle.desc}</p>
+        <p className="text-sm text-[var(--text-dim)] max-w-[30ch] mb-6">{winnerStyle.desc}</p>
+        {me.role && view.winner && (
+          <div className="w-full rounded-3xl border px-4 py-4 mb-4" style={{ borderColor: iWon ? "var(--accent)" : "var(--border)", background: iWon ? "rgba(232,181,69,.10)" : "var(--surface)" }}>
+            <div className="font-display text-2xl leading-none mb-1.5" style={{ color: iWon ? "var(--accent-strong)" : "var(--text-dim)" }}>
+              {iWon ? t("mroom.youWon") : t("mroom.youLost")}
+            </div>
+            <div className="text-sm text-[var(--text-dim)]">{t("mroom.yourRoleWas").replace("{role}", t(`role.${me.role}.name`))}</div>
+            {statChips.length > 0 && (
+              <div className="flex flex-wrap justify-center gap-1.5 mt-3">
+                {statChips.map(([key, n]) => (
+                  <span key={key} className="text-xs px-2.5 py-1 rounded-full bg-[var(--surface-2)] text-[var(--text)]">
+                    {t(key).replace("{n}", n)}
+                  </span>
+                ))}
+              </div>
+            )}
+            {saved && <div className="text-[11px] text-[var(--text-faint)] mt-3">{t("mroom.savedToProfile")}</div>}
+          </div>
+        )}
         <div className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-4 py-2 mb-4 text-left">
           <div className="flex flex-col divide-y divide-[var(--border)]">
             {view.players.map((player) => (
@@ -11588,7 +12334,7 @@ function MafiaRoomGame({ room, dispatch, hostLine }) {
   let body = null;
   if (phase === "roles") body = <MafiaRoomRoleCard view={view} act={act} />;
   else if (myTurn) body = <MafiaRoomNightAction view={view} act={act} seconds={seconds} />;
-  else if (night) body = <MafiaRoomNight view={view} />;
+  else if (night) body = view.ghost ? <MafiaRoomGhostNight view={view} /> : <MafiaRoomNight view={view} />;
   else if (phase === "morning") body = <MafiaRoomMorning view={view} />;
   else if (phase === "day_speech" || phase === "lastword") body = <MafiaRoomSpeech view={view} act={act} seconds={seconds} />;
   else if (phase === "vote") body = <MafiaRoomVote view={view} act={act} seconds={seconds} />;
@@ -11622,7 +12368,10 @@ function MafiaRoomGame({ room, dispatch, hostLine }) {
           />
         </div>
       )}
-      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pt-3 flex flex-col">{body}</div>
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pt-3 flex flex-col">
+        {body}
+        {view.ghost && <MafiaRoomGhostPanel view={view} />}
+      </div>
     </div>
   );
 }
@@ -11637,8 +12386,10 @@ function MafiaRoomApp({ dispatch }) {
   const status = view ? view.status : null;
   const prevStatusRef = useRef(null);
   useEffect(() => {
-    if (status === "playing" && prevStatusRef.current === "lobby") trackEvent("game_started", { game: "mafiaroom" });
-    if (status === "ended" && prevStatusRef.current === "playing") trackEvent("game_completed", { game: "mafiaroom", winner: view && view.winner });
+    // Counted once per game (by the room creator's phone), not once per player.
+    const counts = !!(view && view.is_host);
+    if (counts && status === "playing" && prevStatusRef.current === "lobby") trackEvent("game_started", { game: "mafiaroom", players: view.players.length });
+    if (counts && status === "ended" && prevStatusRef.current === "playing") trackEvent("game_completed", { game: "mafiaroom", winner: view && view.winner });
     prevStatusRef.current = status;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
@@ -11750,6 +12501,22 @@ function bunkerPick(list) {
 function bunkerPickIndex(list) {
   return Math.floor(Math.random() * list.length);
 }
+// Deals a dossier to everyone at once so that no two players get the same
+// profession, hobby and so on (two "energy engineers" at a table of three
+// left nothing to argue about). A list only repeats once it runs out.
+function dealBunkerDossiers(playerIds) {
+  const dossiers = {};
+  playerIds.forEach((pid) => {
+    dossiers[pid] = {};
+  });
+  BUNKER_TRAIT_DEFS.forEach((trait) => {
+    const order = shuffleArray(trait.list.ru.map((_, index) => index));
+    playerIds.forEach((pid, k) => {
+      dossiers[pid][trait.key] = { valueIndex: order[k % order.length], revealed: false };
+    });
+  });
+  return dossiers;
+}
 function makeBunkerDossier() {
   const dossier = {};
   BUNKER_TRAIT_DEFS.forEach((t) => {
@@ -11763,8 +12530,15 @@ function makeBunkerDossier() {
 // explanation.
 function ConnStatusBanner({ status }) {
   const t = useT();
-  if (status !== "reconnecting" && status !== "offline") return null;
+  if (status !== "reconnecting" && status !== "offline" && status !== "host_left") return null;
   const isOffline = status === "offline";
+  if (status === "host_left") {
+    return (
+      <div className="mx-5 mb-2 px-3 py-2 rounded-xl text-xs font-medium text-center shrink-0" style={{ background: "rgba(232,181,69,.14)", color: "var(--accent-strong)" }}>
+        {t("conn.hostLeft")}
+      </div>
+    );
+  }
   return (
     <div
       className="mx-5 mb-2 px-3 py-1.5 rounded-xl text-xs font-medium text-center shrink-0"
@@ -11989,14 +12763,28 @@ function BunkerLobby({ room, roomCode, playerId, dispatch, onStart, error, busy,
   );
 }
 
-function BunkerDossierTab({ me, onReveal }) {
+function BunkerDossierTab({ me, room, playersCount, onReveal }) {
   const t = useT();
   const lang = useLang();
   if (!me || !me.dossier) {
     return <div className="pt-10 text-center text-[var(--text-dim)] text-sm">{t("bunker.dossierPreparing")}</div>;
   }
+  const catastrophe = room && typeof room.catastropheIndex === "number" ? BUNKER_CATASTROPHES[room.catastropheIndex] : null;
   return (
     <div className="flex flex-col gap-3 pt-4">
+      {catastrophe && (
+        <div className="bg-[var(--surface)] border border-[var(--bunker)]/30 rounded-2xl px-4 py-3">
+          <div className="flex items-center gap-2 text-[var(--bunker)] mb-1">
+            <IconRadioactive size={15} />
+            <span className="text-[10px] uppercase tracking-[0.25em]">{t("bunker.catastrophe")}</span>
+            {room.capacity ? (
+              <span className="ml-auto text-[11px] text-[var(--text-dim)]">{t("bunker.slotsShort").replace("{n}", room.capacity).replace("{m}", playersCount)}</span>
+            ) : null}
+          </div>
+          <div className="font-display text-lg leading-tight">{pickLang(catastrophe.title, lang)}</div>
+          <div className="text-[11px] text-[var(--text-faint)] mt-1">{t("bunker.seeTable")}</div>
+        </div>
+      )}
       <p className="text-xs uppercase tracking-[0.25em] text-[var(--text-faint)] mb-1">{t("bunker.yourDossier")}, {me.name}</p>
       {BUNKER_TRAIT_DEFS.map((trait) => {
         const entry = me.dossier[trait.key] || {};
@@ -12009,7 +12797,8 @@ function BunkerDossierTab({ me, onReveal }) {
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--text-faint)] mb-0.5">{label}</div>
-              <ExpandableText as="div" className="text-sm font-medium truncate" text={value} title={label} />
+              {/* Your own card, in full: cut-off text here hid most of the dossier. */}
+              <div className="text-sm font-medium break-words">{value}</div>
             </div>
             {entry.revealed ? (
               <span className="shrink-0 text-[10px] uppercase tracking-widest bg-[var(--bunker)]/15 text-[var(--bunker)] px-2.5 py-1.5 rounded-full flex items-center gap-1">
@@ -12030,15 +12819,74 @@ function BunkerDossierTab({ me, onReveal }) {
   );
 }
 
-function BunkerVotingCard({ room, players, orderedIds, playerId, isHost, onOpenVoting, onCastVote, onCloseVoting }) {
+// Pure tally of one Bunker voting round -> { round, excludeCount, tally,
+// exiled, tie }. Kept outside the component so it can be tested directly.
+function resolveBunkerVote(room) {
+  const { round, excludeCount, votes } = room.voting;
+  const aliveIds = Object.keys(room.players).filter((pid) => !room.players[pid].exiled);
+  const tally = {};
+  Object.keys(votes || {}).forEach((voterId) => {
+    const targetId = votes[voterId];
+    if (!aliveIds.includes(voterId) || !aliveIds.includes(targetId)) return;
+    tally[targetId] = (tally[targetId] || 0) + 1;
+  });
+  const ranked = Object.keys(tally).sort((a, b) => tally[b] - tally[a]);
+  const capacity = Math.max(1, room.capacity || 1);
+  const want = Math.max(0, Math.min(excludeCount, ranked.length, aliveIds.length - capacity));
+  let exiled = [];
+  let tie = false;
+  if (want > 0) {
+    const cutoffVotes = tally[ranked[want - 1]];
+    if (ranked[want] !== undefined && tally[ranked[want]] === cutoffVotes) {
+      tie = true;
+      exiled = ranked.filter((pid) => tally[pid] > cutoffVotes);
+    } else {
+      exiled = ranked.slice(0, want);
+    }
+  }
+  return { round, excludeCount, tally, exiled, tie };
+}
+
+function BunkerVotingCard({ room, players, orderedIds, playerId, isHost, onOpenVoting, onCastVote, onCloseVoting, onRestart }) {
   const t = useT();
   const [excludeCount, setExcludeCount] = useState(1);
   const alive = orderedIds.filter((pid) => !players[pid].exiled);
   const voting = room.voting;
+  const capacity = Math.max(1, room.capacity || 1);
+
+  // Everyone who fits is in: the game is over.
+  if (!voting && alive.length <= capacity) {
+    const out = orderedIds.filter((pid) => players[pid].exiled);
+    return (
+      <div className="bg-[var(--surface)] border border-[var(--bunker)] rounded-2xl p-4">
+        <div className="flex items-center gap-2 mb-3 text-[var(--bunker)]">
+          <IconShield size={18} />
+          <span className="text-xs uppercase tracking-[0.25em]">{t("bunker.finalTitle")}</span>
+        </div>
+        <p className="text-xs text-[var(--text-faint)] mb-1">{t("bunker.finalIn")}</p>
+        <p className="font-display text-2xl leading-tight mb-3">{alive.map((pid) => players[pid].name).join(", ")}</p>
+        {out.length > 0 && (
+          <p className="text-sm text-[var(--text-dim)] mb-3">
+            {t("bunker.finalOut")} {out.map((pid) => players[pid].name).join(", ")}
+          </p>
+        )}
+        {isHost ? (
+          <ConfirmButton
+            label={t("bunker.newGame")}
+            confirmLabel={t("bunker.confirmNewGame")}
+            onConfirm={onRestart}
+            className="w-full bg-[var(--bunker)] text-[var(--bunker-ink)] font-display text-lg tracking-wide py-3 rounded-2xl active:scale-[0.98] transition-transform"
+          />
+        ) : (
+          <p className="text-sm text-[var(--text-faint)]">{t("bunker.waitHostNewGame")}</p>
+        )}
+      </div>
+    );
+  }
 
   if (!voting) {
     const history = room.votingHistory || [];
-    const maxExclude = Math.max(1, alive.length - 1);
+    const maxExclude = Math.max(1, alive.length - capacity);
     return (
       <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4">
         <div className="flex items-center gap-2 mb-3 text-[var(--bunker)]">
@@ -12086,7 +12934,9 @@ function BunkerVotingCard({ room, players, orderedIds, playerId, isHost, onOpenV
                 {t("bunker.roundLabel").replace("{n}", h.round)}{" "}
                 {h.exiled.length > 0
                   ? t("bunker.exiledPlural").replace("{names}", h.exiled.map((pid) => (players[pid] ? players[pid].name : "?")).join(", "))
-                  : t("bunker.noOneVoted")}
+                  : h.tie
+                    ? t("bunker.noOneExiled")
+                    : t("bunker.noOneVoted")}
                 {h.tie && t("bunker.tieNote")}
               </div>
             ))}
@@ -12145,7 +12995,7 @@ function BunkerVotingCard({ room, players, orderedIds, playerId, isHost, onOpenV
   );
 }
 
-function BunkerTableTab({ room, players, orderedIds, playerId, isHost, onExile, onOpenVoting, onCastVote, onCloseVoting }) {
+function BunkerTableTab({ room, players, orderedIds, playerId, isHost, onExile, onOpenVoting, onCastVote, onCloseVoting, onRestart }) {
   const t = useT();
   const lang = useLang();
   const catastropheRaw = room && typeof room.catastropheIndex === "number" ? BUNKER_CATASTROPHES[room.catastropheIndex] : null;
@@ -12169,6 +13019,7 @@ function BunkerTableTab({ room, players, orderedIds, playerId, isHost, onExile, 
         onOpenVoting={onOpenVoting}
         onCastVote={onCastVote}
         onCloseVoting={onCloseVoting}
+        onRestart={onRestart}
       />
       {catastrophe && (
         <div className="bg-[var(--surface)] border border-[var(--bunker)]/30 rounded-2xl p-4">
@@ -12295,7 +13146,7 @@ function BunkerTabBar({ tab, setTab }) {
   );
 }
 
-function BunkerGame({ room, roomCode, playerId, dispatch, onReveal, onExile, onOpenVoting, onCastVote, onCloseVoting, connStatus }) {
+function BunkerGame({ room, roomCode, playerId, dispatch, onReveal, onExile, onOpenVoting, onCastVote, onCloseVoting, onRestart, connStatus }) {
   const t = useT();
   const [tab, setTab] = useState("dossier");
   const players = room && room.players ? room.players : {};
@@ -12303,6 +13154,17 @@ function BunkerGame({ room, roomCode, playerId, dispatch, onReveal, onExile, onO
   const isHost = room && room.hostId === playerId;
   const orderedIds = Object.keys(players).sort((a, b) => (players[a].joinedAt || 0) - (players[b].joinedAt || 0));
   const [rulesOpen, setRulesOpen] = useState(false);
+
+  // A vote opening or closing happens on the shared table. Someone reading
+  // their own dossier used to see nothing change at all and missed it.
+  const votingRound = room && room.voting ? room.voting.round : null;
+  const roundsDone = room && room.votingHistory ? room.votingHistory.length : 0;
+  const seenRef = useRef({ votingRound, roundsDone });
+  useEffect(() => {
+    const seen = seenRef.current;
+    if ((votingRound !== null && votingRound !== seen.votingRound) || roundsDone > seen.roundsDone) setTab("table");
+    seenRef.current = { votingRound, roundsDone };
+  }, [votingRound, roundsDone]);
 
 
   return (
@@ -12317,7 +13179,7 @@ function BunkerGame({ room, roomCode, playerId, dispatch, onReveal, onExile, onO
       <ConnStatusBanner status={connStatus} />
       <FadeIn key={tab} className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-4">
         {tab === "dossier" ? (
-          <BunkerDossierTab me={me} onReveal={onReveal} />
+          <BunkerDossierTab me={me} room={room} playersCount={orderedIds.length} onReveal={onReveal} />
         ) : (
           <BunkerTableTab
             room={room}
@@ -12329,6 +13191,7 @@ function BunkerGame({ room, roomCode, playerId, dispatch, onReveal, onExile, onO
             onOpenVoting={onOpenVoting}
             onCastVote={onCastVote}
             onCloseVoting={onCloseVoting}
+            onRestart={onRestart}
           />
         )}
       </FadeIn>
@@ -12423,10 +13286,11 @@ function BunkerApp({ dispatch }) {
     // spot, which is exactly what forces the debate over who stays.
     const capacity = Math.max(1, Math.ceil(playerIds.length / 2));
     const players = {};
+    const dossiers = dealBunkerDossiers(playerIds);
     playerIds.forEach((pid) => {
-      players[pid] = { ...current.players[pid], dossier: makeBunkerDossier() };
+      players[pid] = { ...current.players[pid], exiled: false, dossier: dossiers[pid] };
     });
-    broadcastState({ ...current, status: "playing", catastropheIndex, capacity, players });
+    broadcastState({ ...current, status: "playing", catastropheIndex, capacity, players, voting: null, votingHistory: [], votingRoundCounter: 0 });
   }
 
   function handleReveal(traitKey) {
@@ -12455,35 +13319,33 @@ function BunkerApp({ dispatch }) {
     sendEvent("vote", { playerId, targetId });
   }
 
-  // Host-only: tallies the open round's ballots and exiles whoever is at
-  // or above the vote count of the excludeCount-th place. A tie right at
-  // that cutoff exiles everyone tied there rather than picking arbitrarily.
+  // Host-only: tallies the open round's ballots and exiles the players with
+  // the most votes, as many as this round asked for. Rules that keep a vote
+  // from wrecking the game:
+  //  * a tie at the cutoff exiles none of the tied players (it used to
+  //    exile all of them -- a 1:1:1 vote emptied the whole room);
+  //  * the bunker never ends up with fewer people than it has spots.
   function handleCloseVoting() {
     const current = roomRef.current;
     if (!current || !current.voting) return;
-    const { round, excludeCount, votes } = current.voting;
-    const tally = {};
-    Object.values(votes).forEach((targetId) => {
-      tally[targetId] = (tally[targetId] || 0) + 1;
-    });
-    const ranked = Object.keys(tally)
-      .filter((pid) => current.players[pid] && !current.players[pid].exiled)
-      .sort((a, b) => tally[b] - tally[a]);
-    let exiled = [];
-    if (ranked.length > 0) {
-      const cutoffCount = Math.min(excludeCount, ranked.length);
-      const cutoffVotes = tally[ranked[cutoffCount - 1]];
-      exiled = ranked.filter((pid) => tally[pid] >= cutoffVotes);
-    }
+    const result = resolveBunkerVote(current);
     const players = { ...current.players };
-    exiled.forEach((pid) => {
+    result.exiled.forEach((pid) => {
       players[pid] = { ...players[pid], exiled: true };
     });
-    const votingHistory = [
-      ...(current.votingHistory || []),
-      { round, excludeCount, tally, exiled, tie: exiled.length > excludeCount },
-    ];
+    const votingHistory = [...(current.votingHistory || []), result];
     broadcastState({ ...current, players, voting: null, votingHistory });
+  }
+
+  // Host-only: everyone back to the lobby for another game.
+  function handleRestart() {
+    const current = roomRef.current;
+    if (!current || !current.players) return;
+    const players = {};
+    Object.keys(current.players).forEach((pid) => {
+      players[pid] = { ...current.players[pid], exiled: false, dossier: null };
+    });
+    broadcastState({ ...current, status: "lobby", catastropheIndex: null, capacity: null, players, voting: null, votingHistory: [], votingRoundCounter: 0 });
   }
 
   if (!roomCode || !room) {
@@ -12511,6 +13373,7 @@ function BunkerApp({ dispatch }) {
         onOpenVoting={handleOpenVoting}
         onCastVote={handleCastVote}
         onCloseVoting={handleCloseVoting}
+        onRestart={handleRestart}
         connStatus={connStatus}
       />
     );
@@ -12671,7 +13534,7 @@ const COURT_EVIDENCE_SECRETARY = {
 };
 const COURT_EVIDENCE_JUROR = {
   ru: [
-    "Вам показалось, что Виновный слишком нервничает для невиновного человека.",
+    "Вам показалось, что Обвиняемый слишком нервничает для невиновного человека.",
     "Вы вспомнили похожий случай из жизни, который случайно подтверждает версию Пострадавшего.",
     "Один из свидетелей ранее говорил вам кое-что, что не прозвучало в зале суда.",
     "Вы сомневаетесь в надёжности представленных улик.",
@@ -12715,7 +13578,7 @@ const COURT_EVIDENCE_JUDGE = {
     "После голосования присяжных и подсчёта Секретаря именно вы выносите вердикт.",
     "Вы вправе прервать любого участника, если порядок в зале нарушен.",
     "Ваша задача — сохранять беспристрастность до самого оглашения вердикта.",
-    "Вы решаете, когда предоставить слово Виновному, Пострадавшему или свидетелям.",
+    "Вы решаете, когда предоставить слово Обвиняемому, Пострадавшему или свидетелям.",
     "У вас есть право попросить любого участника предъявить его улику раньше срока.",
     "Финальное решение по делу остаётся за вами — взвесьте все факты.",
     "Вы следите за дисциплиной и обеспечиваете, чтобы суд не превратился в балаган.",
@@ -12748,7 +13611,7 @@ const COURT_EVIDENCE_JUDGE = {
 
 const COURT_ROLE_DEFS = {
   judge: { label: "Судья", Icon: IconBank, color: "var(--court)", bg: "rgba(224,149,74,.14)" },
-  guilty: { label: "Виновный", Icon: IconAlertTriangle, color: "var(--danger)", bg: "rgba(226,88,90,.14)" },
+  guilty: { label: "Обвиняемый", Icon: IconAlertTriangle, color: "var(--danger)", bg: "rgba(226,88,90,.14)" },
   victim: { label: "Пострадавший", Icon: IconHeart, color: "var(--doctor)", bg: "rgba(94,168,230,.14)" },
   secretary: { label: "Секретарь суда", Icon: IconClipboard, color: "var(--sheriff)", bg: "rgba(166,126,232,.14)" },
   juror: { label: "Присяжный", Icon: IconUsers, color: "var(--local)", bg: "rgba(75,184,172,.14)" },
@@ -13079,10 +13942,14 @@ function assignCourtRound(players, hostId) {
   const guestIds = shuffleArray(allIds.filter((pid) => pid !== hostId));
   const roleForId = {};
   roleForId[hostId] = "judge";
+  // The accused, the victim, then the jury -- a trial needs at least one
+  // juror, so with four people the fourth is a juror, and the secretary
+  // (who only counts the jury's votes) appears from five people up.
   if (guestIds[0]) roleForId[guestIds[0]] = "guilty";
   if (guestIds[1]) roleForId[guestIds[1]] = "victim";
-  if (guestIds[2]) roleForId[guestIds[2]] = "secretary";
-  guestIds.slice(3).forEach((pid) => {
+  if (guestIds[2]) roleForId[guestIds[2]] = "juror";
+  if (guestIds[3]) roleForId[guestIds[3]] = "secretary";
+  guestIds.slice(4).forEach((pid) => {
     roleForId[pid] = "juror";
   });
 
@@ -13316,9 +14183,11 @@ function CourtLobby({ room, roomCode, playerId, dispatch, onStart, error, busy, 
   );
 }
 
-function CourtDossierTab({ me, onReveal }) {
+function CourtDossierTab({ me, room, onReveal }) {
   const t = useT();
   const lang = useLang();
+  const courtCaseRaw = room && typeof room.caseIndex === "number" ? COURT_CASES[room.caseIndex] : null;
+  const courtCaseTitle = courtCaseRaw ? pickLang(courtCaseRaw.title, lang) : "";
   if (!me || !me.role) {
     return <div className="pt-10 text-center text-[var(--text-dim)] text-sm">{t("court.roleAssigning")}</div>;
   }
@@ -13337,6 +14206,14 @@ function CourtDossierTab({ me, onReveal }) {
           <div className="font-display text-2xl" style={{ color: def.color }}>{t(`court.role.${me.role}`)}</div>
         </div>
       </div>
+
+      {courtCaseTitle && (
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4">
+          <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--text-faint)] mb-1">{t("court.caseLabel")}</div>
+          <div className="font-display text-xl leading-tight mb-1">{courtCaseTitle}</div>
+          <p className="text-xs text-[var(--text-faint)]">{t("court.seeTable")}</p>
+        </div>
+      )}
 
       <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4">
         <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2">{t("court.yourEvidence")}</div>
@@ -13450,6 +14327,8 @@ function CourtTableTab({ room, players, orderedIds, playerId, onVote, onTally, o
   const guiltyVotes = votedIds.filter((pid) => players[pid].vote === "guilty").length;
   const victimVotes = votedIds.filter((pid) => players[pid].vote === "victim").length;
   const jurorCount = jurorIds.length;
+  // Small tables (4 players) have no secretary: the judge rules from the open vote.
+  const hasSecretary = orderedIds.some((pid) => players[pid].role === "secretary");
 
   const [gInput, setGInput] = useState("");
   const [vInput, setVInput] = useState("");
@@ -13569,8 +14448,8 @@ function CourtTableTab({ room, players, orderedIds, playerId, onVote, onTally, o
 
       {myRole === "judge" && (
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4">
-          <div className="text-xs uppercase tracking-[0.25em] text-[var(--text-faint)] mb-3">{t("court.secretaryResult")}</div>
-          {room.tally ? (
+          {hasSecretary && <div className="text-xs uppercase tracking-[0.25em] text-[var(--text-faint)] mb-3">{t("court.secretaryResult")}</div>}
+          {!hasSecretary ? null : room.tally ? (
             <p className="text-sm mb-3">
               {t("court.guiltyLabel")}: <b className="text-[var(--danger)]">{room.tally.guilty}</b> · {t("court.notGuiltyLabel")}: <b className="text-[var(--doctor)]">{room.tally.victim}</b>
             </p>
@@ -13676,6 +14555,20 @@ function CourtGame({ room, roomCode, playerId, dispatch, onReveal, onVote, onTal
   const orderedIds = Object.keys(players).sort((a, b) => (players[a].joinedAt || 0) - (players[b].joinedAt || 0));
   const [rulesOpen, setRulesOpen] = useState(false);
 
+  // The vote starting and the verdict both happen on the shared table, and a
+  // new case deals a new role: bring the player to where the news is instead
+  // of leaving them on a tab where nothing visibly changed.
+  const voteRunning = !!(room && room.voteTimer);
+  const hasVerdict = !!(room && room.verdict);
+  const casesDone = room && room.verdictHistory ? room.verdictHistory.length : 0;
+  const seenRef = useRef({ voteRunning, hasVerdict, casesDone });
+  useEffect(() => {
+    const seen = seenRef.current;
+    if (casesDone > seen.casesDone) setTab("evidence");
+    else if ((voteRunning && !seen.voteRunning) || (hasVerdict && !seen.hasVerdict)) setTab("table");
+    seenRef.current = { voteRunning, hasVerdict, casesDone };
+  }, [voteRunning, hasVerdict, casesDone]);
+
 
   return (
     <div className="h-full min-h-0 flex flex-col">
@@ -13689,7 +14582,7 @@ function CourtGame({ room, roomCode, playerId, dispatch, onReveal, onVote, onTal
       <ConnStatusBanner status={connStatus} />
       <FadeIn key={tab} className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-4">
         {tab === "evidence" ? (
-          <CourtDossierTab me={me} onReveal={onReveal} />
+          <CourtDossierTab me={me} room={room} onReveal={onReveal} />
         ) : (
           <CourtTableTab
             room={room}
@@ -13913,12 +14806,23 @@ function App() {
     // screen on first paint — done here, in the lazy initializer, rather
     // than in an effect, so there's no flash of the Hub first.
     if (pendingInviteParams) return { ...merged, screen: pendingInviteParams.game };
+    if (pendingOwnerStats) return { ...merged, screen: "ownerstats" };
     return merged;
   });
 
   // Screen stays on for the whole time any game is open (setup, reveals,
   // lobbies, rounds) and goes back to normal on the Hub. See useWakeLock.
   useWakeLock(state.screen !== "hub");
+
+  // "Someone opened the site" for the owner's statistics page, once per
+  // browser session.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("hatsit_open_logged_v1")) return;
+      sessionStorage.setItem("hatsit_open_logged_v1", "1");
+    } catch (e) {}
+    logAppEvent("app_open", null);
+  }, []);
 
   // Lets plain CSS know the rating card is up, for the support chat button
   // that is mounted outside App.
