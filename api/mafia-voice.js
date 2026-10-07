@@ -19,8 +19,19 @@
 // After changing voice or style, bump MAFIA_VOICE_VERSION in index.html (or
 // redeploy) so phones stop using the sentences they already cached.
 //
+// Every sentence is also kept for good in Supabase Storage (public bucket
+// "mafia-voice"), because the CDN forgets everything on each new deploy and
+// Gemini's quota is small: with the store a sentence is paid for once, ever.
+// The store needs SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SECRET_KEY) in the
+// environment -- the Supabase integration for Vercel adds it. Without the
+// key the function works exactly as before, just without the store. The
+// answer says what happened in the X-Voice-Store header: hit, saved, off
+// or error.
+//
 // If anything here fails the phones fall back to their own built-in voice,
 // so a missing key or an exhausted quota never stops a game.
+
+const crypto = require("crypto");
 
 const DEFAULT_MODEL = "gemini-3.8-flash-tts";
 const DEFAULT_VOICE = "Charon";
@@ -33,6 +44,62 @@ const LANGS = ["ru", "en", "hy"];
 const MAX_GENERATIONS_PER_MINUTE = 60;
 
 const SAMPLE_RATE = 24000;
+
+const DEFAULT_SUPABASE_URL = "https://zocoaqqcrxpbkyzlfzsf.supabase.co";
+const STORE_BUCKET = "mafia-voice";
+const STORE_TIMEOUT_MS = 4000;
+
+function storeSettings() {
+  const url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL).replace(/\/+$/, "");
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || "";
+  return { url, key };
+}
+
+// One file per (version, language, model, voice, style, sentence): change
+// any of them and a fresh recording is made instead of reusing the old one.
+function storePath({ version, lang, model, voice, style, text }) {
+  const hash = crypto.createHash("sha256").update([model, voice, style, text].join("\n")).digest("hex").slice(0, 40);
+  const safeVersion = String(version || "1").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 12) || "1";
+  return `v${safeVersion}/${lang}/${hash}.wav`;
+}
+
+// Reading needs no key: the bucket is public.
+async function storeRead(path) {
+  const { url } = storeSettings();
+  try {
+    const response = await fetch(`${url}/storage/v1/object/public/${STORE_BUCKET}/${path}`, { signal: AbortSignal.timeout(STORE_TIMEOUT_MS) });
+    if (!response.ok) return null;
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length < 1000 || buffer.toString("ascii", 0, 4) !== "RIFF") return null;
+    return buffer;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function storeWrite(path, wav) {
+  const { url, key } = storeSettings();
+  if (!key) return "off";
+  try {
+    const response = await fetch(`${url}/storage/v1/object/${STORE_BUCKET}/${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, apikey: key, "Content-Type": "audio/wav", "Cache-Control": "max-age=31536000", "x-upsert": "true" },
+      body: wav,
+      signal: AbortSignal.timeout(STORE_TIMEOUT_MS),
+    });
+    return response.ok ? "saved" : "error";
+  } catch (e) {
+    return "error";
+  }
+}
+
+function sendWav(res, wav, extra) {
+  res.setHeader("Content-Type", "audio/wav");
+  res.setHeader("Content-Length", String(wav.length));
+  res.setHeader("Cache-Control", "public, max-age=31536000, s-maxage=31536000, immutable");
+  Object.keys(extra || {}).forEach((name) => res.setHeader(name, extra[name]));
+  res.status(200).send(wav);
+}
 
 function fail(res, status, error, detail, diag) {
   res.setHeader("Cache-Control", "no-store");
@@ -191,11 +258,6 @@ module.exports = async function handler(req, res) {
   const text = typeof query.t === "string" ? query.t.replace(/\s+/g, " ").trim() : "";
   if (!lang || !text || text.length > MAX_TEXT_LENGTH) return fail(res, 400, "bad request");
 
-  const now = Date.now();
-  global.__hatsitVoiceLog = (global.__hatsitVoiceLog || []).filter((stamp) => now - stamp < 60000);
-  if (global.__hatsitVoiceLog.length >= MAX_GENERATIONS_PER_MINUTE) return fail(res, 429, "too many requests");
-  global.__hatsitVoiceLog.push(now);
-
   const settings = {
     apiKey,
     model: process.env.GEMINI_TTS_MODEL || DEFAULT_MODEL,
@@ -203,6 +265,16 @@ module.exports = async function handler(req, res) {
     style: process.env.GEMINI_TTS_STYLE || DEFAULT_STYLE,
     text,
   };
+
+  // Already recorded once? Then Gemini is not asked at all.
+  const path = storePath({ version: query.v, lang, ...settings });
+  const stored = await storeRead(path);
+  if (stored) return sendWav(res, stored, { "X-Voice-Store": "hit", "X-Voice-Model": settings.model, "X-Voice-Name": settings.voice });
+
+  const now = Date.now();
+  global.__hatsitVoiceLog = (global.__hatsitVoiceLog || []).filter((stamp) => now - stamp < 60000);
+  if (global.__hatsitVoiceLog.length >= MAX_GENERATIONS_PER_MINUTE) return fail(res, 429, "too many requests");
+  global.__hatsitVoiceLog.push(now);
 
   try {
     const started = Date.now();
@@ -225,17 +297,15 @@ module.exports = async function handler(req, res) {
     if (!pcm || pcm.samples.length < pcm.sampleRate * 0.2) return fail(res, 502, "unreadable audio", raw.slice(0, 300), diag);
 
     const wav = toWav(polish(pcm.samples, pcm.sampleRate), pcm.sampleRate);
-    res.setHeader("Content-Type", "audio/wav");
-    res.setHeader("Content-Length", String(wav.length));
-    res.setHeader("Cache-Control", "public, max-age=31536000, s-maxage=31536000, immutable");
-    res.setHeader("X-Voice-Ms", String(Date.now() - started));
-    res.setHeader("X-Voice-Model", settings.model);
-    res.setHeader("X-Voice-Name", settings.voice);
-    res.status(200).send(wav);
+    const voiceMs = Date.now() - started;
+    // Saved before answering: a serverless function may be frozen the
+    // moment the answer is sent.
+    const storeResult = await storeWrite(path, wav);
+    sendWav(res, wav, { "X-Voice-Ms": String(voiceMs), "X-Voice-Model": settings.model, "X-Voice-Name": settings.voice, "X-Voice-Store": storeResult });
   } catch (e) {
     fail(res, 502, "failed to reach gemini", e && e.message, diag);
   }
 };
 
 // Exposed for the offline tests only.
-module.exports._internals = { toPcm16, polish, toWav, findAudioBase64 };
+module.exports._internals = { toPcm16, polish, toWav, findAudioBase64, storePath };
