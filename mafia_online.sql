@@ -120,18 +120,27 @@ create or replace function public.mafia__enter(p_code text, p_phase text, p_role
 returns void language plpgsql set search_path = public, pg_temp as $$
 declare
   v_seq integer := null;
+  v_seconds numeric := p_seconds;
 begin
   if p_key is not null then
     v_seq := mafia__say(p_code, p_key, p_params);
+  end if;
+  -- "Host is speaking" phases normally end when the voice phone reports the
+  -- sentence as said. This is only how long the room waits if that report
+  -- never comes -- long enough for the slow studio voice to finish.
+  if p_gate and p_seconds is not null then
+    v_seconds := greatest(p_seconds, case p_phase
+      when 'morning' then 36 when 'vote_result' then 22 when 'night_wake' then 22
+      when 'night_start' then 20 when 'reveal' then 14 else 10 end);
   end if;
   update mafia_rooms
      set phase = p_phase,
          phase_role = p_role,
          phase_seq = phase_seq + 1,
-         phase_deadline = case when p_seconds is null then null else now() + make_interval(secs => p_seconds::double precision) end,
+         phase_deadline = case when v_seconds is null then null else now() + make_interval(secs => v_seconds::double precision) end,
          phase_speech_seq = case when p_gate then v_seq else null end,
          phase_min_until = case when p_gate and p_seconds is not null then
-             now() + make_interval(secs => least(p_seconds, case p_phase
+             now() + make_interval(secs => (case p_phase
                when 'vote_result' then 8 when 'morning' then 7 when 'night_start' then 6
                when 'reveal' then 5 when 'night_wake' then 4 else 3 end)::double precision)
            else null end,
@@ -174,6 +183,13 @@ returns boolean language sql set search_path = public, pg_temp as $$
   );
 $$;
 
+-- Room setting "don't reveal the roles of players who are out": the host
+-- only says who left, and nobody's role is shown until the game ends.
+create or replace function public.mafia__hide_roles(p_code text)
+returns boolean language sql stable set search_path = public, pg_temp as $$
+  select coalesce((select (settings->>'hide_roles')::boolean from mafia_rooms where code = p_code), false);
+$$;
+
 create or replace function public.mafia__resolve_night(p_code text)
 returns void language plpgsql set search_path = public, pg_temp as $$
 declare
@@ -199,10 +215,10 @@ begin
     if v_maniac = v_doctor then v_saved := true; else v_victims := v_victims || v_maniac; end if;
   end if;
 
-  update mafia_players set alive = false, role_public = true where room_code = p_code and seat = any (v_victims);
+  update mafia_players set alive = false, role_public = not mafia__hide_roles(p_code) where room_code = p_code and seat = any (v_victims);
 
   select jsonb_build_object(
-           'victims', coalesce((select jsonb_agg(jsonb_build_object('seat', seat, 'role', role) order by seat)
+           'victims', coalesce((select jsonb_agg(jsonb_build_object('seat', seat, 'role', case when mafia__hide_roles(p_code) then null else role end) order by seat)
                                   from mafia_players where room_code = p_code and seat = any (v_victims)), '[]'::jsonb),
            'saved', v_saved,
            'missed', r.mafia_missed)
@@ -408,6 +424,9 @@ begin
         perform mafia__lastword(p_code);
       elsif r.lastword_kind = 'night' then
         perform mafia__start_day(p_code);
+      elsif mafia__hide_roles(p_code) then
+        -- Hidden-roles room: no reveal step at all.
+        perform mafia__after_day(p_code);
       else
         -- The exiled player's role is only revealed after their last word.
         update mafia_players set role_public = true where room_code = p_code and seat = r.exiled_seat returning role into v_role;
@@ -479,8 +498,8 @@ begin
   if v_count is null then return; end if;
 
   if v_count >= 4 then
-    update mafia_players set alive = false, role_public = true, no_vote = false where room_code = p_code and seat = p_seat;
-    perform mafia__say(p_code, 'removed', jsonb_build_object('seat', p_seat, 'role', v_role));
+    update mafia_players set alive = false, role_public = not mafia__hide_roles(p_code), no_vote = false where room_code = p_code and seat = p_seat;
+    perform mafia__say(p_code, 'removed', jsonb_build_object('seat', p_seat, 'role', case when mafia__hide_roles(p_code) then null else v_role end));
     v_winner := mafia__winner(p_code);
     select * into r from mafia_rooms where code = p_code;
     if v_winner is not null then
@@ -507,6 +526,7 @@ returns jsonb language sql immutable set search_path = public, pg_temp as $$
     'don', coalesce((p_settings->>'don')::boolean, false),
     'maniac', coalesce((p_settings->>'maniac')::boolean, false),
     'putana', coalesce((p_settings->>'putana')::boolean, false),
+    'hide_roles', coalesce((p_settings->>'hide_roles')::boolean, false),
     'speech_seconds', least(300, greatest(15, coalesce((p_settings->>'speech_seconds')::int, 60)))
   );
 $$;
@@ -752,7 +772,7 @@ begin
        -- keeps following the defaults (the mafia count grows with the room).
        set settings = coalesce(settings, '{}'::jsonb) || coalesce((
              select jsonb_object_agg(key, value) from jsonb_each(coalesce(p_settings, '{}'::jsonb))
-              where key in ('mafia_count', 'doctor', 'sheriff', 'don', 'maniac', 'putana', 'speech_seconds')), '{}'::jsonb),
+              where key in ('mafia_count', 'doctor', 'sheriff', 'don', 'maniac', 'putana', 'hide_roles', 'speech_seconds')), '{}'::jsonb),
            updated_at = now()
      where code = p_code;
   end if;
@@ -1088,6 +1108,7 @@ revoke execute on function
   public.mafia__advance(text),
   public.mafia__add_warning(text, integer, text),
   public.mafia__clean_settings(jsonb, integer),
+  public.mafia__hide_roles(text),
   public.mafia__view(text, text),
   public.mafia__open(text, text, text, boolean)
 from public, anon, authenticated;
