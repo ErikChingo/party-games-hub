@@ -45,7 +45,10 @@ function isImmutable(url) {
 // depends on. Everything else (Supabase API/Realtime, any third-party
 // call) is left completely alone — no caching, no offline fallback.
 function shouldHandle(url, sameOrigin) {
-  if (sameOrigin) return true;
+  // Our own /api/ answers (support chat, the Mafia host's voice clips) are
+  // not part of the app shell: the voice clips alone would pile up here by
+  // the megabyte, and the browser's ordinary HTTP cache already keeps them.
+  if (sameOrigin) return !url.pathname.startsWith("/api/");
   return (
     IMMUTABLE_HOSTS.includes(url.hostname) ||
     url.hostname === "cdn.tailwindcss.com" ||
