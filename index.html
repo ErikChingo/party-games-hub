@@ -2588,7 +2588,8 @@ const I18N = {
   "hub.wordlessSubtitle": { ru: "2–8 игроков · сыграйте по интуиции, молча", en: "2–8 players · play by intuition, in silence", hy: "2–8 խաղացող · խաղացեք ինտուիցիայով, լուռ" },
   "hub.countdownSubtitle": { ru: "Компания · живые задания на время", en: "The whole group · live tasks against the clock", hy: "Ամբողջ ընկերությունը · կենդանի առաջադրանքներ ժամանակի դեմ" },
   "hub.telephoneSubtitle": { ru: "3–6 игроков · пишите, рисуйте и угадывайте по цепочке", en: "3–6 players · write, draw and guess down the chain", hy: "3–6 խաղացող · գրեք, նկարեք և գուշակեք շղթայով" },
-  "hub.mafiaSubtitle": { ru: "5–20 игроков · панель ведущего", en: "5–20 players · host panel", hy: "5–20 խաղացող · վարողի վահանակ" },
+  "hub.mafiaSubtitle": { ru: "5–20 игроков · теперь и онлайн", en: "5–20 players · now online too", hy: "5–20 խաղացող · հիմա նաև օնլայն" },
+  "hub.newBadge": { ru: "НОВОЕ", en: "NEW", hy: "ՆՈՐ" },
   "hub.bunkerSubtitle": { ru: "Сетевая игра · катастрофа и досье", en: "Online game · catastrophe & dossiers", hy: "Ցանցային խաղ · աղետ և դոսյե" },
   "hub.courtSubtitle": { ru: "Сетевой процесс · роли и вердикт", en: "Online trial · roles & verdict", hy: "Ցանցային դատավարություն · դերեր և վճիռ" },
   "hub.installApp": { ru: "Установить приложение", en: "Install app", hy: "Տեղադրել հավելվածը" },
@@ -5221,7 +5222,7 @@ function BlindScreen({ playerName, index, total, onContinue, onAbort, renderRole
 /* ---------------------------------------------------------------- */
 /* Hub                                                                */
 /* ---------------------------------------------------------------- */
-function GameCard({ title, subtitle, Icon, active, onClick, badge, badgeClassName }) {
+function GameCard({ title, subtitle, Icon, active, onClick, badge, badgeClassName, isNew }) {
   const t = useT();
   return (
     <button
@@ -5233,6 +5234,11 @@ function GameCard({ title, subtitle, Icon, active, onClick, badge, badgeClassNam
           : "bg-[var(--surface)]/60 border-[var(--border)] opacity-60")
       }
     >
+      {isNew && (
+        <span className="absolute -top-2.5 right-5 px-2 py-1 rounded-full bg-[var(--danger)] text-white text-[10px] font-bold leading-none tracking-[0.1em] shadow">
+          {t("hub.newBadge")}
+        </span>
+      )}
       <div
         className={
           "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 " +
@@ -6442,6 +6448,11 @@ function SupportChatWidget() {
 // the i18n block) — it's a single object here that decides its Hub tile
 // and search text; everything else (routing, connection plumbing) is
 // driven off other registries so this stays the only truly bespoke part.
+//
+// `isNew: true` = "we just shipped something big here": the Hub moves such
+// games to the top of the list (in the order they are written below) and
+// puts a NEW badge on their tile. Set it when a game is added or gets a
+// major update, and take it off again when the news is old.
 // ---------------------------------------------------------------------
 const GAMES = [
   { id: "spy", titleKey: "game.spy", subtitleKey: "hub.spySubtitle", Icon: IconGlasses, openAction: "OPEN_SPY_SETUP" },
@@ -6450,7 +6461,7 @@ const GAMES = [
   { id: "wordless", titleKey: "game.wordless", subtitleKey: "hub.wordlessSubtitle", Icon: IconVolumeX, openAction: "OPEN_WORDLESS_SETUP" },
   { id: "countdown", titleKey: "game.countdown", subtitleKey: "hub.countdownSubtitle", Icon: IconHourglass, openAction: "OPEN_COUNTDOWN_SETUP" },
   { id: "telephone", titleKey: "game.telephone", subtitleKey: "hub.telephoneSubtitle", Icon: IconPencil, openAction: "OPEN_TELEPHONE_SETUP" },
-  { id: "mafia", titleKey: "game.mafia", subtitleKey: "hub.mafiaSubtitle", Icon: IconSkull, openAction: "OPEN_MAFIA_SETUP" },
+  { id: "mafia", titleKey: "game.mafia", subtitleKey: "hub.mafiaSubtitle", Icon: IconSkull, openAction: "OPEN_MAFIA_SETUP", isNew: true },
   {
     id: "bunker",
     titleKey: "game.bunker",
@@ -6468,8 +6479,14 @@ const GAMES = [
     openAction: "OPEN_COURT",
     badgeKey: "game.online",
     badgeClassName: "bg-[var(--court)]/15 text-[var(--court)]",
+    isNew: true,
   },
 ];
+
+// The Hub's order: games marked isNew first, everything else as listed.
+function hubGameOrder(games) {
+  return games.filter((g) => g.isNew).concat(games.filter((g) => !g.isNew));
+}
 
 // Every screen any game can be on, keyed by state.screen. App() below just
 // looks a screen up here instead of a long if/else chain — a new game
@@ -6623,8 +6640,9 @@ function Hub({ state, dispatch }) {
     };
   }, []);
 
-  const games = GAMES.map((g) => ({
+  const games = hubGameOrder(GAMES).map((g) => ({
     id: g.id,
+    isNew: !!g.isNew,
     title: t(g.titleKey),
     subtitle: t(g.subtitleKey),
     Icon: g.Icon,
@@ -6714,6 +6732,7 @@ function Hub({ state, dispatch }) {
               active
               badge={g.badge}
               badgeClassName={g.badgeClassName}
+              isNew={g.isNew}
               onClick={g.onClick}
             />
           ))}
