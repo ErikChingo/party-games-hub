@@ -4,6 +4,9 @@
   "functions": {
     "api/mafia-voice.js": {
       "maxDuration": 30
+    },
+    "api/mafia-story.js": {
+      "maxDuration": 15
     }
   }
 }
