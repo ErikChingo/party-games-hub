@@ -1751,6 +1751,7 @@ function useGameRoom(config) {
   // subscribe callbacks below, so a later hiccup doesn't stomp on live state
   // or throw up a scary error banner nobody can see anyway once in-game.
   const initializedRef = useRef(false);
+  const hostSeenRef = useRef(false);
   // hostEvents/messages come from the caller's render and can reference that
   // render's `t()` closures — refs keep attachChannel's listeners (registered
   // once per channel, not once per render) reading the latest versions.
@@ -1819,6 +1820,27 @@ function useGameRoom(config) {
       channel.on("broadcast", { event: gameKey + "_host_left" }, () => {
         if (initializedRef.current) setConnStatus("host_left");
       });
+      // The goodbye message above is not reliably delivered when a page is
+      // closing, so the real signal is presence: the host marks itself on
+      // the channel and the Realtime server tells everyone when that mark
+      // is gone -- also after a crash or a dead battery. Only trusted once
+      // the host has been seen, so a host on an older version of the page
+      // (which never marks itself) is not reported as gone.
+      channel.on("presence", { event: "sync" }, () => {
+        let hostHere = false;
+        try {
+          const state = channel.presenceState() || {};
+          hostHere = Object.keys(state).some((key) => (state[key] || []).some((entry) => entry && entry.host));
+        } catch (e) {
+          return;
+        }
+        if (hostHere) {
+          hostSeenRef.current = true;
+          setConnStatus((status) => (status === "host_left" ? "idle" : status));
+        } else if (hostSeenRef.current && initializedRef.current) {
+          setConnStatus("host_left");
+        }
+      });
     }
 
     // Only the Host resolves join/action requests into authoritative state
@@ -1863,6 +1885,7 @@ function useGameRoom(config) {
       channel.subscribe((status) => {
         if (status === "SUBSCRIBED") {
           setConnStatus("idle");
+          markHostPresent(channel);
           // Re-broadcast so any guests who reconnected first resync to us.
           broadcastState(saved.room);
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
@@ -1894,6 +1917,11 @@ function useGameRoom(config) {
 
   // Tells the guests when the host goes away (back to the Hub, or the page
   // is closed or reloaded).
+  function markHostPresent(channel) {
+    try {
+      if (channel && typeof channel.track === "function") channel.track({ host: true });
+    } catch (e) {}
+  }
   function announceHostLeft() {
     try {
       if (isHostRef.current && channelRef.current) channelRef.current.send({ type: "broadcast", event: gameKey + "_host_left", payload: {} });
@@ -1931,6 +1959,7 @@ function useGameRoom(config) {
     const channel = attachChannel(code, true);
     channel.subscribe((status) => {
       if (status === "SUBSCRIBED") {
+        markHostPresent(channel);
         if (!initializedRef.current) {
           // First-ever connect: seed the brand-new room.
           initializedRef.current = true;
@@ -2562,7 +2591,7 @@ const I18N = {
   "bunker.newGame": { ru: "Новая игра", en: "New game", hy: "Նոր խաղ" },
   "bunker.confirmNewGame": { ru: "Точно начать заново?", en: "Start over for sure?", hy: "Իսկապե՞ս սկսել նորից" },
   "bunker.waitHostNewGame": { ru: "Хост может начать новую игру.", en: "The host can start a new game.", hy: "Հոսթը կարող է սկսել նոր խաղ։" },
-  "bunker.seeTable": { ru: "Все условия — на вкладке «Общий стол»", en: "Full details are on the “Shared table” tab", hy: "Բոլոր պայմանները՝ «Ընդհանուր սեղան» ներդիրում" },
+  "bunker.seeTable": { ru: "Все условия — на вкладке «Общий стол»", en: "Full details are on the “Common table” tab", hy: "Բոլոր պայմանները՝ «Ընդհանուր սեղան» ներդիրում" },
   "bunker.slotsShort": { ru: "мест: {n} из {m}", en: "spots: {n} of {m}", hy: "տեղեր՝ {n}՝ {m}-ից" },
   "bunker.roundExclude": { ru: "Раунд {round} · исключить {count}", en: "Round {round} · exclude {count}", hy: "Փուլ {round} · հեռացնել {count}" },
   "bunker.exiledObserveOnly": { ru: "Вы выбыли и можете только наблюдать за голосованием.", en: "You've been exiled and can only observe the voting.", hy: "Դուք հեռացվել եք և կարող եք միայն դիտել քվեարկությունը։" },
@@ -2613,7 +2642,7 @@ const I18N = {
   "court.waitingJudge": { ru: "Ожидание Судьи…", en: "Waiting for the Judge…", hy: "Սպասում ենք Դատավորին…" },
   "court.role.judge": { ru: "Судья", en: "Judge", hy: "Դատավոր" },
   "court.role.guilty": { ru: "Обвиняемый", en: "The Accused", hy: "Մեղադրյալ" },
-  "court.seeTable": { ru: "Обстоятельства дела — на вкладке «Общий стол»", en: "The details of the case are on the “Shared table” tab", hy: "Գործի հանգամանքները՝ «Ընդհանուր սեղան» ներդիրում" },
+  "court.seeTable": { ru: "Обстоятельства дела — на вкладке «Общий стол»", en: "The details of the case are on the “Common table” tab", hy: "Գործի հանգամանքները՝ «Ընդհանուր սեղան» ներդիրում" },
   "court.role.victim": { ru: "Пострадавший", en: "The Victim", hy: "Տուժող" },
   "court.role.secretary": { ru: "Секретарь суда", en: "Court Secretary", hy: "Դատարանի քարտուղար" },
   "court.role.juror": { ru: "Присяжный", en: "Juror", hy: "Երդվյալ ատենակալ" },
@@ -13953,12 +13982,17 @@ function assignCourtRound(players, hostId) {
     roleForId[pid] = "juror";
   });
 
+  const hasSecretary = Object.keys(roleForId).some((pid) => roleForId[pid] === "secretary");
   const courtCaseIndex = Math.floor(Math.random() * COURT_CASES.length);
   const nextPlayers = {};
   allIds.forEach((pid) => {
     const role = roleForId[pid];
     const pool = COURT_EVIDENCE_BY_ROLE[role] || COURT_EVIDENCE_JUROR;
-    const textIndex = Math.floor(Math.random() * pool.ru.length);
+    // At a table of four there is no secretary, so evidence that talks
+    // about one would point at nobody.
+    let choices = pool.ru.map((_, index) => index);
+    if (!hasSecretary) choices = choices.filter((index) => !/Секретар/i.test(pool.ru[index]));
+    const textIndex = choices[Math.floor(Math.random() * choices.length)];
     nextPlayers[pid] = { ...players[pid], role, evidence: { textIndex, revealed: false }, vote: null };
   });
   return { courtCaseIndex, players: nextPlayers };
