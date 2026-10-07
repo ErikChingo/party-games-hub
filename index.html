@@ -2221,6 +2221,7 @@ const I18N = {
   "mroom.voiceHere": { ru: "Голос ведущего звучит из этого телефона. Сделайте громче.", en: "The host's voice plays from this phone. Turn the volume up.", hy: "Վարողի ձայնը հնչում է այս հեռախոսից։ Բարձրացրեք ձայնը։" },
   "mroom.voiceOn": { ru: "Голос ведущего звучит из телефона игрока {name}.", en: "The host's voice plays from {name}'s phone.", hy: "Վարողի ձայնը հնչում է {name} խաղացողի հեռախոսից։" },
   "mroom.voiceUnavailable": { ru: "Этот телефон не может говорить: в нём нет голоса для этого языка (или это встроенный браузер Telegram / Instagram).", en: "This phone can't speak: it has no voice for this language (or this is the in-app browser of Telegram / Instagram).", hy: "Այս հեռախոսը չի կարող խոսել․ այս լեզվի համար ձայն չկա (կամ սա Telegram-ի / Instagram-ի ներկառուցված դիտարկիչն է)։" },
+  "mroom.voiceStudio": { ru: "Подключён студийный голос ведущего.", en: "The studio host voice is connected.", hy: "Միացված է վարողի ստուդիական ձայնը։" },
   "mroom.voiceHereSilent": { ru: "Голос ведущего закреплён за этим телефоном, но он не может говорить.", en: "The host's voice is set to this phone, but it can't speak.", hy: "Վարողի ձայնը կցված է այս հեռախոսին, բայց այն չի կարող խոսել։" },
   "mroom.hideRoles": { ru: "Скрытые роли", en: "Hidden roles", hy: "Թաքնված դերեր" },
   "mroom.hideRolesDesc": { ru: "Ведущий не называет роль выбывшего. Все роли откроются только в конце игры", en: "The host doesn't say the role of a player who is out. All roles are shown only when the game ends", hy: "Վարողը չի ասում դուրս եկած խաղացողի դերը։ Բոլոր դերերը բացվում են միայն խաղի վերջում" },
@@ -2292,6 +2293,10 @@ const I18N = {
   "mhost.morningMissed": { ru: "Мафия не смогла договориться и промахнулась.", en: "The mafia couldn't agree and missed.", hy: "Մաֆիան չկարողացավ պայմանավորվել և վրիպեց։" },
   "mhost.morningVictim": { ru: "Этой ночью город потерял игрока: {name}. Роль: {role}.", en: "Last night the city lost a player: {name}. Role: {role}.", hy: "Այս գիշեր քաղաքը կորցրեց խաղացողի՝ {name}։ Դերը՝ {role}։" },
   "mhost.morningVictimNoRole": { ru: "Этой ночью город потерял игрока: {name}.", en: "Last night the city lost a player: {name}.", hy: "Այս գիշեր քաղաքը կորցրեց խաղացողի՝ {name}։" },
+  "mhost.rolePart": { ru: "Роль: {role}.", en: "Role: {role}.", hy: "Դերը՝ {role}։" },
+  "mhost.nameOnly": { ru: "{name}.", en: "{name}.", hy: "{name}։" },
+  "mhost.dayBegins": { ru: "Начинается обсуждение.", en: "The discussion begins.", hy: "Սկսվում է քննարկումը։" },
+  "mhost.dayFirstSpeaker": { ru: "Первым говорит {name}.", en: "{name} speaks first.", hy: "Առաջինը խոսում է {name}-ը։" },
   "mhost.morningSaved": { ru: "Этой ночью никто не погиб: доктор спас жертву.", en: "Nobody died last night: the doctor saved the victim.", hy: "Այս գիշեր ոչ ոք չմահացավ. բժիշկը փրկեց զոհին։" },
   "mhost.morningNobody": { ru: "Этой ночью никто не погиб.", en: "Nobody died last night.", hy: "Այս գիշեր ոչ ոք չմահացավ։" },
   "mhost.lastword": { ru: "Последнее слово: {name}.", en: "Last word: {name}.", hy: "Վերջին խոսքը՝ {name}։" },
@@ -9947,22 +9952,339 @@ function mafiaNoteSpeechResult(lang, text, elapsedMs) {
   if (String(text || "").trim().length >= 12 && elapsedMs < 300) mafiaSilentLang = lang;
 }
 
-function mafiaCanSpeak() {
+function mafiaLocalCanSpeak() {
   if (!mafiaSpeechApiPresent()) return false;
   const lang = HATSIT_LANGS.includes(hatsitSettings.language) ? hatsitSettings.language : "ru";
   if (mafiaSilentLang === lang) return false;
   return mafiaHasVoiceFor(lang);
 }
 
+/* ---- Studio voice: sentences voiced by /api/mafia-voice (Gemini) ---- */
+// Played through an <audio> element, so unlike the phone's own speech it
+// also works inside the Telegram / Instagram in-app browsers. Everything
+// here is optional: any failure falls back to the phone's built-in voice.
+const MAFIA_VOICE_API = "/api/mafia-voice";
+// Part of every request's address. Bump it after changing the voice or the
+// style on the server so phones and the CDN stop serving the old audio.
+const MAFIA_VOICE_VERSION = "1";
+// How long a sentence may wait for its audio before the phone says it itself.
+const MAFIA_VOICE_WAIT_MS = 3500;
+const MAFIA_VOICE_CACHE_LIMIT = 250;
+
+// "unknown" until the first answer, then "ok" or "down".
+let mafiaStudioState = "unknown";
+let mafiaStudioDownUntil = 0;
+const mafiaStudioCache = new Map(); // address -> { promise, url }
+const mafiaStudioListeners = new Set();
+let mafiaPrefetchQueue = [];
+let mafiaPrefetchRunning = false;
+
+function mafiaSetStudioState(state) {
+  if (mafiaStudioState === state) return;
+  mafiaStudioState = state;
+  mafiaStudioListeners.forEach((fn) => fn(state));
+}
+function mafiaStudioAvailable() {
+  return typeof window.fetch === "function" && typeof window.Audio === "function" && Date.now() >= mafiaStudioDownUntil;
+}
+function mafiaStudioAddress(text, lang) {
+  return `${MAFIA_VOICE_API}?l=${lang}&v=${MAFIA_VOICE_VERSION}&t=${encodeURIComponent(text)}`;
+}
+
+// Resolves to a playable address for the sentence, or null. One request per
+// sentence however many times it is asked for.
+function mafiaStudioFetch(text, lang) {
+  if (!text || !mafiaStudioAvailable()) return Promise.resolve(null);
+  const address = mafiaStudioAddress(text, lang);
+  const cached = mafiaStudioCache.get(address);
+  if (cached) return cached.promise;
+  const entry = { url: null, promise: null };
+  entry.promise = window
+    .fetch(address)
+    .then((response) => {
+      if (!response.ok) {
+        // Quota or a broken setup: stop asking for a while, the phone's own
+        // voice takes over. Other errors only cost this one sentence.
+        if (response.status === 429 || response.status >= 500) {
+          mafiaStudioDownUntil = Date.now() + (response.status === 429 ? 120000 : 45000);
+          mafiaSetStudioState("down");
+        }
+        throw new Error("voice " + response.status);
+      }
+      return response.blob();
+    })
+    .then((blob) => {
+      if (!blob || blob.size < 2000) throw new Error("empty voice");
+      entry.url = URL.createObjectURL(blob);
+      mafiaSetStudioState("ok");
+      return entry.url;
+    })
+    .catch(() => {
+      mafiaStudioCache.delete(address);
+      return null;
+    });
+  mafiaStudioCache.set(address, entry);
+  if (mafiaStudioCache.size > MAFIA_VOICE_CACHE_LIMIT) {
+    const oldest = mafiaStudioCache.keys().next().value;
+    const dropped = mafiaStudioCache.get(oldest);
+    mafiaStudioCache.delete(oldest);
+    try {
+      if (dropped && dropped.url) URL.revokeObjectURL(dropped.url);
+    } catch (e) {}
+  }
+  return entry.promise;
+}
+
+// Gets sentences ready ahead of time, one request at a time so a burst of
+// names at the start of a game doesn't trip the provider's rate limit.
+// "urgent" ones (needed within seconds) jump the line.
+function mafiaStudioPrefetch(texts, lang, urgent) {
+  const jobs = (texts || []).filter((text) => text && !mafiaStudioCache.has(mafiaStudioAddress(text, lang))).map((text) => [text, lang]);
+  mafiaPrefetchQueue = urgent ? jobs.concat(mafiaPrefetchQueue) : mafiaPrefetchQueue.concat(jobs);
+  if (mafiaPrefetchRunning) return;
+  mafiaPrefetchRunning = true;
+  const next = () => {
+    const job = mafiaPrefetchQueue.shift();
+    if (!job || !mafiaStudioAvailable()) {
+      mafiaPrefetchQueue = [];
+      mafiaPrefetchRunning = false;
+      return;
+    }
+    mafiaStudioFetch(job[0], job[1]).then(() => setTimeout(next, 150));
+  };
+  next();
+}
+
+let mafiaAudioElement = null;
+function mafiaAudio() {
+  if (!mafiaAudioElement) {
+    mafiaAudioElement = new window.Audio();
+    mafiaAudioElement.preload = "auto";
+    try {
+      mafiaAudioElement.setAttribute("playsinline", "");
+    } catch (e) {}
+  }
+  return mafiaAudioElement;
+}
+// A few milliseconds of silence, played on a tap so the browser lets this
+// same element speak later without one.
+const MAFIA_SILENT_WAV = "data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YSADAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+let mafiaAudioBusy = false;
+
+// Plays one fetched sentence. Resolves true when it was heard to the end.
+function mafiaPlayStudio(url, token) {
+  return new Promise((resolve) => {
+    let audio;
+    try {
+      audio = mafiaAudio();
+    } catch (e) {
+      resolve(false);
+      return;
+    }
+    let settled = false;
+    let guard = null;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(guard);
+      mafiaAudioBusy = false;
+      audio.onended = null;
+      audio.onerror = null;
+      audio.onloadedmetadata = null;
+      token.stop = null;
+      resolve(ok);
+    };
+    // Lost "ended" events must not stall a phase.
+    guard = setTimeout(() => finish(true), 30000);
+    audio.onloadedmetadata = () => {
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        clearTimeout(guard);
+        guard = setTimeout(() => finish(true), audio.duration * 1000 + 2500);
+      }
+    };
+    audio.onended = () => finish(true);
+    audio.onerror = () => finish(false);
+    token.stop = () => {
+      try {
+        audio.pause();
+      } catch (e) {}
+      finish(false);
+    };
+    try {
+      mafiaAudioBusy = true;
+      audio.src = url;
+      audio.currentTime = 0;
+      const started = audio.play();
+      // Rejected = the browser wants a tap first; the phone's voice steps in.
+      if (started && typeof started.catch === "function") started.catch(() => finish(false));
+    } catch (e) {
+      finish(false);
+    }
+  });
+}
+
+const mafiaLiveUtterances = [];
+// Says one sentence with the phone's built-in voice. Resolves when done
+// (at once if this phone has no usable voice).
+function mafiaSpeakLocal(text, lang, token) {
+  return new Promise((resolve) => {
+    if (!mafiaLocalCanSpeak()) {
+      resolve(false);
+      return;
+    }
+    let settled = false;
+    let guard = null;
+    let utterance = null;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(guard);
+      const at = mafiaLiveUtterances.indexOf(utterance);
+      if (at >= 0) mafiaLiveUtterances.splice(at, 1);
+      token.stop = null;
+      resolve(ok);
+    };
+    try {
+      utterance = mafiaDressUtterance(new window.SpeechSynthesisUtterance(text), lang);
+      let startedAt = Date.now();
+      utterance.onstart = () => {
+        startedAt = Date.now();
+      };
+      utterance.onend = () => {
+        // Caught talking without a sound: the next poll tells the server,
+        // which hands the voice to a phone that really can speak.
+        if (!settled) mafiaNoteSpeechResult(lang, text, Date.now() - startedAt);
+        finish(true);
+      };
+      utterance.onerror = () => finish(false);
+      // Some phones never fire "end"; don't let one lost event stall a phase.
+      guard = setTimeout(() => finish(true), 4000 + text.length * 140);
+      token.stop = () => {
+        finish(false);
+        try {
+          window.speechSynthesis.cancel();
+        } catch (e) {}
+      };
+      // Kept referenced on purpose: Chrome drops the end event of an
+      // utterance that has been garbage-collected mid-sentence.
+      mafiaLiveUtterances.push(utterance);
+      window.speechSynthesis.resume();
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      finish(false);
+    }
+  });
+}
+
+// Sentences are said strictly one after another, across calls.
+let mafiaSayChain = Promise.resolve();
+let mafiaSayToken = { cancelled: false, stop: null };
+
+// Says the sentences in order: studio voice when its audio is ready in
+// time, the phone's own voice otherwise. Resolves when all are done.
+function mafiaSay(parts, lang) {
+  const token = mafiaSayToken;
+  const texts = (parts || []).filter(Boolean);
+  // Ask for every sentence now: while the first one plays, the ones with
+  // names in them have time to arrive.
+  const pending = texts.map((text) => mafiaStudioFetch(text, lang));
+  const run = async () => {
+    for (let i = 0; i < texts.length; i++) {
+      if (token.cancelled) return;
+      const url = await Promise.race([pending[i], new Promise((resolve) => setTimeout(() => resolve(null), MAFIA_VOICE_WAIT_MS))]);
+      if (token.cancelled) return;
+      if (url && (await mafiaPlayStudio(url, token))) continue;
+      if (token.cancelled) return;
+      await mafiaSpeakLocal(texts[i], lang, token);
+    }
+  };
+  mafiaSayChain = mafiaSayChain.then(run, run);
+  return mafiaSayChain;
+}
+
+// Silences the host at once and drops whatever was still waiting to be said.
+function mafiaStopSaying() {
+  const token = mafiaSayToken;
+  token.cancelled = true;
+  if (typeof token.stop === "function") token.stop();
+  mafiaSayToken = { cancelled: false, stop: null };
+  mafiaSayChain = Promise.resolve();
+  try {
+    if (mafiaSpeechApiPresent()) window.speechSynthesis.cancel();
+  } catch (e) {}
+}
+
+// Whether this phone can be the host's voice: through the studio voice once
+// it has answered, otherwise through the phone's own speech.
+function mafiaCanSpeak() {
+  if (mafiaStudioState === "ok" && mafiaStudioAvailable()) return true;
+  return mafiaLocalCanSpeak();
+}
+
 // Browsers only let a page talk after the user has tapped something;
 // called from the taps that precede the host's first line.
 function mafiaPrimeSpeech() {
+  try {
+    if (typeof window.Audio === "function" && !mafiaAudioBusy) {
+      const audio = mafiaAudio();
+      audio.src = MAFIA_SILENT_WAV;
+      const started = audio.play();
+      if (started && typeof started.catch === "function") started.catch(() => {});
+    }
+  } catch (e) {}
   if (!mafiaSpeechApiPresent()) return;
   try {
     const utterance = new window.SpeechSynthesisUtterance(" ");
     utterance.volume = 0;
     window.speechSynthesis.speak(utterance);
   } catch (e) {}
+}
+
+// Sentences worth having ready before they are needed.
+function mafiaVoiceWarmup(view, lang) {
+  if (!view) return [];
+  const line = (key) => t_lookup("mhost." + key, lang);
+  const settings = view.settings || {};
+  const texts = [line("test"), line("roles_dealt"), line("night_start")];
+  ["putana", "mafia", "don", "maniac", "doctor", "sheriff"].forEach((role) => {
+    if (role === "mafia" || settings[role]) texts.push(line("wake_" + role), line("sleep_" + role));
+  });
+  texts.push(line("morning"), line("morningNobody"), line("morningSaved"), line("morningMissed"), line("dayBegins"), line("vote_start"), line("voteTie"), line("voteNobody"));
+  if (view.status === "playing") {
+    const alive = (view.players || []).filter((p) => p.alive);
+    alive.forEach((p) => texts.push(line("day_speaker").replace("{name}", p.name)));
+    alive.forEach((p) => texts.push(line("morningVictimNoRole").replace("{name}", p.name)));
+    if (!settings.hide_roles) {
+      ["civilian", "mafia", "don", "doctor", "sheriff", "maniac", "putana"].forEach((role) => {
+        if (role === "civilian" || role === "mafia" || settings[role]) texts.push(line("rolePart").replace("{role}", t_lookup(`role.${role}.name`, lang)));
+      });
+    }
+    texts.push(line("win_town"), line("win_mafia"));
+    if (settings.maniac) texts.push(line("win_maniac"));
+  }
+  return texts;
+}
+
+// What the host is likely to say next, given what was just said.
+function mafiaVoiceLookahead(entry, view, lang) {
+  if (!entry || !view) return [];
+  const line = (key) => t_lookup("mhost." + key, lang);
+  const params = entry.params || {};
+  const named = (key, seat) => line(key).replace("{name}", mafiaSeatName(view, seat));
+  const alive = (view.players || []).filter((p) => p.alive);
+  switch (entry.key) {
+    case "morning":
+      return (params.victims || []).map((v) => named("lastword", v.seat));
+    case "vote_start":
+      return alive.map((p) => line("voteExiled").replace("{name}", p.name));
+    case "vote_result":
+      if (params.exiled === null || params.exiled === undefined) return [];
+      return [named("lastword", params.exiled), named("nameOnly", params.exiled)];
+    case "night_start":
+      return alive.map((p) => line("morningVictimNoRole").replace("{name}", p.name));
+    default:
+      return [];
+  }
 }
 
 function mafiaSeatName(view, seat) {
@@ -9973,45 +10295,60 @@ function mafiaSeatName(view, seat) {
 // Turns one entry of the server's phrase queue into the sentence the
 // host says, in the given language. The server only sends a key and the
 // facts (seats, roles); wording lives here.
-function mafiaHostLine(entry, view, lang) {
-  if (!entry) return "";
+// One entry of the server's phrase queue as separate sentences. Each
+// sentence is voiced on its own so the ones that never change ("Morning
+// comes...") are generated once and reused, and only the short ones with a
+// player's name are made per game.
+function mafiaHostParts(entry, view, lang) {
+  if (!entry) return [];
   const line = (key) => t_lookup("mhost." + key, lang);
   const params = entry.params || {};
   const name = (seat) => mafiaSeatName(view, seat);
-  const role = (id) => (id ? t_lookup(`role.${id}.name`, lang) : "");
+  const named = (key, seat) => line(key).replace("{name}", name(seat));
+  const rolePart = (id) => line("rolePart").replace("{role}", t_lookup(`role.${id}.name`, lang));
   switch (entry.key) {
     case "morning": {
       const parts = [line("morning")];
       if (params.missed) parts.push(line("morningMissed"));
       const victims = params.victims || [];
       if (victims.length > 0) {
-        // No role in a "hidden roles" room: the server sends none.
-        victims.forEach((v) => parts.push(v.role ? line("morningVictim").replace("{name}", name(v.seat)).replace("{role}", role(v.role)) : line("morningVictimNoRole").replace("{name}", name(v.seat))));
+        victims.forEach((v) => {
+          parts.push(named("morningVictimNoRole", v.seat));
+          // No role in a "hidden roles" room: the server sends none.
+          if (v.role) parts.push(rolePart(v.role));
+        });
       } else {
         parts.push(line(params.saved ? "morningSaved" : "morningNobody"));
       }
-      return parts.join(" ");
+      return parts;
     }
     case "lastword":
-    case "day_first":
     case "day_speaker":
-      return line(entry.key).replace("{name}", name(params.seat));
+      return [named(entry.key, params.seat)];
+    case "day_first":
+      return [line("dayBegins"), named("dayFirstSpeaker", params.seat)];
     case "vote_result":
-      if (params.exiled !== null && params.exiled !== undefined) return line("voteExiled").replace("{name}", name(params.exiled));
-      return line(params.tie ? "voteTie" : "voteNobody");
+      if (params.exiled !== null && params.exiled !== undefined) return [named("voteExiled", params.exiled)];
+      return [line(params.tie ? "voteTie" : "voteNobody")];
     case "reveal":
+      return params.role ? [named("nameOnly", params.seat), rolePart(params.role)] : [named("nameOnly", params.seat)];
     case "removed":
-      if (!params.role) return entry.key === "removed" ? line("removedNoRole").replace("{name}", name(params.seat)) : name(params.seat) + ".";
-      return line(entry.key).replace("{name}", name(params.seat)).replace("{role}", role(params.role));
+      return params.role ? [named("removedNoRole", params.seat), rolePart(params.role)] : [named("removedNoRole", params.seat)];
     case "warning": {
-      const text = line(params.by === "host" ? "warningHost" : "warningPlayers").replace("{name}", name(params.seat)).replace("{count}", params.count);
-      return params.count === 3 ? text + " " + line("warningNoVote").replace("{name}", name(params.seat)) : text;
+      const parts = [named(params.by === "host" ? "warningHost" : "warningPlayers", params.seat).replace("{count}", params.count)];
+      if (params.count === 3) parts.push(named("warningNoVote", params.seat));
+      return parts;
     }
     case "win":
-      return line("win_" + params.winner);
+      return [line("win_" + params.winner)];
     default:
-      return line(entry.key);
+      return [line(entry.key)];
   }
+}
+
+// The same entry as one string, for the text shown on every phone.
+function mafiaHostLine(entry, view, lang) {
+  return mafiaHostParts(entry, view, lang).join(" ");
 }
 
 // Talks to the mafia_* functions and keeps this phone's view fresh:
@@ -10255,13 +10592,13 @@ function useSecondsLeft(deadlineAt) {
 function useMafiaVoice(view, act) {
   const lang = useLang();
   const spokenRef = useRef(null);
-  const utterancesRef = useRef([]);
   const viewRef = useRef(view);
   viewRef.current = view;
   const queue = view && Array.isArray(view.speech) ? view.speech : [];
   const lastSeq = queue.length > 0 ? queue[queue.length - 1].seq : 0;
   const isVoice = !!(view && view.is_voice);
   const status = view ? view.status : null;
+  const roomCode = view ? view.code : null;
 
   useEffect(() => {
     if (!view) {
@@ -10283,57 +10620,53 @@ function useMafiaVoice(view, act) {
       const current = viewRef.current;
       if (current && current.gate_seq === seq) setTimeout(() => act("mafia_speech_done", { p_seq: seq }), 350);
     };
-    if (!mafiaCanSpeak()) {
-      // This phone holds the voice but cannot talk: don't make the table
-      // sit through the fallback timers in silence.
-      fresh.forEach((entry) => reportDone(entry.seq));
-      return;
-    }
+    const token = mafiaSayToken;
     fresh.forEach((entry) => {
-      const text = mafiaHostLine(entry, viewRef.current, lang);
-      let finished = false;
-      const finish = () => {
-        if (finished) return;
-        finished = true;
-        clearTimeout(guard);
-        utterancesRef.current = utterancesRef.current.filter((u) => u !== utterance);
-        reportDone(entry.seq);
-      };
-      const utterance = mafiaDressUtterance(new window.SpeechSynthesisUtterance(text), lang);
-      let startedAt = Date.now();
-      utterance.onstart = () => {
-        startedAt = Date.now();
-      };
-      utterance.onend = () => {
-        // Caught talking without a sound: the next poll tells the server,
-        // which hands the voice to a phone that really can speak.
-        mafiaNoteSpeechResult(lang, text, Date.now() - startedAt);
-        finish();
-      };
-      utterance.onerror = finish;
-      // Some phones never fire "end"; don't let one lost event stall a phase.
-      const guard = setTimeout(finish, 4000 + text.length * 140);
-      // Kept referenced on purpose: Chrome drops the end event of an
-      // utterance that has been garbage-collected mid-sentence.
-      utterancesRef.current.push(utterance);
-      try {
-        window.speechSynthesis.resume();
-        window.speechSynthesis.speak(utterance);
-      } catch (e) {
-        finish();
-      }
+      // A phone that cannot make a sound at all finishes at once; the
+      // server still keeps each screen up for its minimum time.
+      mafiaSay(mafiaHostParts(entry, viewRef.current, lang), lang).then(() => {
+        if (!token.cancelled) reportDone(entry.seq);
+      });
+      mafiaStudioPrefetch(mafiaVoiceLookahead(entry, viewRef.current, lang), lang, true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastSeq, isVoice, status]);
 
+  // The voice phone gets the usual sentences ready while people are still
+  // gathering, and the ones with names as soon as the game starts.
+  useEffect(() => {
+    if (!isVoice || !viewRef.current || (status !== "lobby" && status !== "playing")) return;
+    mafiaStudioPrefetch(mafiaVoiceWarmup(viewRef.current, lang), lang);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVoice, status, lang, roomCode]);
+
+  // Any phone asks for one sentence in the lobby: that is how it learns the
+  // studio voice works here and can offer itself as the host's voice.
+  useEffect(() => {
+    if (!roomCode) return;
+    mafiaStudioFetch(t_lookup("mhost.test", lang), lang);
+  }, [roomCode, lang]);
+
   useEffect(
     () => () => {
-      try {
-        if (mafiaSpeechApiPresent()) window.speechSynthesis.cancel();
-      } catch (e) {}
+      mafiaStopSaying();
+      mafiaPrefetchQueue = [];
     },
     []
   );
+
+  // Browsers only let a page make sound after a tap. A phone that came back
+  // by itself (reload, reconnect) has had none yet, so the first touch
+  // anywhere on the room screen counts.
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof document.addEventListener !== "function") return undefined;
+    const unlock = () => {
+      document.removeEventListener("pointerdown", unlock, true);
+      mafiaPrimeSpeech();
+    };
+    document.addEventListener("pointerdown", unlock, true);
+    return () => document.removeEventListener("pointerdown", unlock, true);
+  }, []);
 
   return queue.length > 0 ? mafiaHostLine(queue[queue.length - 1], view, lang) : "";
 }
@@ -10510,33 +10843,25 @@ function MafiaRoomVoiceCard({ view, act }) {
   const voicePlayer = view.players.find((p) => p.is_voice);
   const [tested, setTested] = useState(false);
   const [, setVoiceTick] = useState(0);
-  const testRef = useRef(null);
-  // The list of voices arrives a moment after the page loads.
+  // The list of voices arrives a moment after the page loads, and the
+  // studio voice reports in after its first answer.
   useEffect(() => {
-    if (!mafiaSpeechApiPresent() || typeof window.speechSynthesis.addEventListener !== "function") return undefined;
-    const onVoices = () => setVoiceTick((n) => n + 1);
-    window.speechSynthesis.addEventListener("voiceschanged", onVoices);
-    return () => window.speechSynthesis.removeEventListener("voiceschanged", onVoices);
+    const bump = () => setVoiceTick((n) => n + 1);
+    mafiaStudioListeners.add(bump);
+    const hasEvents = mafiaSpeechApiPresent() && typeof window.speechSynthesis.addEventListener === "function";
+    if (hasEvents) window.speechSynthesis.addEventListener("voiceschanged", bump);
+    return () => {
+      mafiaStudioListeners.delete(bump);
+      if (hasEvents) window.speechSynthesis.removeEventListener("voiceschanged", bump);
+    };
   }, []);
   function testVoice() {
-    try {
-      const text = t_lookup("mhost.test", lang);
-      const utterance = mafiaDressUtterance(new window.SpeechSynthesisUtterance(text), lang);
-      const test = { cancelled: false, startedAt: Date.now() };
-      utterance.onstart = () => {
-        test.startedAt = Date.now();
-      };
-      utterance.onend = () => {
-        if (test.cancelled) return;
-        mafiaNoteSpeechResult(lang, text, Date.now() - test.startedAt);
-        setVoiceTick((n) => n + 1);
-      };
-      if (testRef.current) testRef.current.cancelled = true;
-      testRef.current = test;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
-      setTested(true);
-    } catch (e) {}
+    mafiaPrimeSpeech();
+    mafiaStopSaying();
+    // Goes through exactly what the game uses, so a phone that turns out to
+    // be silent is caught here and not in the middle of the night.
+    mafiaSay([t_lookup("mhost.test", lang)], lang).then(() => setVoiceTick((n) => n + 1));
+    setTested(true);
   }
   return (
     <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl px-5 py-4">
@@ -10546,6 +10871,7 @@ function MafiaRoomVoiceCard({ view, act }) {
       <p className="text-sm">
         {view.is_voice ? (canSpeak ? t("mroom.voiceHere") : t("mroom.voiceHereSilent")) : t("mroom.voiceOn").replace("{name}", voicePlayer ? voicePlayer.name : "—")}
       </p>
+      {canSpeak && mafiaStudioState === "ok" && <p className="text-xs text-[var(--accent-strong)] mt-2">{t("mroom.voiceStudio")}</p>}
       {!canSpeak && <p className="text-xs mt-2" style={{ color: "var(--danger)" }}>{t("mroom.voiceUnavailable")}</p>}
       {view.is_voice && !canSpeak && <p className="text-xs text-[var(--text-faint)] mt-1">{t("mroom.voiceNeedsOther")}</p>}
       {canSpeak && (
