@@ -18,6 +18,7 @@ const LANGS = ["ru", "en", "hy"];
 const MAX_NAME_LENGTH = 24;
 const MAX_STORY_LENGTH = 130;
 const MAX_REQUESTS_PER_MINUTE = 40;
+const UPSTREAM_TIMEOUT_MS = 6000;
 
 const PROMPTS = {
   ru: {
@@ -103,6 +104,10 @@ module.exports = async function handler(req, res) {
     const upstream = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
       headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
+      // Gemini now and then hangs on a request. The phone gives up after
+      // 7 seconds anyway, so stop waiting here too instead of running into
+      // the function's time limit.
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: `${words.night(night)} ${facts}` }] }],
         systemInstruction: { parts: [{ text: words.system }] },
@@ -119,7 +124,7 @@ module.exports = async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
     res.status(200).json({ text });
   } catch (e) {
-    fail(res, 502, "failed to reach gemini");
+    fail(res, e && e.name === "TimeoutError" ? 504 : 502, e && e.name === "TimeoutError" ? "story took too long" : "failed to reach gemini");
   }
 };
 
