@@ -1366,6 +1366,209 @@ async function recordGamePlayed(game) {
     console.error("recordGamePlayed failed:", e);
   }
 }
+// The name typed to enter a room becomes the profile name when the player
+// has none yet. People always name themselves for a room and almost never
+// open the Profile to do it, which left the leaderboard nearly nameless.
+function rememberRoomName(name) {
+  try {
+    const trimmed = String(name || "").trim().slice(0, 20);
+    if (!trimmed || !isPlayerNameEditable() || getPlayerName()) return;
+    setPlayerName(trimmed);
+  } catch (e) {}
+}
+
+/* ---------------------------------------------------------------- */
+/* Open rooms: rooms that anyone may join from a public list.         */
+/* The host's phone announces the room every 15 s while it sits in    */
+/* the lobby with "Open room" on (see supabase/open_rooms.sql); a     */
+/* room that stops announcing drops off the list by itself.           */
+/* ---------------------------------------------------------------- */
+const OPEN_ROOM_IDENTITY_KEY = "hatsit_open_room_identity_v1";
+const OPEN_ROOM_BEAT_MS = 15000;
+const OPEN_ROOMS_REFRESH_MS = 10000;
+const OPEN_ROOMS_HUB_REFRESH_MS = 30000;
+let openRoomIdentityCache = null;
+// A per-device id and secret: only the phone that announced a room can
+// refresh it or take it off the list.
+function getOpenRoomIdentity() {
+  if (openRoomIdentityCache) return openRoomIdentityCache;
+  try {
+    const saved = JSON.parse(localStorage.getItem(OPEN_ROOM_IDENTITY_KEY) || "null");
+    if (saved && typeof saved.id === "string" && typeof saved.secret === "string" && saved.secret.length >= 16) {
+      openRoomIdentityCache = saved;
+      return saved;
+    }
+  } catch (e) {}
+  // Padded so the secret is long enough even where randomUUID is missing.
+  const filler = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
+  openRoomIdentityCache = { id: "dev-" + generateAnonId(), secret: generateAnonId() + "-" + filler() + filler() };
+  try {
+    localStorage.setItem(OPEN_ROOM_IDENTITY_KEY, JSON.stringify(openRoomIdentityCache));
+  } catch (e) {}
+  return openRoomIdentityCache;
+}
+async function announceOpenRoom(game, code, name, players, max) {
+  try {
+    const identity = getOpenRoomIdentity();
+    const { data } = await supabaseClient.rpc("open_room_upsert", {
+      p_game: game, p_code: code, p_owner_id: identity.id, p_secret: identity.secret,
+      p_name: name || "", p_players: players || 1, p_max: max || null, p_lang: currentLangForDefaults(),
+    });
+    return !!(data && data.ok);
+  } catch (e) {
+    return false;
+  }
+}
+async function closeOpenRoom(game) {
+  try {
+    const identity = getOpenRoomIdentity();
+    await supabaseClient.rpc("open_room_close", { p_game: game, p_owner_id: identity.id, p_secret: identity.secret });
+  } catch (e) {}
+}
+// game = null asks for every game at once (the Hub only counts them).
+async function fetchOpenRooms(game) {
+  try {
+    const { data, error } = await supabaseClient.rpc("open_rooms_list", { p_game: game || null });
+    if (error || !Array.isArray(data)) return [];
+    return data.filter((room) => room && /^[0-9]{4}$/.test(String(room.code || "")));
+  } catch (e) {
+    return [];
+  }
+}
+// Keeps a room on the public list for as long as `active` stays true.
+function useOpenRoomBeacon({ game, code, active, name, players, max }) {
+  const latest = useRef(null);
+  latest.current = { code, name, players, max };
+  const sentPlayersRef = useRef(null);
+  useEffect(() => {
+    if (!active || !code) return undefined;
+    const beat = () => {
+      const now = latest.current;
+      sentPlayersRef.current = now.players;
+      announceOpenRoom(game, now.code, now.name, now.players, now.max);
+    };
+    beat();
+    const timer = setInterval(beat, OPEN_ROOM_BEAT_MS);
+    return () => {
+      clearInterval(timer);
+      sentPlayersRef.current = null;
+      closeOpenRoom(game);
+    };
+  }, [game, code, active]);
+  // Someone walked in or out: tell the list now, not at the next beat.
+  useEffect(() => {
+    if (!active || !code || sentPlayersRef.current === null || sentPlayersRef.current === players) return;
+    sentPlayersRef.current = players;
+    announceOpenRoom(game, code, latest.current.name, players, latest.current.max);
+  }, [players, active, code, game]);
+}
+// The list shown under "Create room / Join with a code".
+function OpenRoomsList({ game, color, onPick }) {
+  const t = useT();
+  const [rooms, setRooms] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const list = await fetchOpenRooms(game);
+      if (!cancelled) setRooms(list);
+    };
+    load();
+    const timer = setInterval(load, OPEN_ROOMS_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [game]);
+  return (
+    <div className="mt-3">
+      <div className="flex items-center gap-2 mb-2.5">
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: rooms && rooms.length > 0 ? "var(--doctor)" : "var(--text-faint)" }} />
+        <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">{t("open.title")}</span>
+      </div>
+      {rooms !== null && rooms.length === 0 && <p className="text-xs text-[var(--text-faint)] leading-relaxed">{t("open.empty")}</p>}
+      {rooms !== null && rooms.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {rooms.map((room) => (
+            <button
+              key={room.code}
+              onClick={() => onPick(room)}
+              className="w-full flex items-center gap-3 bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-4 py-3 text-left active:scale-[0.98] transition-transform"
+            >
+              <div className="w-9 h-9 rounded-full bg-[var(--surface-2)] flex items-center justify-center text-[var(--text-dim)] shrink-0">
+                <IconUsers size={16} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="font-medium truncate">{room.name || t("common.player")}</div>
+                <div className="text-xs text-[var(--text-faint)]">
+                  {t("open.players").replace("{n}", room.max ? room.players + "/" + room.max : room.players)}
+                  {room.lang ? " · " + String(room.lang).toUpperCase() : ""}
+                </div>
+              </div>
+              <span className="shrink-0 text-xs uppercase tracking-wide px-3 py-1.5 rounded-full" style={{ background: color, color: "var(--bg)" }}>{t("open.join")}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+// Lobby row: a switch for the host, a note for everyone else.
+function OpenRoomSwitch({ isHost, isPublic, onToggle, color }) {
+  const t = useT();
+  if (!isHost) {
+    if (!isPublic) return null;
+    return <p className="text-xs text-[var(--text-faint)] text-center mb-4">{t("open.guestNote")}</p>;
+  }
+  return (
+    <button
+      onClick={onToggle}
+      role="switch"
+      aria-checked={!!isPublic}
+      className="w-full flex items-center gap-3 bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-4 py-3.5 text-left mb-4 active:scale-[0.99] transition-transform"
+    >
+      <div className="w-9 h-9 rounded-full bg-[var(--surface-2)] flex items-center justify-center shrink-0" style={{ color: isPublic ? color : "var(--text-faint)" }}>
+        <IconGlobe size={16} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="font-medium">{t("open.switchTitle")}</div>
+        <div className="text-xs text-[var(--text-faint)] leading-snug">{t("open.switchDesc")}</div>
+      </div>
+      <span className="shrink-0 w-11 h-6 rounded-full relative transition-colors" style={{ background: isPublic ? color : "var(--surface-3)" }}>
+        <span className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all" style={{ left: isPublic ? "22px" : "2px" }} />
+      </span>
+    </button>
+  );
+}
+
+// What the jury decided, from the jurors' own votes ("victim" is the
+// "not guilty" button): guilty | free | tie.
+function courtJuryOutcome(players) {
+  let guilty = 0;
+  let free = 0;
+  Object.keys(players || {}).forEach((pid) => {
+    const p = players[pid];
+    if (!p || p.role !== "juror") return;
+    if (p.vote === "guilty") guilty++;
+    else if (p.vote === "victim") free++;
+  });
+  return guilty > free ? "guilty" : free > guilty ? "free" : "tie";
+}
+// Adds a finished case to the player's Court statistics (see
+// supabase/court_stats.sql). Returns true when the server counted it.
+async function recordCourtCase(me, players) {
+  if (!me || !me.role) return false;
+  try {
+    const vote = me.role === "juror" ? (me.vote === "guilty" ? "guilty" : me.vote === "victim" ? "free" : null) : null;
+    const { data } = await supabaseClient.rpc("record_court_case", {
+      p_id: getPlayerId(), p_name: getPlayerName(), p_role: me.role, p_jury: courtJuryOutcome(players), p_vote: vote,
+    });
+    return !!(data && data.ok && !data.already);
+  } catch (e) {
+    console.error("recordCourtCase failed:", e);
+    return false;
+  }
+}
+
 // Fires recordGamePlayed(game) exactly when `status` transitions INTO
 // "playing" from something else -- not on every re-render while already
 // playing (Bunker/Court broadcast a state update on nearly every action).
@@ -1455,7 +1658,7 @@ const LEADERBOARD_COLUMNS = {
   mafia: "mafia_wins",
 };
 // What getPlayerTitle() needs to know about every leaderboard row.
-const TITLE_PROFILE_FIELDS = ["wordless_best", "countdown_best", "streak_longest", "selected_title", "mafia_wins", "mafia_mafia_wins", "mafia_finds", "mafia_saves"];
+const TITLE_PROFILE_FIELDS = ["wordless_best", "countdown_best", "streak_longest", "selected_title", "mafia_wins", "mafia_mafia_wins", "mafia_finds", "mafia_saves", "court_played", "court_judge", "court_acquitted", "court_roles_mask"];
 // Drives both the ProfilePanel leaderboard tab grid and which column
 // fetchLeaderboard() above reads -- one list to keep in sync instead of two.
 const LEADERBOARD_TABS = [
@@ -1950,6 +2153,7 @@ function useGameRoom(config) {
   }, []);
 
   function handleCreate(name) {
+    rememberRoomName(name);
     setBusy(true);
     setError("");
     isHostRef.current = true;
@@ -1994,6 +2198,7 @@ function useGameRoom(config) {
       setError(messagesRef.current.enterNameError);
       return;
     }
+    rememberRoomName(name);
     setBusy(true);
     setError("");
     isHostRef.current = false;
@@ -2023,9 +2228,26 @@ function useGameRoom(config) {
     });
   }
 
+  // Open room: while the host waits in the lobby with the switch on, the
+  // room is announced on the public list.
+  const publicHost = room && room.players ? room.players[room.hostId] : null;
+  useOpenRoomBeacon({
+    game: gameKey,
+    code: roomCode,
+    active: !!(room && room.status === "lobby" && room.isPublic && room.hostId === playerId),
+    name: publicHost ? publicHost.name : "",
+    players: room && room.players ? Object.keys(room.players).length : 1,
+    max: null,
+  });
+  function togglePublic() {
+    const current = roomRef.current;
+    if (!current || current.hostId !== playerId) return;
+    broadcastState({ ...current, isPublic: !current.isPublic });
+  }
+
   return {
     roomCode, room, error, busy, connStatus, playerId, inviteCode,
-    isHostRef, roomRef,
+    isHostRef, roomRef, togglePublic,
     handleCreate, handleJoin, broadcastState, sendEvent,
   };
 }
@@ -2814,6 +3036,46 @@ const I18N = {
   "achievements.mafiaStreak5.desc": { ru: "5 побед в Мафии подряд", en: "Win 5 Mafia games in a row", hy: "5 հաղթանակ Մաֆիայում անընդմեջ" },
   "achievements.mafiaAllRoles.title": { ru: "Мастер перевоплощения", en: "Master of disguise", hy: "Կերպարանափոխման վարպետ" },
   "achievements.mafiaAllRoles.desc": { ru: "Сыграйте мирным, мафией, доктором и шерифом", en: "Play as a civilian, mafia, doctor and sheriff", hy: "Խաղացեք խաղաղ բնակչի, մաֆիայի, բժշկի և շերիֆի դերերում" },
+  "open.title": { ru: "Открытые комнаты", en: "Open rooms", hy: "Բաց սենյակներ" },
+  "open.empty": { ru: "Сейчас открытых комнат нет. Создайте свою и включите «Открытая комната» — к вам смогут зайти другие игроки.", en: "No open rooms right now. Create your own and switch on “Open room” so other players can join you.", hy: "Հիմա բաց սենյակներ չկան։ Ստեղծեք ձերը և միացրեք «Բաց սենյակ»-ը, որ այլ խաղացողներ կարողանան միանալ։" },
+  "open.players": { ru: "Игроков: {n}", en: "Players: {n}", hy: "Խաղացողներ՝ {n}" },
+  "open.join": { ru: "Войти", en: "Join", hy: "Մտնել" },
+  "open.switchTitle": { ru: "Открытая комната", en: "Open room", hy: "Բաց սենյակ" },
+  "open.switchDesc": { ru: "Комната видна в списке, войти может любой игрок", en: "The room is on the public list, anyone can join", hy: "Սենյակը երևում է ցանկում, ցանկացած խաղացող կարող է մտնել" },
+  "open.guestNote": { ru: "Открытая комната: сюда могут зайти другие игроки", en: "Open room: other players can join here", hy: "Բաց սենյակ․ այստեղ կարող են մտնել այլ խաղացողներ" },
+  "open.hubBadge": { ru: "Ждут: {n}", en: "Waiting: {n}", hy: "Սպասում են՝ {n}" },
+  "achievements.groupCourt": { ru: "Суд", en: "Court", hy: "Դատարան" },
+  "profile.courtTitle": { ru: "Суд", en: "Court", hy: "Դատարան" },
+  "profile.courtPlayed": { ru: "Дел", en: "Cases", hy: "Գործեր" },
+  "profile.courtJudge": { ru: "Судьёй", en: "As judge", hy: "Որպես դատավոր" },
+  "profile.courtJuror": { ru: "Присяжным", en: "As juror", hy: "Որպես երդվյալ" },
+  "profile.courtAcquitted": { ru: "Оправдан", en: "Acquitted", hy: "Արդարացված" },
+  "profile.courtJustice": { ru: "Выиграл дело", en: "Cases won", hy: "Շահած գործեր" },
+  "profile.courtMajority": { ru: "С большинством", en: "With the majority", hy: "Մեծամասնության հետ" },
+  "achievements.courtFirst.title": { ru: "Первое заседание", en: "First hearing", hy: "Առաջին նիստ" },
+  "achievements.courtFirst.desc": { ru: "Сыграйте дело в Суде", en: "Play a case in Court", hy: "Խաղացեք մեկ գործ Դատարանում" },
+  "achievements.court10.title": { ru: "Завсегдатай суда", en: "Court regular", hy: "Դատարանի մշտական այցելու" },
+  "achievements.court10.desc": { ru: "Сыграйте 10 дел", en: "Play 10 cases", hy: "Խաղացեք 10 գործ" },
+  "achievements.court50.title": { ru: "Ветеран правосудия", en: "Veteran of justice", hy: "Արդարադատության վետերան" },
+  "achievements.court50.desc": { ru: "Сыграйте 50 дел", en: "Play 50 cases", hy: "Խաղացեք 50 գործ" },
+  "achievements.courtJudge1.title": { ru: "Встать, суд идёт", en: "All rise", hy: "Ոտքի՛, դատարանն է գալիս" },
+  "achievements.courtJudge1.desc": { ru: "Вынесите вердикт в роли судьи", en: "Issue a verdict as the judge", hy: "Կայացրեք վճիռ որպես դատավոր" },
+  "achievements.courtJudge10.title": { ru: "Ваша честь", en: "Your Honor", hy: "Ձերդ պատվարժանություն" },
+  "achievements.courtJudge10.desc": { ru: "Вынесите 10 вердиктов", en: "Issue 10 verdicts", hy: "Կայացրեք 10 վճիռ" },
+  "achievements.courtJuror5.title": { ru: "Присяжный заседатель", en: "Member of the jury", hy: "Երդվյալ ատենակալ" },
+  "achievements.courtJuror5.desc": { ru: "Побывайте присяжным в 5 делах", en: "Serve as a juror in 5 cases", hy: "Եղեք երդվյալ 5 գործում" },
+  "achievements.courtMajority5.title": { ru: "Глас присяжных", en: "Voice of the jury", hy: "Երդվյալների ձայնը" },
+  "achievements.courtMajority5.desc": { ru: "5 раз проголосуйте так же, как большинство присяжных", en: "Vote with the jury's majority 5 times", hy: "5 անգամ քվեարկեք երդվյալների մեծամասնության պես" },
+  "achievements.courtAcquitted1.title": { ru: "Оправдан", en: "Acquitted", hy: "Արդարացված" },
+  "achievements.courtAcquitted1.desc": { ru: "Будучи обвиняемым, добейтесь оправдания присяжными", en: "As the accused, get the jury to acquit you", hy: "Որպես մեղադրյալ՝ հասեք նրան, որ երդվյալներն արդարացնեն ձեզ" },
+  "achievements.courtAcquitted5.title": { ru: "Неуловимый", en: "Untouchable", hy: "Անորսալի" },
+  "achievements.courtAcquitted5.desc": { ru: "Добейтесь оправдания 5 раз", en: "Get acquitted 5 times", hy: "Արդարացվեք 5 անգամ" },
+  "achievements.courtJustice3.title": { ru: "Справедливость", en: "Justice served", hy: "Արդարություն" },
+  "achievements.courtJustice3.desc": { ru: "Будучи пострадавшим, 3 раза добейтесь обвинения", en: "As the victim, get a guilty vote from the jury 3 times", hy: "Որպես տուժող՝ 3 անգամ հասեք մեղադրական քվեի" },
+  "achievements.courtSecretary1.title": { ru: "Протокол ведётся", en: "On the record", hy: "Արձանագրությունը վարվում է" },
+  "achievements.courtSecretary1.desc": { ru: "Побывайте секретарём суда", en: "Serve as the court secretary", hy: "Եղեք դատարանի քարտուղար" },
+  "achievements.courtAllRoles.title": { ru: "Человек закона", en: "Person of the law", hy: "Օրենքի մարդ" },
+  "achievements.courtAllRoles.desc": { ru: "Побывайте судьёй, обвиняемым, пострадавшим и присяжным", en: "Be the judge, the accused, the victim and a juror", hy: "Եղեք դատավոր, մեղադրյալ, տուժող և երդվյալ" },
   "achievements.groupGeneral": { ru: "Общие", en: "General", hy: "Ընդհանուր" },
   "achievements.groupMafia": { ru: "Мафия онлайн", en: "Online Mafia", hy: "Օնլայն Մաֆիա" },
   "profile.mafiaTitle": { ru: "Мафия онлайн", en: "Online Mafia", hy: "Օնլայն Մաֆիա" },
@@ -3437,6 +3699,18 @@ const ACHIEVEMENTS = [
   { id: "mafia_streak_3", group: "mafia", Icon: IconFlame, titleKey: "achievements.mafiaStreak3.title", descKey: "achievements.mafiaStreak3.desc", check: (p) => (p.mafia_best_streak || 0) >= 3 },
   { id: "mafia_streak_5", group: "mafia", Icon: IconRocket, titleKey: "achievements.mafiaStreak5.title", descKey: "achievements.mafiaStreak5.desc", check: (p) => (p.mafia_best_streak || 0) >= 5 },
   { id: "mafia_all_roles", group: "mafia", Icon: IconMasks, titleKey: "achievements.mafiaAllRoles.title", descKey: "achievements.mafiaAllRoles.desc", check: (p) => ((p.mafia_roles_mask || 0) & 27) === 27 },
+  { id: "court_first", group: "court", Icon: IconBank, titleKey: "achievements.courtFirst.title", descKey: "achievements.courtFirst.desc", check: (p) => (p.court_played || 0) >= 1 || (p.court_cases || 0) >= 1 },
+  { id: "court_10", group: "court", Icon: IconUsers, titleKey: "achievements.court10.title", descKey: "achievements.court10.desc", check: (p) => (p.court_played || 0) >= 10 },
+  { id: "court_50", group: "court", Icon: IconMedal, titleKey: "achievements.court50.title", descKey: "achievements.court50.desc", check: (p) => (p.court_played || 0) >= 50 },
+  { id: "court_judge_1", group: "court", Icon: IconBookOpen, titleKey: "achievements.courtJudge1.title", descKey: "achievements.courtJudge1.desc", check: (p) => (p.court_judge || 0) >= 1 },
+  { id: "court_judge_10", group: "court", Icon: IconCrown, titleKey: "achievements.courtJudge10.title", descKey: "achievements.courtJudge10.desc", check: (p) => (p.court_judge || 0) >= 10 },
+  { id: "court_juror_5", group: "court", Icon: IconVote, titleKey: "achievements.courtJuror5.title", descKey: "achievements.courtJuror5.desc", check: (p) => (p.court_juror || 0) >= 5 },
+  { id: "court_majority_5", group: "court", Icon: IconCheck, titleKey: "achievements.courtMajority5.title", descKey: "achievements.courtMajority5.desc", check: (p) => (p.court_majority || 0) >= 5 },
+  { id: "court_acquitted_1", group: "court", Icon: IconShield, titleKey: "achievements.courtAcquitted1.title", descKey: "achievements.courtAcquitted1.desc", check: (p) => (p.court_acquitted || 0) >= 1 },
+  { id: "court_acquitted_5", group: "court", Icon: IconUmbrella, titleKey: "achievements.courtAcquitted5.title", descKey: "achievements.courtAcquitted5.desc", check: (p) => (p.court_acquitted || 0) >= 5 },
+  { id: "court_justice_3", group: "court", Icon: IconTrophy, titleKey: "achievements.courtJustice3.title", descKey: "achievements.courtJustice3.desc", check: (p) => (p.court_justice || 0) >= 3 },
+  { id: "court_secretary_1", group: "court", Icon: IconClipboard, titleKey: "achievements.courtSecretary1.title", descKey: "achievements.courtSecretary1.desc", check: (p) => ((p.court_roles_mask || 0) & 16) === 16 },
+  { id: "court_all_roles", group: "court", Icon: IconMasks, titleKey: "achievements.courtAllRoles.title", descKey: "achievements.courtAllRoles.desc", check: (p) => ((p.court_roles_mask || 0) & 15) === 15 },
 ];
 function computeUnlockedAchievementIds(profile) {
   if (!profile) return [];
@@ -3466,11 +3740,15 @@ const PLAYER_TITLES = [
   { achievementId: "mafia_godfather", color: "#d6598f", icon: "🕴️", rare: false, label: { ru: "Крёстный отец", en: "Godfather", hy: "Կնքահայր" } },
   { achievementId: "mafia_sheriff_10", color: "#a67ee8", icon: "⭐", rare: false, label: { ru: "Гроза мафии", en: "Mafia's Nightmare", hy: "Մաֆիայի սարսափ" } },
   { achievementId: "mafia_doctor_10", color: "#5ea8e6", icon: "💉", rare: false, label: { ru: "Главврач", en: "Chief Physician", hy: "Գլխավոր բժիշկ" } },
+  { achievementId: "court_all_roles", color: "#4bb8ac", icon: "📜", rare: false, label: { ru: "Человек закона", en: "Person of the Law", hy: "Օրենքի մարդ" } },
+  { achievementId: "court_judge_10", color: "#e8b545", icon: "⚖️", rare: false, label: { ru: "Ваша честь", en: "Your Honor", hy: "Ձերդ պատվարժանություն" } },
+  { achievementId: "court_acquitted_5", color: "#8dd44c", icon: "🕊️", rare: false, label: { ru: "Неуловимый", en: "Untouchable", hy: "Անորսալի" } },
   { achievementId: "wordless_10", color: "#a67ee8", icon: "🤫", rare: false, label: { ru: "Мастер тишины", en: "Silence Master", hy: "Լռության վարպետ" } },
   { achievementId: "countdown_10", color: "#e0954a", icon: "⚡", rare: false, label: { ru: "Несгибаемый", en: "Unyielding", hy: "Անդրդվելի" } },
   { achievementId: "streak_3", color: "#5ea8e6", icon: "📅", rare: false, label: { ru: "Постоянный", en: "Consistent", hy: "Հաստատուն" } },
   { achievementId: "wordless_5", color: "#8dd44c", icon: "🤐", rare: false, label: { ru: "Молчун", en: "Quiet One", hy: "Լռակյաց" } },
   { achievementId: "countdown_5", color: "#d6598f", icon: "🪨", rare: false, label: { ru: "Стойкий", en: "Steadfast", hy: "Կայուն" } },
+  { achievementId: "court_10", color: "#e0954a", icon: "🏛️", rare: false, label: { ru: "Завсегдатай суда", en: "Court Regular", hy: "Դատարանի մշտական այցելու" } },
   { achievementId: "mafia_win_1", color: "#4bb8ac", icon: "🎭", rare: false, label: { ru: "Игрок Мафии", en: "Mafia Player", hy: "Մաֆիայի խաղացող" } },
   { achievementId: "first_steps", color: "#e8b545", icon: "🌱", rare: false, label: { ru: "Новичок", en: "Newcomer", hy: "Սկսնակ" } },
 ];
@@ -5907,6 +6185,14 @@ function ProfilePanel({ onClose, initialTab }) {
     ["profile.mafiaSaves", (profile && profile.mafia_saves) || 0],
     ["profile.mafiaKills", (profile && profile.mafia_kills) || 0],
   ];
+  const courtTiles = [
+    ["profile.courtPlayed", Math.max(courtPlayed, (profile && profile.court_cases) || 0)],
+    ["profile.courtJudge", (profile && profile.court_judge) || 0],
+    ["profile.courtJuror", (profile && profile.court_juror) || 0],
+    ["profile.courtAcquitted", (profile && profile.court_acquitted) || 0],
+    ["profile.courtJustice", (profile && profile.court_justice) || 0],
+    ["profile.courtMajority", (profile && profile.court_majority) || 0],
+  ];
   const myTitle = getPlayerTitle(profile);
 
   return (
@@ -6077,6 +6363,20 @@ function ProfilePanel({ onClose, initialTab }) {
                   </div>
                 )}
 
+                {courtTiles[0][1] > 0 && (
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2.5">{t("profile.courtTitle")}</div>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      {courtTiles.map(([labelKey, value]) => (
+                        <div key={labelKey} className="bg-[var(--surface-2)] rounded-2xl p-3 text-center">
+                          <div className="font-display text-2xl leading-none mb-1.5" style={{ color: "var(--court)" }}>{value}</div>
+                          <div className="text-[10px] uppercase tracking-wide text-[var(--text-faint)] leading-tight">{t(labelKey)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {mafiaGames > 0 && (
                   <div>
                     <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2.5">{t("profile.mafiaTitle")}</div>
@@ -6099,6 +6399,7 @@ function ProfilePanel({ onClose, initialTab }) {
                   {[
                     ["achievements.groupGeneral", ACHIEVEMENTS.filter((a) => !a.group)],
                     ["achievements.groupMafia", ACHIEVEMENTS.filter((a) => a.group === "mafia")],
+                    ["achievements.groupCourt", ACHIEVEMENTS.filter((a) => a.group === "court")],
                   ].map(([groupKey, list]) => (
                     <div key={groupKey} className="mb-4 last:mb-0">
                       <div className="text-[11px] text-[var(--text-dim)] mb-2">
@@ -7177,14 +7478,36 @@ function Hub({ state, dispatch }) {
     };
   }, []);
 
+  // Rooms waiting for players right now, per game -- shown on the cards so
+  // someone who came alone sees there is a game to walk into.
+  const [openCounts, setOpenCounts] = useState({});
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const rooms = await fetchOpenRooms(null);
+      if (cancelled) return;
+      const counts = {};
+      rooms.forEach((room) => {
+        counts[room.game] = (counts[room.game] || 0) + 1;
+      });
+      setOpenCounts(counts);
+    };
+    load();
+    const timer = setInterval(load, OPEN_ROOMS_HUB_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
+
   const games = hubGameOrder(GAMES).map((g) => ({
     id: g.id,
     isNew: !!g.isNew,
     title: t(g.titleKey),
     subtitle: t(g.subtitleKey),
     Icon: g.Icon,
-    badge: g.badgeKey ? t(g.badgeKey) : undefined,
-    badgeClassName: g.badgeClassName,
+    badge: openCounts[g.id] > 0 ? t("open.hubBadge").replace("{n}", openCounts[g.id]) : g.badgeKey ? t(g.badgeKey) : undefined,
+    badgeClassName: openCounts[g.id] > 0 ? "bg-[var(--doctor)]/20 text-[var(--doctor)]" : g.badgeClassName,
     onClick: () => dispatch({ type: g.openAction }),
   }));
 
@@ -11117,6 +11440,7 @@ function useMafiaRoom() {
   }, []);
 
   const handleCreate = useCallback(async (name) => {
+    rememberRoomName(name);
     setBusy(true);
     setError(null);
     const { data, requestId } = await rpc("mafia_create_room", { p_name: name, p_can_speak: mafiaCanSpeak() });
@@ -11126,6 +11450,7 @@ function useMafiaRoom() {
   }, [rpc, enter, describeError]);
 
   const handleJoin = useCallback(async (name, joinCode) => {
+    rememberRoomName(name);
     setBusy(true);
     setError(null);
     const { data, requestId } = await rpc("mafia_join_room", { p_code: joinCode, p_name: name, p_can_speak: mafiaCanSpeak() });
@@ -11348,7 +11673,7 @@ const MAFIA_ROOM_RULES = {
 function MafiaRoomMenu({ dispatch, onCreate, onJoin, busy, error, initialCode }) {
   const t = useT();
   const [mode, setMode] = useState(initialCode ? "join" : null);
-  const [name, setName] = useState(() => (isInsideTelegram() ? getPlayerName() || "" : ""));
+  const [name, setName] = useState(() => getPlayerName() || "");
   const [code, setCode] = useState(initialCode || "");
   const [rulesOpen, setRulesOpen] = useState(false);
   const inputClass = "w-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-4 py-3.5 text-[var(--text)] outline-none focus:border-[var(--accent)]";
@@ -11383,6 +11708,14 @@ function MafiaRoomMenu({ dispatch, onCreate, onJoin, busy, error, initialCode })
               <div className="text-sm text-[var(--text-dim)]">{t("mroom.joinDesc")}</div>
             </button>
             {error && <p className="text-sm text-[var(--danger)] text-center">{error}</p>}
+            <OpenRoomsList
+              game="mafia"
+              color="var(--accent)"
+              onPick={(picked) => {
+                setCode(picked.code);
+                setMode("join");
+              }}
+            />
           </div>
         )}
 
@@ -11556,6 +11889,15 @@ function MafiaRoomLobby({ room, dispatch }) {
   actRef.current = act;
   const settings = { ...(view.settings || {}), ...(draft || {}) };
   const count = view.players.length;
+  // Open room: announced on the public list while it waits in the lobby.
+  useOpenRoomBeacon({
+    game: "mafia",
+    code,
+    active: !!(view.is_host && view.status === "lobby" && settings.public),
+    name: view.me ? view.me.name : "",
+    players: count,
+    max: 20,
+  });
   const maxMafia = Math.max(1, Math.floor((Math.max(count, MAFIA_ROOM_MIN_PLAYERS) - 1) / 2));
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -11691,6 +12033,15 @@ function MafiaRoomLobby({ room, dispatch }) {
               ))}
             </div>
             <RoleToggle
+              Icon={IconGlobe}
+              color="var(--accent-strong)"
+              bg="rgba(232,181,69,.14)"
+              title={t("open.switchTitle")}
+              description={t("open.switchDesc")}
+              checked={!!settings.public}
+              onChange={() => setSetting({ public: !settings.public })}
+            />
+            <RoleToggle
               Icon={IconEyeOff}
               color="var(--accent-strong)"
               bg="rgba(232,181,69,.14)"
@@ -11729,6 +12080,7 @@ function MafiaRoomLobby({ room, dispatch }) {
             {settings.hide_roles && <p className="mt-1 text-[var(--accent-strong)]">{t("mroom.hideRolesOn")}</p>}
             {settings.ghosts === false && <p className="mt-1">{t("mroom.ghostsOff")}</p>}
             {settings.stories !== false && <p className="mt-1">{t("mroom.stories")}</p>}
+            {settings.public && <p className="mt-1">{t("open.guestNote")}</p>}
           </div>
         )}
       </div>
@@ -12584,7 +12936,7 @@ function ConnStatusBanner({ status }) {
 function BunkerMenu({ dispatch, onCreate, onJoin, busy, error, initialCode }) {
   const t = useT();
   const [mode, setMode] = useState(initialCode ? "join" : null); // null | 'create' | 'join'
-  const [name, setName] = useState("");
+  const [name, setName] = useState(() => getPlayerName() || "");
   const [code, setCode] = useState(initialCode || "");
   const [rulesOpen, setRulesOpen] = useState(false);
 
@@ -12622,6 +12974,14 @@ function BunkerMenu({ dispatch, onCreate, onJoin, busy, error, initialCode }) {
               <div className="font-display text-xl mb-1">{t("bunker.joinByCode")}</div>
               <div className="text-sm text-[var(--text-dim)]">{t("bunker.joinByCodeDesc")}</div>
             </button>
+            <OpenRoomsList
+              game="bunker"
+              color="var(--bunker)"
+              onPick={(picked) => {
+                setCode(picked.code);
+                setMode("join");
+              }}
+            />
           </div>
         )}
 
@@ -12687,7 +13047,7 @@ function BunkerMenu({ dispatch, onCreate, onJoin, busy, error, initialCode }) {
   );
 }
 
-function BunkerLobby({ room, roomCode, playerId, dispatch, onStart, error, busy, connStatus }) {
+function BunkerLobby({ room, roomCode, playerId, dispatch, onStart, onTogglePublic, error, busy, connStatus }) {
   const t = useT();
   const players = room && room.players ? room.players : {};
   const orderedIds = Object.keys(players).sort((a, b) => (players[a].joinedAt || 0) - (players[b].joinedAt || 0));
@@ -12745,6 +13105,7 @@ function BunkerLobby({ room, roomCode, playerId, dispatch, onStart, error, busy,
           </div>
         </div>
         <QrCodeModal open={qrOpen} onClose={() => setQrOpen(false)} code={roomCode} game="bunker" gameLabel={t("bunker.title")} />
+        <OpenRoomSwitch isHost={isHost} isPublic={!!(room && room.isPublic)} onToggle={onTogglePublic} color="var(--bunker)" />
 
         <div className="flex flex-col gap-2.5 mb-4">
           {orderedIds.map((pid) => {
@@ -13241,7 +13602,7 @@ function BunkerApp({ dispatch }) {
       const players = { ...current.players };
       const existing = players[payload.playerId];
       players[payload.playerId] = {
-        name: (existing && existing.name) || (payload.name || t("common.player")).trim().slice(0, 20) || t("common.player"),
+        name: (existing && existing.name) || moderateDisplayNameClient(payload.name).slice(0, 20) || t("common.player"),
         isHost: payload.playerId === current.hostId,
         joinedAt: existing ? existing.joinedAt : Date.now(),
         exiled: existing ? existing.exiled : false,
@@ -13276,7 +13637,7 @@ function BunkerApp({ dispatch }) {
 
   const {
     roomCode, room, error, busy, connStatus, playerId, inviteCode,
-    roomRef, handleCreate, handleJoin, broadcastState, sendEvent,
+    roomRef, togglePublic, handleCreate, handleJoin, broadcastState, sendEvent,
   } = useGameRoom({
     gameKey: "bunker",
     genPlayerId: () => genRoomPlayerId("p"),
@@ -13286,7 +13647,7 @@ function BunkerApp({ dispatch }) {
       hostId: playerId,
       catastropheIndex: null,
       players: {
-        [playerId]: { name: name.trim().slice(0, 20) || t("bunker.host"), isHost: true, joinedAt: Date.now(), exiled: false, dossier: null },
+        [playerId]: { name: moderateDisplayNameClient(name).slice(0, 20) || t("bunker.host"), isHost: true, joinedAt: Date.now(), exiled: false, dossier: null },
       },
     }),
     hostEvents,
@@ -13414,6 +13775,7 @@ function BunkerApp({ dispatch }) {
       playerId={playerId}
       dispatch={dispatch}
       onStart={handleStart}
+      onTogglePublic={togglePublic}
       error={error}
       busy={busy}
       connStatus={connStatus}
@@ -13445,6 +13807,26 @@ const COURT_CASES = [
     description: { ru: "Праздничный торт, купленный в подарок начальнику на юбилей, был найден наполовину съеденным в комнате отдыха за час до вручения.", en: "The cake bought as a birthday gift for the boss was found half-eaten in the break room, an hour before it was supposed to be presented.", hy: "Պետի հոբելյանի համար նվեր գնված տոնական տորթը հանգստի սենյակում հայտնաբերվել է կիսակեր՝ հանձնումից մեկ ժամ առաջ։" } },
   { title: { ru: "Дело о секретном рецепте бабушки", en: "The Case of Grandma's Secret Recipe", hy: "Տատիկի գաղտնի բաղադրատոմսի գործը" },
     description: { ru: "Фамильный рецепт пирога, который семья хранила три поколения, оказался опубликован в интернете под чужим именем за неделю до семейного ужина.", en: "The family pie recipe, kept secret for three generations, turned up published online under someone else's name a week before the family dinner.", hy: "Ընտանեկան կարկանդակի բաղադրատոմսը, որը երեք սերունդ գաղտնի էր պահվել, հայտնվել է ինտերնետում ուրիշի անունով՝ ընտանեկան ընթրիքից մեկ շաբաթ առաջ։" } },
+  { title: { ru: "Дело о пропавшем пульте", en: "The Case of the Missing Remote", hy: "Անհետացած հեռակառավարման վահանակի գործը" },
+    description: { ru: "Пульт от телевизора исчез прямо во время финала, а через час нашёлся в морозилке, аккуратно завёрнутый в фольгу.", en: "The TV remote vanished right in the middle of the final and turned up an hour later in the freezer, neatly wrapped in foil.", hy: "Հեռուստացույցի վահանակն անհետացավ հենց եզրափակչի ժամանակ, իսկ մեկ ժամ անց գտնվեց սառցախցիկում՝ խնամքով փաթաթված փայլաթիթեղի մեջ։" } },
+  { title: { ru: "Дело о чужом Wi‑Fi", en: "The Case of the Borrowed Wi‑Fi", hy: "Ուրիշի Wi‑Fi-ի գործը" },
+    description: { ru: "Весь подъезд месяц пользовался чужим Wi‑Fi, пока хозяин не переименовал сеть в «Я знаю, кто вы».", en: "The whole building used someone else's Wi‑Fi for a month, until the owner renamed the network “I know who you are”.", hy: "Ամբողջ մուտքը մեկ ամիս օգտվում էր ուրիշի Wi‑Fi-ից, մինչև տերը ցանցի անունը փոխեց՝ «Ես գիտեմ, թե ով եք դուք»։" } },
+  { title: { ru: "Дело о коте-наследнике", en: "The Case of the Cat Heir", hy: "Ժառանգ կատվի գործը" },
+    description: { ru: "Бабушка завещала квартиру коту, и теперь родственники спорят, кто из них законный опекун наследника.", en: "Grandma left her apartment to the cat, and now the relatives are arguing over which of them is the heir's lawful guardian.", hy: "Տատիկը բնակարանը կտակել է կատվին, և հիմա հարազատները վիճում են, թե իրենցից ով է ժառանգի օրինական խնամակալը։" } },
+  { title: { ru: "Дело о съеденном отчёте", en: "The Case of the Eaten Report", hy: "Կերված հաշվետվության գործը" },
+    description: { ru: "Годовой отчёт пропал за час до сдачи; сотрудник утверждает, что его съела офисная собака, которой в офисе никогда не было.", en: "The annual report disappeared an hour before the deadline; the employee claims it was eaten by the office dog, which the office has never had.", hy: "Տարեկան հաշվետվությունը կորավ հանձնելուց մեկ ժամ առաջ. աշխատակիցը պնդում է, որ այն կերել է գրասենյակի շունը, որը գրասենյակում երբեք չի եղել։" } },
+  { title: { ru: "Дело о свадебном торте", en: "The Case of the Wedding Cake", hy: "Հարսանեկան տորթի գործը" },
+    description: { ru: "Свадебный торт на три яруса приехал уже без верхнего, а курьер уверяет, что так и было задумано.", en: "The three-tier wedding cake arrived without its top tier, and the courier insists that was the design all along.", hy: "Եռահարկ հարսանեկան տորթը հասավ արդեն առանց վերին հարկի, իսկ առաքիչը հավատացնում է, որ հենց այդպես էլ նախատեսված էր։" } },
+  { title: { ru: "Дело о соседской дрели", en: "The Case of the Neighbor's Drill", hy: "Հարևանի դրելի գործը" },
+    description: { ru: "Сосед сверлил стену каждое воскресенье в семь утра целый год, но ни одной полки у него в квартире так и не появилось.", en: "A neighbor drilled into the wall at seven every Sunday morning for a whole year, yet not a single shelf has appeared in his apartment.", hy: "Հարևանը մի ամբողջ տարի ամեն կիրակի առավոտյան ժամը յոթին պատ էր ծակում, բայց նրա բնակարանում այդպես էլ ոչ մի դարակ չհայտնվեց։" } },
+  { title: { ru: "Дело о подменённом чемодане", en: "The Case of the Swapped Suitcase", hy: "Փոխված ճամպրուկի գործը" },
+    description: { ru: "В аэропорту пассажир забрал чужой чемодан, неделю носил чужие вещи и теперь отказывается их возвращать, потому что они ему больше идут.", en: "A passenger took the wrong suitcase at the airport, wore a stranger's clothes for a week and now refuses to return them because they suit him better.", hy: "Օդանավակայանում ուղևորը վերցրեց ուրիշի ճամպրուկը, մեկ շաբաթ կրեց ուրիշի հագուստը և հիմա հրաժարվում է վերադարձնել, որովհետև այն իրեն ավելի է սազում։" } },
+  { title: { ru: "Дело о школьном хомяке", en: "The Case of the Class Hamster", hy: "Դպրոցական համստերի գործը" },
+    description: { ru: "Школьный хомяк на каникулах гостил у ученика и вернулся в класс в два раза крупнее и другого цвета.", en: "The class hamster spent the holidays at a pupil's home and came back twice the size and a different color.", hy: "Դպրոցի համստերը արձակուրդին հյուրընկալվեց աշակերտներից մեկի տանը և դասարան վերադարձավ երկու անգամ ավելի մեծ ու այլ գույնի։" } },
+  { title: { ru: "Дело о кнопках лифта", en: "The Case of the Elevator Buttons", hy: "Վերելակի կոճակների գործը" },
+    description: { ru: "Кто-то нажал в лифте все двадцать пять кнопок сразу, из-за чего весь дом опоздал на работу.", en: "Someone pressed all twenty-five elevator buttons at once, making the entire building late for work.", hy: "Ինչ-որ մեկը վերելակում միանգամից սեղմեց բոլոր քսանհինգ կոճակները, ինչի պատճառով ամբողջ շենքն ուշացավ աշխատանքից։" } },
+  { title: { ru: "Дело о дачных кабачках", en: "The Case of the Garden Zucchini", hy: "Ամառանոցի դդմիկների գործը" },
+    description: { ru: "С дачного участка за ночь исчезли все кабачки, а наутро у каждого соседа на крыльце лежало по одному — с запиской «Угощайтесь».", en: "Every zucchini vanished from a garden plot overnight, and in the morning each neighbor found one on the porch with a note: “Help yourself”.", hy: "Ամառանոցի հողամասից մեկ գիշերում անհետացան բոլոր դդմիկները, իսկ առավոտյան յուրաքանչյուր հարևանի շեմին դրված էր մեկական՝ «Հյուրասիրվեք» գրությամբ։" } },
 ];
 
 const COURT_EVIDENCE_GUILTY = {
@@ -14007,7 +14389,7 @@ function CourtRulesCard() {
 function CourtMenu({ dispatch, onCreate, onJoin, busy, error, initialCode }) {
   const t = useT();
   const [mode, setMode] = useState(initialCode ? "join" : null); // null | 'create' | 'join'
-  const [name, setName] = useState("");
+  const [name, setName] = useState(() => getPlayerName() || "");
   const [code, setCode] = useState(initialCode || "");
   const [rulesOpen, setRulesOpen] = useState(false);
 
@@ -14045,6 +14427,14 @@ function CourtMenu({ dispatch, onCreate, onJoin, busy, error, initialCode }) {
               <div className="font-display text-xl mb-1">{t("court.joinByCode")}</div>
               <div className="text-sm text-[var(--text-dim)]">{t("court.joinByCodeDesc")}</div>
             </button>
+            <OpenRoomsList
+              game="court"
+              color="var(--court)"
+              onPick={(picked) => {
+                setCode(picked.code);
+                setMode("join");
+              }}
+            />
           </div>
         )}
 
@@ -14110,7 +14500,7 @@ function CourtMenu({ dispatch, onCreate, onJoin, busy, error, initialCode }) {
   );
 }
 
-function CourtLobby({ room, roomCode, playerId, dispatch, onStart, error, busy, connStatus }) {
+function CourtLobby({ room, roomCode, playerId, dispatch, onStart, onTogglePublic, error, busy, connStatus }) {
   const t = useT();
   const players = room && room.players ? room.players : {};
   const orderedIds = Object.keys(players).sort((a, b) => (players[a].joinedAt || 0) - (players[b].joinedAt || 0));
@@ -14169,6 +14559,7 @@ function CourtLobby({ room, roomCode, playerId, dispatch, onStart, error, busy, 
           </div>
         </div>
         <QrCodeModal open={qrOpen} onClose={() => setQrOpen(false)} code={roomCode} game="court" gameLabel={t("court.title")} />
+        <OpenRoomSwitch isHost={isHost} isPublic={!!(room && room.isPublic)} onToggle={onTogglePublic} color="var(--court)" />
 
         <div className="flex flex-col gap-2.5 mb-4">
           {orderedIds.map((pid) => {
@@ -14596,10 +14987,25 @@ function CourtGame({ room, roomCode, playerId, dispatch, onReveal, onVote, onTal
   const hasVerdict = !!(room && room.verdict);
   const casesDone = room && room.verdictHistory ? room.verdictHistory.length : 0;
   const seenRef = useRef({ voteRunning, hasVerdict, casesDone });
+  const [newAchievements, setNewAchievements] = useState([]);
+  const latestRef = useRef(null);
+  latestRef.current = { me, players };
   useEffect(() => {
     const seen = seenRef.current;
     if (casesDone > seen.casesDone) setTab("evidence");
     else if ((voteRunning && !seen.voteRunning) || (hasVerdict && !seen.hasVerdict)) setTab("table");
+    // The verdict has just been issued: this case goes into the player's
+    // statistics, and whatever it unlocks is celebrated right here.
+    if (hasVerdict && !seen.hasVerdict) {
+      const now = latestRef.current;
+      recordCourtCase(now.me, now.players).then(async (counted) => {
+        if (!counted) return;
+        const profile = await fetchMyProfile();
+        if (!profile) return;
+        const fresh = detectNewlyUnlockedAchievements(profile);
+        if (fresh.length > 0) setNewAchievements((prev) => prev.concat(fresh));
+      });
+    }
     seenRef.current = { voteRunning, hasVerdict, casesDone };
   }, [voteRunning, hasVerdict, casesDone]);
 
@@ -14614,6 +15020,9 @@ function CourtGame({ room, roomCode, playerId, dispatch, onReveal, onVote, onTal
       />
       <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("court.rulesTitle")} color="var(--court)" rules={useRules(COURT_RULES)} />
       <ConnStatusBanner status={connStatus} />
+      {newAchievements.length > 0 && (
+        <AchievementUnlockToast achievement={newAchievements[0]} onDone={() => setNewAchievements((prev) => prev.slice(1))} />
+      )}
       <FadeIn key={tab} className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-4">
         {tab === "evidence" ? (
           <CourtDossierTab me={me} room={room} onReveal={onReveal} />
@@ -14649,7 +15058,7 @@ function CourtApp({ dispatch }) {
       const players = { ...current.players };
       const existing = players[payload.playerId];
       players[payload.playerId] = {
-        name: (existing && existing.name) || (payload.name || t("court.participant")).trim().slice(0, 20) || t("court.participant"),
+        name: (existing && existing.name) || moderateDisplayNameClient(payload.name).slice(0, 20) || t("court.participant"),
         isHost: payload.playerId === current.hostId,
         joinedAt: existing ? existing.joinedAt : Date.now(),
         role: existing ? existing.role : null,
@@ -14696,7 +15105,7 @@ function CourtApp({ dispatch }) {
 
   const {
     roomCode, room, error, busy, connStatus, playerId, inviteCode,
-    roomRef, handleCreate, handleJoin, broadcastState, sendEvent,
+    roomRef, togglePublic, handleCreate, handleJoin, broadcastState, sendEvent,
   } = useGameRoom({
     gameKey: "court",
     genPlayerId: () => genRoomPlayerId("c"),
@@ -14708,7 +15117,7 @@ function CourtApp({ dispatch }) {
       tally: null,
       verdict: null,
       players: {
-        [playerId]: { name: name.trim().slice(0, 20) || t("court.judge"), isHost: true, joinedAt: Date.now(), role: null, evidence: null, vote: null },
+        [playerId]: { name: moderateDisplayNameClient(name).slice(0, 20) || t("court.judge"), isHost: true, joinedAt: Date.now(), role: null, evidence: null, vote: null },
       },
     }),
     hostEvents,
@@ -14822,6 +15231,7 @@ function CourtApp({ dispatch }) {
       playerId={playerId}
       dispatch={dispatch}
       onStart={handleStart}
+      onTogglePublic={togglePublic}
       error={error}
       busy={busy}
       connStatus={connStatus}
