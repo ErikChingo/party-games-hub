@@ -1383,6 +1383,11 @@ function rememberRoomName(name) {
 /* the lobby with "Open room" on (see supabase/open_rooms.sql); a     */
 /* room that stops announcing drops off the list by itself.           */
 /* ---------------------------------------------------------------- */
+// Bunker/Court: how long guests wait for a vanished host before the next
+// player takes the room over (shorter if the host left on purpose).
+const HOST_TAKEOVER_MS = 30000;
+const HOST_TAKEOVER_AFTER_LEAVE_MS = 5000;
+const HOST_TAKEOVER_STEP_MS = 4000;
 const OPEN_ROOM_IDENTITY_KEY = "hatsit_open_room_identity_v1";
 const OPEN_ROOM_BEAT_MS = 15000;
 const OPEN_ROOMS_REFRESH_MS = 10000;
@@ -1537,6 +1542,27 @@ function OpenRoomSwitch({ isHost, isPublic, onToggle, color }) {
         <span className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all" style={{ left: isPublic ? "22px" : "2px" }} />
       </span>
     </button>
+  );
+}
+
+// Players who walked out of a Bunker/Court game stay in the room state
+// (their role and votes are part of the case) but are marked; a new game
+// or a new case is dealt only to the ones still here.
+function withoutLeftPlayers(players) {
+  const out = {};
+  Object.keys(players || {}).forEach((pid) => {
+    if (players[pid] && !players[pid].left) out[pid] = players[pid];
+  });
+  return out;
+}
+// "left" / "offline" next to a name in Bunker and Court.
+function PlayerGoneTag({ player }) {
+  const t = useT();
+  if (!player || (!player.left && !player.away)) return null;
+  return (
+    <span className="text-[10px] uppercase tracking-widest text-[var(--text-faint)] bg-[var(--surface-2)] px-2 py-0.5 rounded-full shrink-0">
+      {t(player.left ? "room.left" : "room.away")}
+    </span>
   );
 }
 
@@ -1911,7 +1937,7 @@ function makeRoomSessionStore(storageKey) {
 }
 
 function useGameRoom(config) {
-  const { gameKey, genPlayerId, genRoomCode, buildInitialRoom, hostEvents, messages } = config;
+  const { gameKey, genPlayerId, genRoomCode, buildInitialRoom, hostEvents, messages, onHostTakeover } = config;
   const session = makeRoomSessionStore(gameKey + "Session");
 
   const [roomCode, setRoomCode] = useState(null);
@@ -1955,6 +1981,10 @@ function useGameRoom(config) {
   // or throw up a scary error banner nobody can see anyway once in-game.
   const initializedRef = useRef(false);
   const hostSeenRef = useRef(false);
+  const guestsSeenRef = useRef(new Set());
+  const takeoverTimerRef = useRef(null);
+  const onHostTakeoverRef = useRef(onHostTakeover);
+  onHostTakeoverRef.current = onHostTakeover;
   // hostEvents/messages come from the caller's render and can reference that
   // render's `t()` closures — refs keep attachChannel's listeners (registered
   // once per channel, not once per render) reading the latest versions.
@@ -2004,6 +2034,18 @@ function useGameRoom(config) {
 
     channel.on("broadcast", { event: gameKey + "_state" }, ({ payload }) => {
       if (!payload || !payload.room) return;
+      // After a takeover the room carries a newer hostSince. An older copy
+      // (a former host coming back with what it had saved) is ignored, and
+      // the real host answers it with the current state.
+      const mine = roomRef.current;
+      if (mine && mine.hostSince && payload.room.hostSince && payload.room.hostSince < mine.hostSince) {
+        if (isHostRef.current && mine.hostId === playerId) broadcastState(mine);
+        return;
+      }
+      if (isHostRef.current && payload.room.hostId && payload.room.hostId !== playerId) {
+        // Someone took over while this phone was away: carry on as a guest.
+        setTimeout(() => becomeGuest(code), 0);
+      }
       if (joinTimeoutRef.current) {
         clearTimeout(joinTimeoutRef.current);
         joinTimeoutRef.current = null;
@@ -2021,7 +2063,10 @@ function useGameRoom(config) {
     // the next state broadcast (host is back) clears this again.
     if (!isHostChannel) {
       channel.on("broadcast", { event: gameKey + "_host_left" }, () => {
-        if (initializedRef.current) setConnStatus("host_left");
+        if (!initializedRef.current) return;
+        setConnStatus("host_left");
+        // The host went back to the menu on purpose: no point waiting long.
+        scheduleTakeover(HOST_TAKEOVER_AFTER_LEAVE_MS);
       });
       // The goodbye message above is not reliably delivered when a page is
       // closing, so the real signal is presence: the host marks itself on
@@ -2039,10 +2084,53 @@ function useGameRoom(config) {
         }
         if (hostHere) {
           hostSeenRef.current = true;
+          cancelTakeover();
           setConnStatus((status) => (status === "host_left" ? "idle" : status));
         } else if (hostSeenRef.current && initializedRef.current) {
           setConnStatus("host_left");
+          scheduleTakeover(HOST_TAKEOVER_MS);
         }
+      });
+    }
+
+    // A guest who goes back to the menu says so; the host takes them out of
+    // the lobby, or marks them "left" in a running game. Guests also mark
+    // themselves on the channel, so a guest who just closed the page shows
+    // as "offline" (only once they have been seen at least once, so a guest
+    // on an older version of the page is never shown as gone).
+    if (isHostChannel) {
+      channel.on("broadcast", { event: gameKey + "_leave" }, ({ payload }) => {
+        const current = roomRef.current;
+        const pid = payload && payload.playerId;
+        if (!current || !current.players || !pid || !current.players[pid] || pid === current.hostId) return;
+        const players = { ...current.players };
+        if (current.status === "lobby") delete players[pid];
+        else players[pid] = { ...players[pid], left: true, away: false };
+        broadcastState({ ...current, players });
+      });
+      channel.on("presence", { event: "sync" }, () => {
+        const current = roomRef.current;
+        if (!current || !current.players) return;
+        let here = null;
+        try {
+          const state = channel.presenceState() || {};
+          here = new Set();
+          Object.keys(state).forEach((key) => (state[key] || []).forEach((entry) => entry && entry.player && here.add(entry.player)));
+        } catch (e) {
+          return;
+        }
+        here.forEach((pid) => guestsSeenRef.current.add(pid));
+        let changed = false;
+        const players = { ...current.players };
+        Object.keys(players).forEach((pid) => {
+          if (pid === current.hostId || !guestsSeenRef.current.has(pid)) return;
+          const away = !here.has(pid);
+          if (!!players[pid].away !== away) {
+            players[pid] = { ...players[pid], away };
+            changed = true;
+          }
+        });
+        if (changed) broadcastState({ ...current, players });
       });
     }
 
@@ -2100,6 +2188,7 @@ function useGameRoom(config) {
       const channel = attachChannel(saved.code, false);
       channel.subscribe((status) => {
         if (status === "SUBSCRIBED") {
+          markGuestPresent(channel);
           channel.send({ type: "broadcast", event: gameKey + "_join", payload: { playerId, name: messagesRef.current.defaultName } });
           joinTimeoutRef.current = setTimeout(() => {
             // No response — the room is probably gone. Fall back to the
@@ -2120,9 +2209,133 @@ function useGameRoom(config) {
 
   // Tells the guests when the host goes away (back to the Hub, or the page
   // is closed or reloaded).
+  // ---- Host takeover: if the host is gone, the next player on line runs
+  // the room. Every phone holds the full room state (it is broadcast to
+  // all), so the game simply carries on from where it was.
+  function cancelTakeover() {
+    if (takeoverTimerRef.current) {
+      clearTimeout(takeoverTimerRef.current);
+      takeoverTimerRef.current = null;
+    }
+  }
+  // Every guest waits, but in line: the first in line after `ms`, the
+  // next one a few seconds later, and so on -- so two phones never take
+  // the room over at the same moment.
+  function scheduleTakeover(ms) {
+    if (takeoverTimerRef.current) return;
+    const line = takeoverLine(presentPlayers());
+    const place = line.indexOf(playerId);
+    takeoverTimerRef.current = setTimeout(tryTakeover, ms + (place < 0 ? line.length : place) * HOST_TAKEOVER_STEP_MS);
+  }
+  function presentPlayers() {
+    const present = new Set([playerId]);
+    try {
+      const state = (channelRef.current && channelRef.current.presenceState()) || {};
+      Object.keys(state).forEach((key) => (state[key] || []).forEach((entry) => entry && entry.player && present.add(entry.player)));
+    } catch (e) {}
+    return present;
+  }
+  function takeoverLine(present) {
+    const current = roomRef.current;
+    if (!current || !current.players) return [];
+    return Object.keys(current.players)
+      .filter((pid) => pid !== current.hostId && present.has(pid) && !current.players[pid].left)
+      .sort((a, b) => (current.players[a].joinedAt || 0) - (current.players[b].joinedAt || 0));
+  }
+  function tryTakeover() {
+    takeoverTimerRef.current = null;
+    const channel = channelRef.current;
+    const current = roomRef.current;
+    if (!channel || !current || !current.players || isHostRef.current) return;
+    let present = null;
+    try {
+      const state = channel.presenceState() || {};
+      present = new Set();
+      let hostHere = false;
+      Object.keys(state).forEach((key) =>
+        (state[key] || []).forEach((entry) => {
+          if (!entry) return;
+          if (entry.host) hostHere = true;
+          if (entry.player) present.add(entry.player);
+        })
+      );
+      if (hostHere) return;
+    } catch (e) {
+      return;
+    }
+    present.add(playerId);
+    const successor = takeoverLine(present)[0];
+    if (successor !== playerId) {
+      // Someone else should take over; check again later in case they are gone too.
+      scheduleTakeover(HOST_TAKEOVER_MS);
+      return;
+    }
+    takeOver(current);
+  }
+  function takeOver(current) {
+    const code = roomCodeRef.current;
+    if (!code) return;
+    const oldHost = current.hostId;
+    const players = { ...current.players };
+    if (players[oldHost]) players[oldHost] = { ...players[oldHost], isHost: false, away: true };
+    players[playerId] = { ...players[playerId], isHost: true, away: false, left: false };
+    let next = { ...current, hostId: playerId, hostSince: Date.now(), players };
+    if (onHostTakeoverRef.current) next = onHostTakeoverRef.current(next, oldHost, playerId) || next;
+    isHostRef.current = true;
+    hostSeenRef.current = false;
+    const old = channelRef.current;
+    channelRef.current = null;
+    try {
+      if (old) supabaseClient.removeChannel(old);
+    } catch (e) {}
+    setRoom(next);
+    roomRef.current = next;
+    session.persist(code, true, next);
+    const channel = attachChannel(code, true);
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        markHostPresent(channel);
+        setConnStatus("idle");
+        broadcastState(roomRef.current || next);
+      }
+    });
+  }
+  // A former host whose room was taken over rejoins as an ordinary player.
+  function becomeGuest(code) {
+    if (!isHostRef.current) return;
+    isHostRef.current = false;
+    hostSeenRef.current = false;
+    const old = channelRef.current;
+    channelRef.current = null;
+    try {
+      if (old) supabaseClient.removeChannel(old);
+    } catch (e) {}
+    session.persist(code, false, null);
+    const channel = attachChannel(code, false);
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        markGuestPresent(channel);
+        const me = roomRef.current && roomRef.current.players && roomRef.current.players[playerId];
+        channel.send({ type: "broadcast", event: gameKey + "_join", payload: { playerId, name: (me && me.name) || messagesRef.current.defaultName } });
+      }
+    });
+  }
+
+  function markGuestPresent(channel) {
+    try {
+      if (channel && typeof channel.track === "function") channel.track({ player: playerId });
+    } catch (e) {}
+  }
+  function announceGuestLeft() {
+    try {
+      if (!isHostRef.current && channelRef.current && roomRef.current) {
+        channelRef.current.send({ type: "broadcast", event: gameKey + "_leave", payload: { playerId } });
+      }
+    } catch (e) {}
+  }
   function markHostPresent(channel) {
     try {
-      if (channel && typeof channel.track === "function") channel.track({ host: true });
+      if (channel && typeof channel.track === "function") channel.track({ host: true, player: playerId });
     } catch (e) {}
   }
   function announceHostLeft() {
@@ -2139,7 +2352,11 @@ function useGameRoom(config) {
   useEffect(() => {
     return () => {
       if (joinTimeoutRef.current) clearTimeout(joinTimeoutRef.current);
+      cancelTakeover();
       announceHostLeft();
+      // Unmount = the player went back to the menu on purpose (a reload
+      // keeps the room), so a guest leaves for real.
+      announceGuestLeft();
       if (channelRef.current) {
         supabaseClient.removeChannel(channelRef.current);
         channelRef.current = null;
@@ -2159,7 +2376,7 @@ function useGameRoom(config) {
     isHostRef.current = true;
     initializedRef.current = false;
     const code = genRoomCode();
-    const initialRoom = buildInitialRoom(playerId, name);
+    const initialRoom = { ...buildInitialRoom(playerId, name), hostSince: Date.now() };
     const channel = attachChannel(code, true);
     channel.subscribe((status) => {
       if (status === "SUBSCRIBED") {
@@ -2206,6 +2423,7 @@ function useGameRoom(config) {
     const channel = attachChannel(code, false);
     channel.subscribe((status) => {
       if (status === "SUBSCRIBED") {
+        markGuestPresent(channel);
         channel.send({ type: "broadcast", event: gameKey + "_join", payload: { playerId, name: name.trim().slice(0, 20) } });
         if (!initializedRef.current) {
           joinTimeoutRef.current = setTimeout(() => {
@@ -2236,9 +2454,17 @@ function useGameRoom(config) {
     code: roomCode,
     active: !!(room && room.status === "lobby" && room.isPublic && room.hostId === playerId),
     name: publicHost ? publicHost.name : "",
-    players: room && room.players ? Object.keys(room.players).length : 1,
+    players: room && room.players ? Object.keys(room.players).filter((pid) => !room.players[pid].away).length : 1,
     max: null,
   });
+  // Host-only, lobby: take out a player who is gone and not coming back.
+  function removePlayer(pid) {
+    const current = roomRef.current;
+    if (!current || current.hostId !== playerId || current.status !== "lobby" || !current.players[pid] || pid === current.hostId) return;
+    const players = { ...current.players };
+    delete players[pid];
+    broadcastState({ ...current, players });
+  }
   function togglePublic() {
     const current = roomRef.current;
     if (!current || current.hostId !== playerId) return;
@@ -2247,7 +2473,7 @@ function useGameRoom(config) {
 
   return {
     roomCode, room, error, busy, connStatus, playerId, inviteCode,
-    isHostRef, roomRef, togglePublic,
+    isHostRef, roomRef, togglePublic, removePlayer,
     handleCreate, handleJoin, broadcastState, sendEvent,
   };
 }
@@ -3044,6 +3270,16 @@ const I18N = {
   "open.switchDesc": { ru: "Комната видна в списке, войти может любой игрок", en: "The room is on the public list, anyone can join", hy: "Սենյակը երևում է ցանկում, ցանկացած խաղացող կարող է մտնել" },
   "open.guestNote": { ru: "Открытая комната: сюда могут зайти другие игроки", en: "Open room: other players can join here", hy: "Բաց սենյակ․ այստեղ կարող են մտնել այլ խաղացողներ" },
   "open.hubBadge": { ru: "Ждут: {n}", en: "Waiting: {n}", hy: "Սպասում են՝ {n}" },
+  "leave.hint": { ru: "Нажмите ещё раз, чтобы выйти из игры", en: "Press again to leave the game", hy: "Սեղմեք ևս մեկ անգամ՝ խաղից դուրս գալու համար" },
+  "leave.hintMafia": { ru: "Если выйдете, вы выбываете из игры. Нажмите ещё раз, чтобы выйти.", en: "If you leave, you are out of the game. Press again to leave.", hy: "Եթե դուրս գաք, դուրս կմնաք խաղից։ Սեղմեք ևս մեկ անգամ՝ դուրս գալու համար։" },
+  "leave.hintSite": { ru: "Нажмите «назад» ещё раз, чтобы закрыть Хатсит", en: "Press back again to close Hatsit", hy: "Սեղմեք «հետ» ևս մեկ անգամ՝ Hatsit-ը փակելու համար" },
+  "leave.confirmMafia": { ru: "Выйти и выбыть?", en: "Leave and drop out?", hy: "Դուրս գա՞լ և դուրս մնալ" },
+  "conn.newHost": { ru: "Хост пропал — игру ведёт {name}", en: "The host is gone — {name} is running the game now", hy: "Հոսթը անհետացավ — խաղը հիմա վարում է {name}-ը" },
+  "mhost.leftGame": { ru: "{name} покидает игру и выбывает.", en: "{name} leaves the game and is out.", hy: "{name}-ը լքում է խաղը և դուրս է գալիս։" },
+  "mhost.goneGame": { ru: "{name} пропал со связи и выбывает из игры.", en: "{name} lost connection and is out of the game.", hy: "{name}-ի հետ կապը կորավ, և նա դուրս է գալիս խաղից։" },
+  "room.left": { ru: "вышел", en: "left", hy: "դուրս է եկել" },
+  "room.away": { ru: "не в сети", en: "offline", hy: "ցանցում չէ" },
+  "room.remove": { ru: "Убрать из комнаты", en: "Remove from the room", hy: "Հեռացնել սենյակից" },
   "achievements.groupCourt": { ru: "Суд", en: "Court", hy: "Դատարան" },
   "profile.courtTitle": { ru: "Суд", en: "Court", hy: "Դատարան" },
   "profile.courtPlayed": { ru: "Дел", en: "Cases", hy: "Գործեր" },
@@ -3146,6 +3382,86 @@ function useT() {
 // support bubble can hide itself once a game has actually been picked,
 // instead of floating over gameplay screens where it mostly gets in the
 // way. Same module-level pub/sub shape as hatsitSettings above.
+/* ---------------------------------------------------------------- */
+/* Leave guard: in a running game the first "back" (the arrow, a      */
+/* swipe from the screen edge, Android's back button, Telegram's back) */
+/* only shows a hint; a second one within 2.5 s really leaves. Stray   */
+/* edge swipes used to throw players out mid-game.                     */
+/* ---------------------------------------------------------------- */
+const LEAVE_WINDOW_MS = 2500;
+// Local games: screens where the game is actually under way.
+const LEAVE_GUARD_SCREENS = new Set([
+  "spy-reveal", "spy-playing", "alias-team-intro", "alias-playing", "alias-round-end",
+  "croc-team-intro", "croc-playing", "croc-round-end", "wordless-reveal", "wordless-playing",
+  "countdown-round-intro", "countdown-playing", "telephone-turn", "mafia-reveal", "mafia-roster", "mafia-game",
+]);
+// Online games register themselves while the player is inside a room.
+let leaveGuardRoom = null; // { messageKey, onLeave }
+let lastLeaveAttempt = 0;
+const leaveHintListeners = new Set();
+function showLeaveHint(messageKey) {
+  const text = t_lookup(messageKey || "leave.hint", currentLangForDefaults());
+  leaveHintListeners.forEach((fn) => fn(text));
+}
+function isLeaveGuarded(screen) {
+  return LEAVE_GUARD_SCREENS.has(screen) || !!leaveGuardRoom;
+}
+// Runs doLeave on the second request within the window; the first one
+// only shows the hint.
+function confirmLeave(doLeave, messageKey) {
+  const now = Date.now();
+  if (now - lastLeaveAttempt < LEAVE_WINDOW_MS) {
+    lastLeaveAttempt = 0;
+    doLeave();
+    return true;
+  }
+  lastLeaveAttempt = now;
+  showLeaveHint(messageKey);
+  return false;
+}
+function useLeaveGuard(active, options) {
+  const latest = useRef(options);
+  latest.current = options;
+  useEffect(() => {
+    if (!active) return undefined;
+    const token = {
+      get messageKey() {
+        return latest.current && latest.current.messageKey;
+      },
+      get onLeave() {
+        return latest.current && latest.current.onLeave;
+      },
+    };
+    leaveGuardRoom = token;
+    return () => {
+      if (leaveGuardRoom === token) leaveGuardRoom = null;
+    };
+  }, [active]);
+}
+// The small pill that shows the hint.
+function LeaveHint() {
+  const [text, setText] = useState(null);
+  useEffect(() => {
+    let timer = null;
+    const show = (value) => {
+      setText(value);
+      clearTimeout(timer);
+      timer = setTimeout(() => setText(null), LEAVE_WINDOW_MS);
+    };
+    leaveHintListeners.add(show);
+    return () => {
+      leaveHintListeners.delete(show);
+      clearTimeout(timer);
+    };
+  }, []);
+  if (!text) return null;
+  return (
+    <div className="fixed left-1/2 -translate-x-1/2 bottom-24 z-[60] max-w-[90vw] px-4 py-2.5 rounded-2xl bg-[var(--surface-3)] border border-[var(--border-strong)] text-sm text-center shadow-lg" role="status">
+      {text}
+    </div>
+  );
+}
+
 let hatsitCurrentScreen = "hub";
 const hatsitScreenListeners = new Set();
 function setHatsitCurrentScreen(screen) {
@@ -8083,7 +8399,7 @@ function AliasTeamIntro({ state, dispatch }) {
         <ConfirmButton
           label={t("common.finish")}
           confirmLabel={t("common.confirm")}
-          onConfirm={() => dispatch({ type: "GO_HUB" })}
+          onConfirm={() => dispatch({ type: "GO_HUB", leaveConfirmed: true })}
           className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1"
         />
         <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">{t("game.alias")}</span>
@@ -8359,7 +8675,7 @@ function CrocTeamIntro({ state, dispatch }) {
         <ConfirmButton
           label={t("common.finish")}
           confirmLabel={t("common.confirm")}
-          onConfirm={() => dispatch({ type: "GO_HUB" })}
+          onConfirm={() => dispatch({ type: "GO_HUB", leaveConfirmed: true })}
           className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1"
         />
         <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">{t("game.croc")}</span>
@@ -8625,7 +8941,7 @@ function WordlessPlaying({ state, dispatch }) {
         <ConfirmButton
           label={t("common.finish")}
           confirmLabel={t("common.confirm")}
-          onConfirm={() => dispatch({ type: "GO_HUB" })}
+          onConfirm={() => dispatch({ type: "GO_HUB", leaveConfirmed: true })}
           className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1"
         />
         <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">{t("wordless.level")} {wordless.level}</span>
@@ -8812,7 +9128,7 @@ function CountdownRoundIntro({ state, dispatch }) {
         <ConfirmButton
           label={t("common.finish")}
           confirmLabel={t("common.confirm")}
-          onConfirm={() => dispatch({ type: "GO_HUB" })}
+          onConfirm={() => dispatch({ type: "GO_HUB", leaveConfirmed: true })}
           className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1"
         />
         <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">{t("countdown.round")} {countdown.round}</span>
@@ -8881,7 +9197,7 @@ function CountdownPlaying({ state, dispatch }) {
         <ConfirmButton
           label={t("common.finish")}
           confirmLabel={t("common.confirm")}
-          onConfirm={() => dispatch({ type: "GO_HUB" })}
+          onConfirm={() => dispatch({ type: "GO_HUB", leaveConfirmed: true })}
           className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1"
         />
         <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">{t("countdown.round")} {countdown.round}</span>
@@ -9237,7 +9553,7 @@ function TelephoneTurn({ state, dispatch }) {
     <ConfirmButton
       label={t("common.finish")}
       confirmLabel={t("common.confirm")}
-      onConfirm={() => dispatch({ type: "GO_HUB" })}
+      onConfirm={() => dispatch({ type: "GO_HUB", leaveConfirmed: true })}
       className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1"
     />
   );
@@ -9759,7 +10075,7 @@ function MafiaRoster({ state, dispatch }) {
         <ConfirmButton
           label={t("common.finish")}
           confirmLabel={t("common.confirm")}
-          onConfirm={() => dispatch({ type: "GO_HUB" })}
+          onConfirm={() => dispatch({ type: "GO_HUB", leaveConfirmed: true })}
           className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1"
         />
         <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">{t("mafia.hostPanel")}</span>
@@ -10631,7 +10947,7 @@ function MafiaGame({ state, dispatch }) {
         <ConfirmButton
           label={t("common.finish")}
           confirmLabel={t("common.confirm")}
-          onConfirm={() => dispatch({ type: "GO_HUB" })}
+          onConfirm={() => dispatch({ type: "GO_HUB", leaveConfirmed: true })}
           className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1"
         />
         <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">
@@ -11297,6 +11613,10 @@ function mafiaHostParts(entry, view, lang) {
       return params.role ? [named("nameOnly", params.seat), rolePart(params.role)] : [named("nameOnly", params.seat)];
     case "removed":
       return params.role ? [named("removedNoRole", params.seat), rolePart(params.role)] : [named("removedNoRole", params.seat)];
+    case "left":
+      return params.role ? [named("leftGame", params.seat), rolePart(params.role)] : [named("leftGame", params.seat)];
+    case "gone":
+      return params.role ? [named("goneGame", params.seat), rolePart(params.role)] : [named("goneGame", params.seat)];
     case "warning": {
       const parts = [named(params.by === "host" ? "warningHost" : "warningPlayers", params.seat).replace("{count}", params.count)];
       if (params.count === 3) parts.push(named("warningNoVote", params.seat));
@@ -11942,7 +12262,7 @@ function MafiaRoomLobby({ room, dispatch }) {
 
   function leave() {
     handleLeave();
-    dispatch({ type: "GO_HUB" });
+    dispatch({ type: "GO_HUB", leaveConfirmed: true });
   }
   function copyCode() {
     try {
@@ -12686,8 +13006,11 @@ function MafiaRoomGame({ room, dispatch, hostLine }) {
 
   function leave() {
     handleLeave();
-    dispatch({ type: "GO_HUB" });
+    dispatch({ type: "GO_HUB", leaveConfirmed: true });
   }
+  // A living player who leaves drops out of the game (see mafia_leave_room),
+  // so the phone's "back" asks twice and says so.
+  useLeaveGuard(!!me.alive, { messageKey: "leave.hintMafia", onLeave: leave });
 
   if (listOpen) {
     return (
@@ -12724,7 +13047,7 @@ function MafiaRoomGame({ room, dispatch, hostLine }) {
   return (
     <div className="h-full min-h-0 flex flex-col">
       <div className="flex items-center justify-between px-5 pt-4 shrink-0">
-        <ConfirmButton label={t("common.finish")} confirmLabel={t("common.confirm")} onConfirm={leave} className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1" />
+        <ConfirmButton label={t("common.finish")} confirmLabel={me.alive ? t("leave.confirmMafia") : t("common.confirm")} onConfirm={leave} className="text-xs uppercase tracking-wider text-[var(--text-faint)] active:text-[var(--danger)] px-2 py-1" />
         <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)]">
           {phase === "roles" ? t("mroom.title") : `${night ? t("mafia.nightLabel") : t("mafia.dayLabel")} ${view.night}`}
         </span>
@@ -13047,7 +13370,7 @@ function BunkerMenu({ dispatch, onCreate, onJoin, busy, error, initialCode }) {
   );
 }
 
-function BunkerLobby({ room, roomCode, playerId, dispatch, onStart, onTogglePublic, error, busy, connStatus }) {
+function BunkerLobby({ room, roomCode, playerId, dispatch, onStart, onTogglePublic, onRemovePlayer, error, busy, connStatus }) {
   const t = useT();
   const players = room && room.players ? room.players : {};
   const orderedIds = Object.keys(players).sort((a, b) => (players[a].joinedAt || 0) - (players[b].joinedAt || 0));
@@ -13116,6 +13439,12 @@ function BunkerLobby({ room, roomCode, playerId, dispatch, onStart, onTogglePubl
                   <IconUsers size={16} />
                 </div>
                 <ExpandableText as="span" className="font-medium truncate" text={p.name} title={t("common.player")} />
+                <PlayerGoneTag player={p} />
+                {isHost && p.away && !p.isHost && (
+                  <button onClick={() => onRemovePlayer && onRemovePlayer(pid)} aria-label={t("room.remove")} className="ml-auto shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[var(--text-faint)] active:bg-[var(--surface-2)]">
+                    <IconX size={14} />
+                  </button>
+                )}
                 {p.isHost && (
                   <span className="ml-auto shrink-0 text-[10px] uppercase tracking-widest text-[var(--accent-strong)] bg-[var(--accent)]/10 px-2 py-0.5 rounded-full">{t("bunker.host")}</span>
                 )}
@@ -13351,7 +13680,7 @@ function BunkerVotingCard({ room, players, orderedIds, playerId, isHost, onOpenV
           </span>
         </div>
         <span className="text-xs text-[var(--text-faint)] shrink-0">
-          {votedCount}/{alive.length}
+          {votedCount}/{alive.filter((pid) => voting.votes[pid] || !(players[pid].away || players[pid].left)).length}
         </span>
       </div>
       {meExiled ? (
@@ -13468,6 +13797,7 @@ function BunkerTableTab({ room, players, orderedIds, playerId, isHost, onExile, 
                   <ExpandableText as="span" className="font-display text-lg tracking-wide truncate" text={p.name} title={t("common.player")} />
                   {p.isHost && <span className="text-[10px] uppercase tracking-widest text-[var(--accent-strong)] bg-[var(--accent)]/10 px-2 py-0.5 rounded-full shrink-0">{t("bunker.host")}</span>}
                   {isMe && <span className="text-[10px] uppercase tracking-widest text-[var(--text-faint)] shrink-0">{t("common.you")}</span>}
+                  <PlayerGoneTag player={p} />
                   {p.exiled && <span className="text-[10px] uppercase tracking-widest text-[var(--danger)] bg-[var(--danger)]/10 px-2 py-0.5 rounded-full shrink-0">{t("bunker.exiledBadge")}</span>}
                 </div>
                 {isHost && !p.exiled && (
@@ -13637,7 +13967,7 @@ function BunkerApp({ dispatch }) {
 
   const {
     roomCode, room, error, busy, connStatus, playerId, inviteCode,
-    roomRef, togglePublic, handleCreate, handleJoin, broadcastState, sendEvent,
+    roomRef, togglePublic, removePlayer, handleCreate, handleJoin, broadcastState, sendEvent,
   } = useGameRoom({
     gameKey: "bunker",
     genPlayerId: () => genRoomPlayerId("p"),
@@ -13666,19 +13996,21 @@ function BunkerApp({ dispatch }) {
   // room.status flip to "playing" via the realtime broadcast, so each
   // participant is counted once, not just the host.
   useRecordGamePlayedOnStart(room && room.status, "bunker");
+  useLeaveGuard(!!(roomCode && room && (room.status !== "lobby" || room.hostId === playerId)), { messageKey: "leave.hint" });
 
   function handleStart() {
     const current = roomRef.current;
     if (!current || !current.players) return;
     const catastropheIndex = bunkerPickIndex(BUNKER_CATASTROPHES);
-    const playerIds = Object.keys(current.players);
+    const here = withoutLeftPlayers(current.players);
+    const playerIds = Object.keys(here);
     // The bunker never fits everyone — only about half the group gets a
     // spot, which is exactly what forces the debate over who stays.
     const capacity = Math.max(1, Math.ceil(playerIds.length / 2));
     const players = {};
     const dossiers = dealBunkerDossiers(playerIds);
     playerIds.forEach((pid) => {
-      players[pid] = { ...current.players[pid], exiled: false, dossier: dossiers[pid] };
+      players[pid] = { ...here[pid], exiled: false, dossier: dossiers[pid] };
     });
     broadcastState({ ...current, status: "playing", catastropheIndex, capacity, players, voting: null, votingHistory: [], votingRoundCounter: 0 });
   }
@@ -13732,8 +14064,9 @@ function BunkerApp({ dispatch }) {
     const current = roomRef.current;
     if (!current || !current.players) return;
     const players = {};
-    Object.keys(current.players).forEach((pid) => {
-      players[pid] = { ...current.players[pid], exiled: false, dossier: null };
+    const here = withoutLeftPlayers(current.players);
+    Object.keys(here).forEach((pid) => {
+      players[pid] = { ...here[pid], exiled: false, dossier: null };
     });
     broadcastState({ ...current, status: "lobby", catastropheIndex: null, capacity: null, players, voting: null, votingHistory: [], votingRoundCounter: 0 });
   }
@@ -13776,6 +14109,7 @@ function BunkerApp({ dispatch }) {
       dispatch={dispatch}
       onStart={handleStart}
       onTogglePublic={togglePublic}
+      onRemovePlayer={removePlayer}
       error={error}
       busy={busy}
       connStatus={connStatus}
@@ -14500,7 +14834,7 @@ function CourtMenu({ dispatch, onCreate, onJoin, busy, error, initialCode }) {
   );
 }
 
-function CourtLobby({ room, roomCode, playerId, dispatch, onStart, onTogglePublic, error, busy, connStatus }) {
+function CourtLobby({ room, roomCode, playerId, dispatch, onStart, onTogglePublic, onRemovePlayer, error, busy, connStatus }) {
   const t = useT();
   const players = room && room.players ? room.players : {};
   const orderedIds = Object.keys(players).sort((a, b) => (players[a].joinedAt || 0) - (players[b].joinedAt || 0));
@@ -14570,6 +14904,12 @@ function CourtLobby({ room, roomCode, playerId, dispatch, onStart, onTogglePubli
                   <IconUsers size={16} />
                 </div>
                 <ExpandableText as="span" className="font-medium truncate" text={p.name} title={t("common.participant")} />
+                <PlayerGoneTag player={p} />
+                {isHost && p.away && !p.isHost && (
+                  <button onClick={() => onRemovePlayer && onRemovePlayer(pid)} aria-label={t("room.remove")} className="ml-auto shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[var(--text-faint)] active:bg-[var(--surface-2)]">
+                    <IconX size={14} />
+                  </button>
+                )}
                 {p.isHost && (
                   <span className="ml-auto shrink-0 text-[10px] uppercase tracking-widest text-[var(--accent-strong)] bg-[var(--accent)]/10 px-2 py-0.5 rounded-full">{t("court.judge")}</span>
                 )}
@@ -14751,7 +15091,8 @@ function CourtTableTab({ room, players, orderedIds, playerId, onVote, onTally, o
   const votedIds = jurorIds.filter((pid) => players[pid].vote);
   const guiltyVotes = votedIds.filter((pid) => players[pid].vote === "guilty").length;
   const victimVotes = votedIds.filter((pid) => players[pid].vote === "victim").length;
-  const jurorCount = jurorIds.length;
+  // A juror who is gone and has not voted is not waited for.
+  const jurorCount = jurorIds.filter((pid) => players[pid].vote || !(players[pid].away || players[pid].left)).length;
   // Small tables (4 players) have no secretary: the judge rules from the open vote.
   const hasSecretary = orderedIds.some((pid) => players[pid].role === "secretary");
 
@@ -14922,6 +15263,7 @@ function CourtTableTab({ room, players, orderedIds, playerId, onVote, onTally, o
                 <div className="flex items-center gap-2 min-w-0">
                   <ExpandableText as="span" className="font-display text-lg tracking-wide truncate" text={p.name} title={t("common.participant")} />
                   {isMe && <span className="text-[10px] uppercase tracking-widest text-[var(--text-faint)] shrink-0">{t("common.you")}</span>}
+                  <PlayerGoneTag player={p} />
                 </div>
                 {p.role && (
                   <span className="shrink-0 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full flex items-center gap-1" style={{ background: rDef.bg, color: rDef.color }}>
@@ -15105,9 +15447,24 @@ function CourtApp({ dispatch }) {
 
   const {
     roomCode, room, error, busy, connStatus, playerId, inviteCode,
-    roomRef, togglePublic, handleCreate, handleJoin, broadcastState, sendEvent,
+    roomRef, togglePublic, removePlayer, handleCreate, handleJoin, broadcastState, sendEvent,
   } = useGameRoom({
     gameKey: "court",
+    // The judge is the host. When someone takes the room over mid-case, they
+    // take the judge's chair, and the old judge gets their former role.
+    onHostTakeover: (next, oldHost, newHost) => {
+      const a = next.players[oldHost];
+      const b = next.players[newHost];
+      if (!a || !b || a.role !== "judge") return next;
+      return {
+        ...next,
+        players: {
+          ...next.players,
+          [oldHost]: { ...a, role: b.role, evidence: b.evidence, vote: b.vote },
+          [newHost]: { ...b, role: "judge", evidence: a.evidence, vote: null },
+        },
+      };
+    },
     genPlayerId: () => genRoomPlayerId("c"),
     genRoomCode: genRoomCode4,
     buildInitialRoom: (playerId, name) => ({
@@ -15137,12 +15494,14 @@ function CourtApp({ dispatch }) {
   // (handleNewCase below flips status "playing" -> "verdict" -> "playing"
   // again), and the edge-triggered hook correctly counts each new case.
   useRecordGamePlayedOnStart(room && room.status, "court");
+  useLeaveGuard(!!(roomCode && room && (room.status !== "lobby" || room.hostId === playerId)), { messageKey: "leave.hint" });
 
   function handleStart() {
     const current = roomRef.current;
     if (!current || !current.players) return;
-    if (Object.keys(current.players).length < 4) return;
-    const { courtCaseIndex, players } = assignCourtRound(current.players, current.hostId);
+    const here = withoutLeftPlayers(current.players);
+    if (Object.keys(here).length < 4) return;
+    const { courtCaseIndex, players } = assignCourtRound(here, current.hostId);
     broadcastState({ ...current, status: "playing", caseIndex: courtCaseIndex, tally: null, verdict: null, voteTimer: null, players });
   }
 
@@ -15152,8 +15511,9 @@ function CourtApp({ dispatch }) {
   function handleNewCase() {
     const current = roomRef.current;
     if (!current || !current.players) return;
-    if (Object.keys(current.players).length < 4) return;
-    const { courtCaseIndex, players } = assignCourtRound(current.players, current.hostId);
+    const here = withoutLeftPlayers(current.players);
+    if (Object.keys(here).length < 4) return;
+    const { courtCaseIndex, players } = assignCourtRound(here, current.hostId);
     const verdictHistory = current.verdict
       ? [...(current.verdictHistory || []), { caseIndex: current.caseIndex, verdict: current.verdict, tally: current.tally }]
       : current.verdictHistory || [];
@@ -15232,6 +15592,7 @@ function CourtApp({ dispatch }) {
       dispatch={dispatch}
       onStart={handleStart}
       onTogglePublic={togglePublic}
+      onRemovePlayer={removePlayer}
       error={error}
       busy={busy}
       connStatus={connStatus}
@@ -15285,7 +15646,61 @@ function App() {
   const dispatchWithTracking = useCallback((action) => {
     const game = LAUNCH_ACTION_TO_GAME[action && action.type];
     if (game) trackEvent("game_started", { game });
+    // Leaving a running game takes two presses (see confirmLeave).
+    if (action && action.type === "GO_HUB" && !action.leaveConfirmed && isLeaveGuarded(hatsitCurrentScreen)) {
+      const room = leaveGuardRoom;
+      confirmLeave(() => {
+        if (room && room.onLeave) room.onLeave();
+        else dispatch(action);
+      }, room && room.messageKey);
+      return;
+    }
     dispatch(action);
+  }, []);
+  const dispatchRef = useRef(dispatchWithTracking);
+  dispatchRef.current = dispatchWithTracking;
+
+  // The phone's own "back" (edge swipe, Android button, a PWA's back):
+  // one history entry is kept in reserve so that "back" reaches the app
+  // instead of closing the page. In a game it asks for a second press
+  // (see confirmLeave); on the main screen a second press closes Hatsit.
+  // The reserve entry is only added after the player has touched the
+  // page -- browsers skip entries added without that.
+  useEffect(() => {
+    let armed = false;
+    const arm = () => {
+      if (armed) return;
+      try {
+        window.history.pushState({ hatsitBackGuard: true }, "");
+        armed = true;
+      } catch (e) {}
+    };
+    const onPop = () => {
+      armed = false;
+      if (hatsitCurrentScreen === "hub") {
+        if (Date.now() - lastLeaveAttempt < LEAVE_WINDOW_MS) {
+          lastLeaveAttempt = 0;
+          try {
+            window.history.back();
+          } catch (e) {}
+          return;
+        }
+        lastLeaveAttempt = Date.now();
+        showLeaveHint("leave.hintSite");
+        arm();
+        return;
+      }
+      arm();
+      dispatchRef.current({ type: "GO_HUB" });
+    };
+    window.addEventListener("pointerdown", arm, true);
+    window.addEventListener("keydown", arm, true);
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("pointerdown", arm, true);
+      window.removeEventListener("keydown", arm, true);
+      window.removeEventListener("popstate", onPop);
+    };
   }, []);
 
   // Keeps the document's declared language (and browser tab title) in
@@ -15361,7 +15776,7 @@ function App() {
   useEffect(() => {
     const telegram = tg();
     if (!telegram || !telegram.BackButton) return;
-    const onBack = () => dispatch({ type: "GO_HUB" });
+    const onBack = () => dispatchRef.current({ type: "GO_HUB" });
     if (state.screen === "hub") {
       telegram.BackButton.hide();
     } else {
@@ -15383,7 +15798,12 @@ function App() {
   // single point every screen (and everything they render) gets their
   // "dispatch" prop from, so it's also the single point that needs to know
   // about game-launch analytics (see dispatchWithTracking above).
-  const screen = ScreenComponent ? <ScreenComponent state={state} dispatch={dispatchWithTracking} /> : <Hub state={state} dispatch={dispatchWithTracking} />;
+  const screen = (
+    <>
+      {ScreenComponent ? <ScreenComponent state={state} dispatch={dispatchWithTracking} /> : <Hub state={state} dispatch={dispatchWithTracking} />}
+      <LeaveHint />
+    </>
+  );
 
   return (
     <div
