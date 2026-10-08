@@ -16623,6 +16623,62 @@ function DurakLocalGame({ initial, onExit, onAgain }) {
 }
 
 // ---------- online ----------
+// My own move, shown before the referee answers: the same change the
+// engine makes, applied to my view. Anything it cannot know (who draws
+// what at the end of a bout) simply arrives with the referee's answer.
+function durakPredict(view, i, m) {
+  if (!view || view.status !== "playing" || i < 0 || !m) return view;
+  const E = DurakEngine;
+  const legal =
+    m.type === "play" ? E.canPlay(view, i, m.card)
+    : m.type === "beat" ? E.canBeat(view, i, m.card, m.target)
+    : m.type === "transfer" ? E.canTransfer(view, i, m.card)
+    : m.type === "take" ? E.canTake(view, i)
+    : m.type === "pass" ? E.canPass(view, i)
+    : false;
+  if (!legal) return view;
+  const v = JSON.parse(JSON.stringify(view));
+  const me = v.players[i];
+  const drop = (card) => {
+    me.hand = me.hand.filter((c) => c !== card);
+    me.handCount = me.hand.length;
+  };
+  const fresh = () => v.players.forEach((p) => {
+    p.passed = false;
+  });
+  const note = (entry) => {
+    v.seq = (v.seq || 0) + 1;
+    v.log = (v.log || []).concat([{ seq: v.seq, ...entry }]);
+  };
+  if (m.type === "play") {
+    drop(m.card);
+    v.table.push({ a: m.card, d: null });
+    fresh();
+    note({ t: "play", p: i, c: m.card });
+  } else if (m.type === "beat") {
+    drop(m.card);
+    v.table[m.target].d = m.card;
+    fresh();
+    note({ t: "beat", p: i, c: m.card, on: v.table[m.target].a });
+  } else if (m.type === "transfer") {
+    drop(m.card);
+    v.table.push({ a: m.card, d: null });
+    const next = E.nextActive(v, i);
+    v.attacker = i;
+    v.defender = next;
+    v.boutLimit = Math.min(E.MAX_TABLE, E.handSize(v.players[next]));
+    fresh();
+    note({ t: "transfer", p: i, c: m.card, to: next });
+  } else if (m.type === "take") {
+    v.taking = true;
+    fresh();
+    note({ t: "take", p: i });
+  } else if (m.type === "pass") {
+    me.passed = true;
+  }
+  return v;
+}
+
 function useDurakRoom() {
   const identity = useMemo(getCardsIdentity, []);
   const [code, setCode] = useState(null);
@@ -16640,6 +16696,10 @@ function useDurakRoom() {
   const codeRef = useRef(null);
   const versionRef = useRef(0);
   const channelRef = useRef(null);
+  // My moves not yet confirmed by the referee, oldest first.
+  const pendingRef = useRef([]);
+  const sendingRef = useRef(false);
+  const [pending, setPending] = useState([]);
 
   const accept = useCallback((data) => {
     if (!data || !data.ok || !data.view) return;
@@ -16654,6 +16714,8 @@ function useDurakRoom() {
     } catch (e) {}
   }, []);
   const leaveLocally = useCallback(() => {
+    pendingRef.current = [];
+    setPending([]);
     codeRef.current = null;
     versionRef.current = 0;
     setCode(null);
@@ -16667,8 +16729,10 @@ function useDurakRoom() {
     if (!current) return;
     try {
       const { data } = await supabaseClient.rpc("cards_view", { p_code: current, p_player_id: identity.id, p_secret: identity.secret });
-      if (data && data.ok) accept(data);
-      else if (data && (data.error === "not_found" || data.error === "not_in_room")) leaveLocally();
+      // While my own move is on its way, its answer is the fresher news.
+      if (data && data.ok) {
+        if (pendingRef.current.length === 0) accept(data);
+      } else if (data && (data.error === "not_found" || data.error === "not_in_room")) leaveLocally();
     } catch (e) {}
   }, [identity, accept, leaveLocally]);
   const call = useCallback(
@@ -16701,6 +16765,52 @@ function useDurakRoom() {
       return data;
     },
     [identity, accept, refresh]
+  );
+
+  // My own moves: shown at once (see durakPredict), sent to the referee one
+  // after another in the background; each answer replaces the guess. If the
+  // referee says no, the guesses are dropped and the real table comes back.
+  const flush = useCallback(async () => {
+    if (sendingRef.current) return;
+    sendingRef.current = true;
+    while (pendingRef.current.length > 0 && codeRef.current) {
+      const m = pendingRef.current[0];
+      let data = null;
+      try {
+        const response = await fetch("/api/cards", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "move", playerId: identity.id, secret: identity.secret, code: codeRef.current, move: m }),
+          signal: typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined,
+        });
+        data = await response.json().catch(() => null);
+      } catch (e) {
+        data = null;
+      }
+      if (data && data.ok) {
+        pendingRef.current = pendingRef.current.slice(1);
+        accept(data);
+        setPending(pendingRef.current);
+        try {
+          if (channelRef.current) channelRef.current.send({ type: "broadcast", event: "ping", payload: {} });
+        } catch (e) {}
+      } else {
+        pendingRef.current = [];
+        setPending([]);
+        if (!data || (data.error !== "illegal" && data.error !== "not_playing")) setError("durak.errGeneric");
+        refresh();
+        break;
+      }
+    }
+    sendingRef.current = false;
+  }, [identity, accept, refresh]);
+  const move = useCallback(
+    (m) => {
+      pendingRef.current = pendingRef.current.concat([m]);
+      setPending(pendingRef.current);
+      flush();
+    },
+    [flush]
   );
 
   // Back after a reload: pick the room up again.
@@ -16738,6 +16848,7 @@ function useDurakRoom() {
   }, [code, refresh]);
   // Out of time: ask the referee to move on (the host first, others a bit later).
   const meIndex = view ? view.players.findIndex((p) => p.id === identity.id) : -1;
+  const shown = useMemo(() => (view && pending.length ? pending.reduce((v, m) => durakPredict(v, meIndex, m), view) : view), [view, pending, meIndex]);
   const isHost = !!(view && view.hostId === identity.id);
   useEffect(() => {
     if (!view || view.status !== "playing" || !view.deadline) return undefined;
@@ -16797,7 +16908,7 @@ function useDurakRoom() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
-  return { identity, code, view, busy, error, setError, inviteCode, meIndex, isHost, call, create, join, leave };
+  return { identity, code, view: shown, busy, error, setError, inviteCode, meIndex, isHost, call, move, create, join, leave };
 }
 
 function DurakLobby({ room, onExit }) {
@@ -16946,7 +17057,7 @@ function DurakApp({ dispatch }) {
     const amHost = room.isHost;
     body = (
       <div className="relative flex-1 min-h-0 flex flex-col">
-        <DurakTable view={view} meIndex={room.meIndex} onMove={(m) => room.call("move", { move: m })} deadline={view.deadline} busy={room.busy} />
+        <DurakTable view={view} meIndex={room.meIndex} onMove={room.move} deadline={view.deadline} busy={false} />
         {view.status === "ended" && (
           <DurakResult
             view={view}
