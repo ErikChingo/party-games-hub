@@ -7,6 +7,9 @@
     },
     "api/mafia-story.js": {
       "maxDuration": 15
+    },
+    "api/cards.js": {
+      "maxDuration": 15
     }
   }
 }
