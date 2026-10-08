@@ -157,8 +157,22 @@
     animation: titleRareGlow 2.4s ease-in-out infinite, titleRareShimmer 3s linear infinite;
   }
 
+  /* Durak: cards flying onto the table, into the hand and away. */
+  @keyframes durakIn{ from{ opacity:0; transform:translateY(var(--dy,-130px)) rotate(var(--dr,-6deg)) scale(.82);} to{ opacity:1; transform:none;} }
+  .durak-in{ animation:durakIn .38s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes durakDraw{ from{ opacity:0; transform:translate(-30px,-60px) scale(.8);} to{ opacity:1; transform:none;} }
+  .durak-draw{ animation:durakDraw .36s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes durakOutDiscard{ from{ opacity:1; transform:none;} to{ opacity:0; transform:translate(160px,-30px) rotate(28deg) scale(.7);} }
+  .durak-out-discard{ animation:durakOutDiscard .45s cubic-bezier(.5,0,.75,0) both; }
+  @keyframes durakOutTake{ from{ opacity:1; transform:none;} to{ opacity:0; transform:translateY(var(--ty,-200px)) scale(.6);} }
+  .durak-out-take{ animation:durakOutTake .45s cubic-bezier(.5,0,.75,0) both; }
+  @keyframes durakTurn{ 0%,100%{ box-shadow:0 0 0 1px var(--accent);} 50%{ box-shadow:0 0 0 1px var(--accent), 0 0 16px rgba(232,181,69,.55);} }
+  .durak-turn{ animation:durakTurn 1.4s ease-in-out infinite; }
+  @keyframes durakBump{ 0%{ transform:scale(1);} 40%{ transform:scale(1.45); color:var(--accent-strong);} 100%{ transform:scale(1);} }
+  .durak-bump{ display:inline-block; animation:durakBump .35s ease-out; }
+
   @media (prefers-reduced-motion: reduce){
-    .pop, .pulse, .flash-badge, .breathe, .neon-pulse, .typing-dot, .title-frame-rare{ animation:none !important; }
+    .pop, .pulse, .flash-badge, .breathe, .neon-pulse, .typing-dot, .title-frame-rare, .durak-in, .durak-draw, .durak-out-discard, .durak-out-take, .durak-turn, .durak-bump{ animation:none !important; }
   }
 
   .no-scrollbar::-webkit-scrollbar{ display:none; }
@@ -3312,6 +3326,8 @@ const I18N = {
   "durak.tagTaking": { ru: "берёт", en: "taking", hy: "վերցնում է" },
   "durak.tagDefending": { ru: "отбивается", en: "defending", hy: "պաշտպանվում է" },
   "durak.tagAttacking": { ru: "ходит", en: "attacking", hy: "քայլում է" },
+  "durak.throwerTurn": { ru: "Подкидывает {name}", en: "{name} may throw in", hy: "Ավելացնում է {name}-ը" },
+  "durak.tagThrowing": { ru: "подкидывает", en: "throwing in", hy: "ավելացնում է" },
   "durak.tagPassed": { ru: "пас", en: "pass", hy: "պաս" },
   "durak.tagOut": { ru: "вышел", en: "out", hy: "դուրս է" },
   "durak.tagLeft": { ru: "играет бот", en: "bot playing", hy: "խաղում է բոտը" },
@@ -15790,6 +15806,25 @@ const DurakEngine = (function () {
   function attackers(state) {
     return state.players.map((p, i) => i).filter((i) => i !== state.defender && isActive(state.players[i]));
   }
+  // Who may throw in, in order: the main attacker, then everyone else
+  // clockwise starting after the defender.
+  function throwOrder(state) {
+    const n = state.players.length;
+    const order = [state.attacker];
+    for (let k = 1; k < n; k++) {
+      const i = (state.defender + k) % n;
+      if (i !== state.attacker && i !== state.defender) order.push(i);
+    }
+    return order.filter((i) => isActive(state.players[i]));
+  }
+  // Whose turn it is to throw in or pass right now: the first in that order
+  // who has not passed yet; -1 with an empty table or when all have passed.
+  function thrower(state) {
+    if (state.status !== "playing" || state.table.length === 0) return -1;
+    const order = throwOrder(state);
+    for (let k = 0; k < order.length; k++) if (!state.players[order[k]].passed) return order[k];
+    return -1;
+  }
   // Room left on the table this bout.
   function canAddMore(state) {
     if (state.table.length >= state.boutLimit) return false;
@@ -15798,13 +15833,18 @@ const DurakEngine = (function () {
   }
 
   // ---------- what a player may do ----------
-  function canPlay(state, i, card) {
+  // Could this card go on the table at all (ignoring whose turn it is)?
+  function canThrow(state, i, card) {
     if (state.status !== "playing" || i === state.defender) return false;
     const p = state.players[i];
-    if (!isActive(p) || !p.hand.includes(card)) return false;
+    if (!isActive(p) || !p.hand || !p.hand.includes(card)) return false;
     if (state.table.length === 0) return i === state.attacker;
     if (!canAddMore(state)) return false;
     return ranksOnTable(state).has(rank(card));
+  }
+  function canPlay(state, i, card) {
+    if (!canThrow(state, i, card)) return false;
+    return state.table.length === 0 || thrower(state) === i;
   }
   function canBeat(state, i, card, target) {
     if (state.status !== "playing" || i !== state.defender || state.taking) return false;
@@ -15828,7 +15868,7 @@ const DurakEngine = (function () {
   }
   function canPass(state, i) {
     if (state.status !== "playing" || i === state.defender || !isActive(state.players[i])) return false;
-    return state.table.length > 0 && !state.players[i].passed;
+    return state.table.length > 0 && !state.players[i].passed && thrower(state) === i;
   }
   // Cards this player could legally throw in right now.
   function playableCards(state, i) {
@@ -15955,7 +15995,8 @@ const DurakEngine = (function () {
   function settle(state) {
     if (state.status !== "playing" || state.table.length === 0) return;
     attackers(state).forEach((i) => {
-      if (!state.players[i].passed && playableCards(state, i).length === 0) state.players[i].passed = true;
+      const p = state.players[i];
+      if (!p.passed && !p.hand.some((c) => canThrow(state, i, c))) p.passed = true;
     });
     const allPassed = attackers(state).every((i) => state.players[i].passed);
     const allBeaten = uncovered(state) === 0;
@@ -16028,27 +16069,22 @@ const DurakEngine = (function () {
   }
 
   // ---------- a player who does not move in time ----------
-  // Leading with nothing on the table: the lowest card goes. A defender with
-  // unbeaten cards takes them. Everyone else simply passes.
+  // Whoever the game is waiting for: leading with nothing on the table, the
+  // lowest card goes; a defender with unbeaten cards takes them; the player
+  // whose turn it is to throw in passes. The next one gets a fresh timer.
   function timeout(input) {
-    let state = clone(input);
+    const state = clone(input);
     if (state.status !== "playing") return { state, idle: [] };
-    const idle = [];
     if (state.table.length === 0) {
       const lead = sortHand(state.players[state.attacker].hand, state.trump)[0];
-      idle.push(state.attacker);
-      return { state: apply(state, state.attacker, { type: "play", card: lead }).state, idle };
+      return { state: apply(state, state.attacker, { type: "play", card: lead }).state, idle: [state.attacker] };
     }
     if (!state.taking && uncovered(state) > 0) {
-      idle.push(state.defender);
-      state = apply(state, state.defender, { type: "take" }).state;
+      return { state: apply(state, state.defender, { type: "take" }).state, idle: [state.defender] };
     }
-    attackers(state).forEach((i) => {
-      if (state.status === "playing" && canPass(state, i)) {
-        state = apply(state, i, { type: "pass" }).state;
-      }
-    });
-    return { state, idle };
+    const t = thrower(state);
+    if (t >= 0) return { state: apply(state, t, { type: "pass" }).state, idle: [t] };
+    return { state, idle: [] };
   }
 
   // ---------- bots ----------
@@ -16142,7 +16178,7 @@ const DurakEngine = (function () {
   return {
     SUITS, RANKS, HAND, MAX_TABLE, MAX_PLAYERS, MAX_BOUTS,
     rank, suit, beats, sortHand, makeDeck, shuffle, nextActive, activeCount, uncovered, attackers, ranksOnTable,
-    canPlay, canBeat, canTransfer, canTake, canPass, playableCards, handSize,
+    throwOrder, thrower, canThrow, canPlay, canBeat, canTransfer, canTake, canPass, playableCards, handSize,
     newGame, apply, timeout, botMove, nextBotMove, viewFor,
   };
 })();
@@ -16183,7 +16219,7 @@ const CARDS_IDENTITY_KEY = "hatsit_cards_identity_v1";
 const DURAK_SESSION_KEY = "hatsit_durak_session_v1";
 const DURAK_LOCAL_KEY = "hatsit_durak_local_v1";
 const DURAK_POLL_MS = 2500;
-const DURAK_BOT_DELAY_MS = 750;
+const DURAK_BOT_DELAY_MS = 900;
 const DURAK_SUIT_SYMBOL = { S: "♠", C: "♣", D: "♦", H: "♥" };
 const DURAK_RANK_LETTERS = { ru: { 11: "В", 12: "Д", 13: "К", 14: "Т" }, en: { 11: "J", 12: "Q", 13: "K", 14: "A" }, hy: { 11: "J", 12: "Q", 13: "K", 14: "A" } };
 
@@ -16254,9 +16290,20 @@ function DurakCardBack({ small }) {
 
 // The game table, shared by the bot game and the online game. `view` is the
 // state as this player may see it (their own hand, everyone else's counts).
+//
+// Motion: a card flies onto the table from whoever played it (from below
+// for me, from above for everyone else); new cards slide into the hand one
+// after another; at the end of a bout the table sweeps off to the discard
+// pile or into the hand of whoever took it. The player the game is waiting
+// for glows. All of it switches off with "reduce motion".
+const DURAK_LEAVE_MS = 480;
+function durakWhoPlayed(view, card) {
+  const log = view.log || [];
+  for (let k = log.length - 1; k >= 0; k--) if (log[k].c === card) return log[k].p;
+  return null;
+}
 function DurakTable({ view, meIndex, onMove, deadline, busy }) {
   const t = useT();
-  const lang = useLang();
   const [selected, setSelected] = useState(null);
   const seconds = useSecondsLeft(deadline || null);
   const me = view.players[meIndex];
@@ -16270,10 +16317,34 @@ function DurakTable({ view, meIndex, onMove, deadline, busy }) {
   const canPass = DurakEngine.canPass(view, meIndex);
   const canTransferSelected = !!selected && DurakEngine.canTransfer(view, meIndex, selected);
   const allBeaten = view.table.length > 0 && DurakEngine.uncovered(view) === 0;
+  const thrower = DurakEngine.thrower(view);
+  // Whom the game is waiting for right now.
+  const waitingFor = !playing ? -1 : view.table.length === 0 ? view.attacker : !view.taking && DurakEngine.uncovered(view) > 0 ? view.defender : thrower;
+
+  // Cards that just arrived in the hand slide in one after another.
+  const seenHand = useRef(null);
+  const newInHand = seenHand.current ? hand.filter((c) => !seenHand.current.has(c)) : hand;
+  // The table of the bout that just ended, kept a moment to sweep it away.
+  const lastTable = useRef({ table: [], seq: 0 });
+  const [leaving, setLeaving] = useState(null);
   useEffect(() => {
+    seenHand.current = new Set(hand);
     if (selected && !hand.includes(selected)) setSelected(null);
+    const before = lastTable.current;
+    if (before.table.length > 0 && view.table.length === 0) {
+      const end = (view.log || []).filter((e) => (e.t === "beaten" || e.t === "took") && e.seq > before.seq).pop();
+      if (end) {
+        setLeaving({ table: before.table, took: end.t === "took", toMe: end.p === meIndex, key: end.seq });
+      }
+    }
+    lastTable.current = { table: view.table, seq: view.seq || 0 };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
+  useEffect(() => {
+    if (!leaving) return undefined;
+    const timer = setTimeout(() => setLeaving(null), DURAK_LEAVE_MS);
+    return () => clearTimeout(timer);
+  }, [leaving]);
 
   function tapCard(card) {
     if (!playing || busy) return;
@@ -16301,32 +16372,57 @@ function DurakTable({ view, meIndex, onMove, deadline, busy }) {
   const n = view.players.length;
   const others = [];
   for (let k = 1; k < n; k++) others.push((meIndex + k) % n);
-  const attackerName = durakPlayerName(t, view.players[view.attacker]);
-  const defenderName = durakPlayerName(t, view.players[view.defender]);
+  const nameOf = (i) => durakPlayerName(t, view.players[i]);
   let status = "";
   if (playing) {
     if (isDefender && view.table.length > 0) status = view.taking ? t("durak.youTake") : DurakEngine.uncovered(view) > 0 ? t("durak.youDefend") : t("durak.waitThrow");
-    else if (view.table.length === 0) status = meIndex === view.attacker ? t("durak.youAttack") : t("durak.waiting").replace("{name}", attackerName);
-    else if (canPass) status = view.taking ? t("durak.youThrowTaking").replace("{name}", defenderName) : allBeaten ? t("durak.youThrowDone") : t("durak.youThrow");
-    else status = t("durak.defending").replace("{name}", defenderName);
+    else if (view.table.length === 0) status = meIndex === view.attacker ? t("durak.youAttack") : t("durak.waiting").replace("{name}", nameOf(view.attacker));
+    else if (canPass) status = view.taking ? t("durak.youThrowTaking").replace("{name}", nameOf(view.defender)) : allBeaten ? t("durak.youThrowDone") : t("durak.youThrow");
+    else if (waitingFor === view.defender) status = t("durak.defending").replace("{name}", nameOf(view.defender));
+    else if (thrower >= 0) status = t("durak.throwerTurn").replace("{name}", nameOf(thrower));
+    else status = t("durak.defending").replace("{name}", nameOf(view.defender));
   }
+  const myTurn = playing && waitingFor === meIndex;
   const targetsForSelected = selected && isDefender ? beatTargets(selected) : [];
+  const flyFrom = (card, fallback) => {
+    const who = durakWhoPlayed(view, card);
+    const p = who === null ? fallback : who;
+    return p === meIndex ? { "--dy": "150px", "--dr": "6deg" } : { "--dy": "-130px", "--dr": "-6deg" };
+  };
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <div className="flex gap-2 overflow-x-auto no-scrollbar px-4 pb-2 shrink-0">
+      <div className="flex gap-2 overflow-x-auto no-scrollbar px-4 pb-2 pt-1 shrink-0">
         {others.map((i) => {
           const p = view.players[i];
-          const tag = !playing ? null : i === view.defender ? (view.taking ? t("durak.tagTaking") : t("durak.tagDefending")) : i === view.attacker && view.table.length === 0 ? t("durak.tagAttacking") : p.passed && view.table.length > 0 ? t("durak.tagPassed") : null;
+          const tag = !playing
+            ? null
+            : i === view.defender
+              ? view.taking ? t("durak.tagTaking") : t("durak.tagDefending")
+              : i === view.attacker && view.table.length === 0
+                ? t("durak.tagAttacking")
+                : i === thrower
+                  ? t("durak.tagThrowing")
+                  : p.passed && view.table.length > 0
+                    ? t("durak.tagPassed")
+                    : null;
+          const waiting = i === waitingFor;
           return (
-            <div key={i} className={"shrink-0 min-w-[88px] rounded-2xl border px-3 py-2 " + (i === view.defender && playing ? "border-[var(--accent)]/60 bg-[var(--accent)]/10" : "border-[var(--border)] bg-[var(--surface)]")}>
+            <div
+              key={i}
+              className={
+                "shrink-0 min-w-[88px] rounded-2xl border px-3 py-2 transition-colors duration-300 " +
+                (waiting ? "durak-turn border-[var(--accent)] bg-[var(--accent)]/10" : i === view.defender && playing ? "border-[var(--accent)]/40 bg-[var(--surface)]" : "border-[var(--border)] bg-[var(--surface)]") +
+                (p.out ? " opacity-50" : "")
+              }
+            >
               <div className="text-sm font-medium truncate max-w-[110px]">{durakPlayerName(t, p)}</div>
               <div className="flex items-center gap-1 mt-1">
                 <DurakCardBack small />
-                <span className="text-xs font-mono text-[var(--text-dim)]">{p.out ? "—" : p.handCount}</span>
+                <span key={p.handCount} className="text-xs font-mono text-[var(--text-dim)] durak-bump">{p.out ? "—" : p.handCount}</span>
               </div>
-              <div className="text-[10px] uppercase tracking-wide text-[var(--text-faint)] mt-1 truncate">
-                {p.out ? (p.place ? t("durak.tagOut") : "") : p.left ? t("durak.tagLeft") : tag || " "}
+              <div className={"text-[10px] uppercase tracking-wide mt-1 truncate " + (waiting ? "text-[var(--accent-strong)]" : "text-[var(--text-faint)]")}>
+                {p.out ? (p.place ? t("durak.tagOut") : "") : p.left ? t("durak.tagLeft") : tag || " "}
               </div>
             </div>
           );
@@ -16357,20 +16453,20 @@ function DurakTable({ view, meIndex, onMove, deadline, busy }) {
             <div>{t("durak.discard").replace("{n}", view.discard)}</div>
           </div>
         </div>
-        {playing && seconds !== null && <div className="text-xs font-mono text-[var(--text-faint)]">{fmtTime(seconds)}</div>}
+        {playing && seconds !== null && <div className={"text-xs font-mono " + (myTurn && seconds <= 10 ? "text-[var(--danger)] pulse" : "text-[var(--text-faint)]")}>{fmtTime(seconds)}</div>}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-4">
+      <div className="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar px-4">
         <div className="grid grid-cols-3 gap-x-3 gap-y-5 py-3 justify-items-center">
           {view.table.map((pair, k) => {
             const target = targetsForSelected.includes(k);
             return (
-              <button key={k} onClick={() => tapTable(k)} className="relative" style={{ width: 70, height: 96 }} aria-label={t("durak.tableCard")}>
-                <div className="absolute left-0 top-0">
+              <button key={k + pair.a} onClick={() => tapTable(k)} className="relative" style={{ width: 70, height: 96 }} aria-label={t("durak.tableCard")}>
+                <div key={pair.a} className="absolute left-0 top-0 durak-in" style={flyFrom(pair.a, view.attacker)}>
                   <DurakCard card={pair.a} highlight={target} />
                 </div>
                 {pair.d && (
-                  <div className="absolute left-4 top-4">
+                  <div key={pair.d} className="absolute left-4 top-4 durak-in" style={flyFrom(pair.d, view.defender)}>
                     <DurakCard card={pair.d} />
                   </div>
                 )}
@@ -16378,14 +16474,34 @@ function DurakTable({ view, meIndex, onMove, deadline, busy }) {
             );
           })}
         </div>
-        {view.table.length === 0 && playing && <p className="text-center text-xs text-[var(--text-faint)] py-6">{t("durak.emptyTable")}</p>}
+        {leaving && (
+          <div key={leaving.key} className="absolute inset-x-4 top-0 grid grid-cols-3 gap-x-3 gap-y-5 py-3 justify-items-center pointer-events-none" aria-hidden="true">
+            {leaving.table.map((pair, k) => (
+              <div
+                key={k}
+                className={"relative " + (leaving.took ? "durak-out-take" : "durak-out-discard")}
+                style={{ width: 70, height: 96, "--ty": leaving.toMe ? "260px" : "-200px", animationDelay: k * 35 + "ms" }}
+              >
+                <div className="absolute left-0 top-0">
+                  <DurakCard card={pair.a} />
+                </div>
+                {pair.d && (
+                  <div className="absolute left-4 top-4">
+                    <DurakCard card={pair.d} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {view.table.length === 0 && !leaving && playing && <p className="text-center text-xs text-[var(--text-faint)] py-6 pop">{t("durak.emptyTable")}</p>}
       </div>
 
       <div className="shrink-0 px-4 pt-2 pb-4 border-t border-[var(--border)] bg-[var(--bg)]">
-        <p className="text-sm text-center mb-2 min-h-[1.25rem]">{status}</p>
+        <p key={status} className={"text-sm text-center mb-2 min-h-[1.25rem] pop " + (myTurn ? "text-[var(--accent-strong)] font-medium" : "")}>{status}</p>
         <div className="flex gap-2 justify-center mb-3 min-h-[44px]">
           {isDefender && canTake && (
-            <button onClick={() => onMove({ type: "take" })} disabled={busy} className="px-5 py-2.5 rounded-xl bg-[var(--danger)] text-white font-display text-lg tracking-wide disabled:opacity-40">
+            <button onClick={() => onMove({ type: "take" })} disabled={busy} className="pop px-5 py-2.5 rounded-xl bg-[var(--danger)] text-white font-display text-lg tracking-wide disabled:opacity-40 active:scale-95 transition-transform">
               {t("durak.take")}
             </button>
           )}
@@ -16396,13 +16512,13 @@ function DurakTable({ view, meIndex, onMove, deadline, busy }) {
                 setSelected(null);
               }}
               disabled={busy}
-              className="px-5 py-2.5 rounded-xl bg-[var(--accent)] text-[var(--accent-ink)] font-display text-lg tracking-wide disabled:opacity-40"
+              className="pop px-5 py-2.5 rounded-xl bg-[var(--accent)] text-[var(--accent-ink)] font-display text-lg tracking-wide disabled:opacity-40 active:scale-95 transition-transform"
             >
               {t("durak.transfer")}
             </button>
           )}
           {canPass && (
-            <button onClick={() => onMove({ type: "pass" })} disabled={busy} className="px-5 py-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border-strong)] font-display text-lg tracking-wide disabled:opacity-40">
+            <button onClick={() => onMove({ type: "pass" })} disabled={busy} className="pop px-5 py-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border-strong)] font-display text-lg tracking-wide disabled:opacity-40 active:scale-95 transition-transform">
               {view.taking || !allBeaten ? t("durak.enough") : t("durak.done")}
             </button>
           )}
@@ -16410,7 +16526,12 @@ function DurakTable({ view, meIndex, onMove, deadline, busy }) {
         <div className="flex gap-1 overflow-x-auto no-scrollbar pt-3 pb-1 justify-start">
           {hand.map((card) => {
             const usable = isDefender ? beatTargets(card).length > 0 || DurakEngine.canTransfer(view, meIndex, card) : playable.includes(card);
-            return <DurakCard key={card} card={card} selected={selected === card} dim={playing && !usable} onClick={() => tapCard(card)} />;
+            const fresh = newInHand.indexOf(card);
+            return (
+              <div key={card} className={fresh >= 0 ? "durak-draw" : ""} style={fresh >= 0 ? { animationDelay: fresh * 60 + "ms" } : undefined}>
+                <DurakCard card={card} selected={selected === card} dim={playing && !usable} onClick={() => tapCard(card)} />
+              </div>
+            );
           })}
         </div>
         {me && me.out && playing && <p className="text-center text-xs text-[var(--text-faint)]">{t("durak.youAreOut")}</p>}
