@@ -1,4 +1,4 @@
-// Online card games (Durak): the referee.
+// Online card games (Durak, Blot, Blackjack): the referee.
 //
 //   POST /api/cards  { action, code?, playerId, secret, name?, settings?, move? }
 //   -> { ok, code, version, view }   or   { error }
@@ -22,10 +22,43 @@
 
 const crypto = require("crypto");
 const Durak = require("./_lib/durak.js");
+const Blot = require("./_lib/blot.js");
+const Blackjack = require("./_lib/blackjack.js");
+
+// Every game here has the same shape: newGame(players, settings, random),
+// apply(state, seat, move), timeout(state), nextBotMove(state, isBot),
+// viewFor(state, playerId).
+const GAMES = {
+  durak: {
+    engine: Durak,
+    minPlayers: 2,
+    maxPlayers: 6,
+    fill: false,
+    settings: (s, old) => ({ transfer: s.transfer === undefined ? !!(old && old.transfer) : !!s.transfer }),
+  },
+  blot: {
+    engine: Blot,
+    minPlayers: 1,
+    maxPlayers: 4,
+    fill: 4, // empty seats are taken by bots when the game starts
+    settings: (s, old) => ({ target: [101, 201, 301].includes(Number(s.target)) ? Number(s.target) : (old && old.target) || 101 }),
+  },
+  blackjack: {
+    engine: Blackjack,
+    minPlayers: 1,
+    maxPlayers: 6,
+    fill: false,
+    // A table you can sit down at while it is running.
+    joinLate: (player) => ({ ...player, chips: Blackjack.START_CHIPS, bet: 0, lastBet: 50, cards: [], done: false, outcome: null, win: 0, afk: 0 }),
+    settings: () => ({}),
+  },
+};
+const gameOf = (state) => GAMES[state.game] || GAMES.durak;
 
 const DEFAULT_SUPABASE_URL = "https://zocoaqqcrxpbkyzlfzsf.supabase.co";
 const TURN_MS = 30000;
-const MAX_PLAYERS = 6;
+// Blot: how long the score of a deal stays on screen before the next deal.
+const SCORE_MS = 9000;
 const STALE_ROOM_MS = 6 * 60 * 60 * 1000;
 const MAX_BOT_STEPS = 80;
 
@@ -70,7 +103,7 @@ async function insertRoom(code, state) {
   const response = await db("card_rooms", {
     method: "POST",
     headers: { Prefer: "return=minimal" },
-    body: JSON.stringify({ code, game: "durak", state, version: 1 }),
+    body: JSON.stringify({ code, game: state.game, state, version: 1 }),
   });
   if (response.status === 409) return false;
   if (!response.ok) throw new Error("insert " + response.status);
@@ -92,18 +125,19 @@ async function moderate(name) {
 
 // ---------- the game side ----------
 function runBots(state) {
+  const engine = gameOf(state).engine;
   let current = state;
   for (let step = 0; step < MAX_BOT_STEPS && current.status === "playing"; step++) {
-    const move = Durak.nextBotMove(current, (i) => !!current.players[i].bot);
+    const move = engine.nextBotMove(current, (i) => !!current.players[i].bot);
     if (!move) break;
-    const result = Durak.apply(current, move[0], move[1]);
+    const result = engine.apply(current, move[0], move[1]);
     if (!result.ok) break;
     current = result.state;
   }
   return current;
 }
 function stamp(state, now) {
-  state.deadline = state.status === "playing" ? now + TURN_MS : null;
+  state.deadline = state.status === "playing" ? now + (state.phase === "score" ? SCORE_MS : TURN_MS) : null;
   return state;
 }
 function botName(state) {
@@ -116,8 +150,18 @@ function lobbyPlayers(state) {
   return state.players.map((p) => ({ id: p.id, name: p.name, bot: !!p.bot, botNo: p.botNo || null, secretHash: p.secretHash || null, joinedAt: p.joinedAt }));
 }
 function deal(state, now) {
+  const kind = gameOf(state);
   const players = lobbyPlayers(state).map((p) => (p.left ? { ...p, bot: true } : p));
-  const game = Durak.newGame(players, state.settings, Math.random);
+  if (kind.fill) {
+    const probe = { players: players.slice() };
+    while (players.length < kind.fill) {
+      const n = botName(probe);
+      const bot = { id: "bot-" + n + "-" + now.toString(36), name: "Bot " + n, bot: true, botNo: n, joinedAt: now };
+      players.push(bot);
+      probe.players.push(bot);
+    }
+  }
+  const game = kind.engine.newGame(players, state.settings, Math.random);
   game.hostId = state.hostId;
   game.round = (state.round || 0) + 1;
   game.open = !!state.open;
@@ -126,6 +170,9 @@ function deal(state, now) {
 
 // Applies one action to a room state. Returns { state } or { error }.
 function act(state, body, me, now) {
+  const kind = gameOf(state);
+  const engine = kind.engine;
+  const MAX_PLAYERS = kind.maxPlayers;
   const isHost = state.hostId === body.playerId;
   const idx = state.players.findIndex((p) => p.id === body.playerId);
   switch (body.action) {
@@ -136,9 +183,14 @@ function act(state, body, me, now) {
         players[idx] = { ...players[idx], bot: false, afk: 0, left: false, name: me.name || players[idx].name };
         return { state: { ...state, players } };
       }
+      const seat = { id: body.playerId, name: me.name, bot: false, secretHash: me.hash, joinedAt: now };
+      if (state.status === "playing" && kind.joinLate) {
+        if (state.players.length >= MAX_PLAYERS) return { error: "full" };
+        return { state: { ...state, players: state.players.concat([kind.joinLate(seat)]) } };
+      }
       if (state.status !== "lobby") return { error: "in_progress" };
       if (state.players.length >= MAX_PLAYERS) return { error: "full" };
-      return { state: { ...state, players: state.players.concat([{ id: body.playerId, name: me.name, bot: false, secretHash: me.hash, joinedAt: now }]) } };
+      return { state: { ...state, players: state.players.concat([seat]) } };
     }
     case "leave": {
       if (idx < 0) return { state };
@@ -158,7 +210,7 @@ function act(state, body, me, now) {
     case "settings": {
       if (!isHost || state.status !== "lobby") return { error: "forbidden" };
       const s = body.settings || {};
-      return { state: { ...state, settings: { ...state.settings, transfer: !!s.transfer }, open: s.open === undefined ? !!state.open : !!s.open } };
+      return { state: { ...state, settings: kind.settings(s, state.settings), open: s.open === undefined ? !!state.open : !!s.open } };
     }
     case "add_bot": {
       if (!isHost || state.status !== "lobby") return { error: "forbidden" };
@@ -179,13 +231,13 @@ function act(state, body, me, now) {
       if (!isHost) return { error: "forbidden" };
       if (body.action === "start" && state.status !== "lobby") return { error: "in_progress" };
       if (body.action === "rematch" && state.status !== "ended") return { error: "not_ended" };
-      if (state.players.length < 2) return { error: "need_players" };
+      if (state.players.length < kind.minPlayers) return { error: "need_players" };
       return { state: deal(state, now) };
     }
     case "move": {
       if (state.status !== "playing") return { error: "not_playing" };
       if (idx < 0) return { error: "not_in_room" };
-      const result = Durak.apply(state, idx, body.move || {});
+      const result = engine.apply(state, idx, body.move || {});
       if (!result.ok) return { error: result.error };
       const players = result.state.players.slice();
       players[idx] = { ...players[idx], afk: 0 };
@@ -194,7 +246,7 @@ function act(state, body, me, now) {
     case "tick": {
       if (state.status !== "playing") return { state };
       if (!state.deadline || state.deadline > now) return { state };
-      const result = Durak.timeout(state);
+      const result = engine.timeout(state);
       const players = result.state.players.map((p, i) => {
         if (!result.idle.includes(i)) return p;
         const afk = (p.afk || 0) + 1;
@@ -233,12 +285,13 @@ module.exports = async function handler(req, res) {
   try {
     if (action === "create") {
       me.name = await moderate(body.name);
+      const game = GAMES[body.game] ? body.game : "durak";
       const state = {
         v: 1,
-        game: "durak",
+        game,
         status: "lobby",
         hostId: playerId,
-        settings: { transfer: !!(body.settings && body.settings.transfer) },
+        settings: GAMES[game].settings(body.settings || {}, null),
         open: false,
         players: [{ id: playerId, name: me.name, bot: false, secretHash: me.hash, joinedAt: now }],
         createdAt: now,
@@ -279,7 +332,7 @@ module.exports = async function handler(req, res) {
 
 function send(res, code, version, state, playerId) {
   res.setHeader("Cache-Control", "no-store");
-  res.status(200).json({ ok: true, code, version, view: Durak.viewFor(state, playerId) });
+  res.status(200).json({ ok: true, code, version, view: gameOf(state).engine.viewFor(state, playerId) });
 }
 
-module.exports._internals = { act, runBots, deal, hash, TURN_MS };
+module.exports._internals = { act, runBots, deal, hash, TURN_MS, SCORE_MS, GAMES };
