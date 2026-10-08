@@ -356,6 +356,7 @@ const BlackjackEngine = (function () {
     out.players = state.players.map((p) => {
       const q = { ...p };
       delete q.secretHash;
+      delete q.profileId;
       return q;
     });
     return out;
