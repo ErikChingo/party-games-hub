@@ -19,6 +19,11 @@
 //
 // A player who leaves a running game, or lets the timer run out twice, is
 // replaced by a bot -- the game goes on for everyone else.
+//
+// Statistics: when an online game with at least two people ends (and after
+// every Blot deal and every Blackjack round), the referee adds what it saw
+// to each person's profile through cards_record(). Games against bots only
+// do not count.
 
 const crypto = require("crypto");
 const Durak = require("./_lib/durak.js");
@@ -147,8 +152,10 @@ function botName(state) {
   return n;
 }
 function lobbyPlayers(state) {
-  return state.players.map((p) => ({ id: p.id, name: p.name, bot: !!p.bot, botNo: p.botNo || null, secretHash: p.secretHash || null, joinedAt: p.joinedAt }));
+  return state.players.map((p) => ({ id: p.id, name: p.name, bot: !!p.bot, botNo: p.botNo || null, secretHash: p.secretHash || null, profileId: p.profileId || null, joinedAt: p.joinedAt }));
 }
+const PROFILE_RE = /^(tg|anon):[A-Za-z0-9_-]{1,70}$/;
+const cleanProfile = (id) => (typeof id === "string" && PROFILE_RE.test(id) ? id : null);
 function deal(state, now) {
   const kind = gameOf(state);
   const players = lobbyPlayers(state).map((p) => (p.left ? { ...p, bot: true } : p));
@@ -163,6 +170,7 @@ function deal(state, now) {
   }
   const game = kind.engine.newGame(players, state.settings, Math.random);
   game.hostId = state.hostId;
+  game.humans = game.players.filter((p) => !p.bot).length;
   game.round = (state.round || 0) + 1;
   game.open = !!state.open;
   return stamp(runBots(game), now);
@@ -180,10 +188,10 @@ function act(state, body, me, now) {
       if (idx >= 0) {
         // Back again (reload, or returning after leaving): take your seat back.
         const players = state.players.slice();
-        players[idx] = { ...players[idx], bot: false, afk: 0, left: false, name: me.name || players[idx].name };
+        players[idx] = { ...players[idx], bot: false, afk: 0, left: false, name: me.name || players[idx].name, profileId: me.profileId || players[idx].profileId || null };
         return { state: { ...state, players } };
       }
-      const seat = { id: body.playerId, name: me.name, bot: false, secretHash: me.hash, joinedAt: now };
+      const seat = { id: body.playerId, name: me.name, bot: false, secretHash: me.hash, profileId: me.profileId, joinedAt: now };
       if (state.status === "playing" && kind.joinLate) {
         if (state.players.length >= MAX_PLAYERS) return { error: "full" };
         return { state: { ...state, players: state.players.concat([kind.joinLate(seat)]) } };
@@ -260,6 +268,58 @@ function act(state, body, me, now) {
   }
 }
 
+// ---------- statistics ----------
+// What this change of state adds to people's profiles: [{ profileId, name, delta }].
+// Marks what it has counted inside `next`, so nothing is counted twice.
+function statsEvents(prev, next) {
+  const out = new Map();
+  const add = (p, delta) => {
+    if (!p || p.bot || !p.profileId) return;
+    const cur = out.get(p.profileId) || { profileId: p.profileId, name: p.name || "", delta: {} };
+    Object.keys(delta).forEach((k) => {
+      if (k.startsWith("bj_best")) cur.delta[k] = Math.max(cur.delta[k] || 0, delta[k]);
+      else cur.delta[k] = (cur.delta[k] || 0) + delta[k];
+    });
+    out.set(p.profileId, cur);
+  };
+  const humansNow = next.players ? next.players.filter((p) => !p.bot).length : 0;
+  if (next.game === "durak") {
+    if (prev.status === "playing" && next.status === "ended" && (next.humans || 0) >= 2) {
+      next.players.forEach((p, i) => add(p, { durak_games: 1, durak_wins: !next.draw && next.loser !== i ? 1 : 0, durak_fools: next.loser === i ? 1 : 0, durak_firsts: p.place === 1 ? 1 : 0 }));
+    }
+  } else if (next.game === "blot") {
+    if ((next.humans || 0) >= 2 && Array.isArray(next.history)) {
+      const done = next.statsDeal || 0;
+      next.history
+        .filter((h) => h.deal > done && h.deal <= next.deals)
+        .forEach((h) => {
+          if (h.made && h.contract) add(next.players[h.contract.seat], { blot_made: 1 });
+          if (h.capot !== null && h.capot !== undefined) next.players.forEach((p, i) => i % 2 === h.capot && add(p, { blot_capots: 1 }));
+          next.statsDeal = Math.max(next.statsDeal || 0, h.deal);
+        });
+      if (prev.status === "playing" && next.status === "ended") {
+        next.players.forEach((p, i) => add(p, { blot_games: 1, blot_wins: next.winner !== null && i % 2 === next.winner ? 1 : 0 }));
+      }
+    }
+  } else if (next.game === "blackjack") {
+    if (next.phase === "score" && next.statsRound !== next.round && humansNow >= 2) {
+      next.statsRound = next.round;
+      next.players.forEach((p) => {
+        if (!(p.bet > 0) || !p.outcome) return;
+        add(p, { bj_rounds: 1, bj_wins: p.win > 0 ? 1 : 0, bj_blackjacks: p.outcome === "blackjack" ? 1 : 0, bj_best_chips: p.chips || 0, bj_best_win: Math.max(0, p.win || 0) });
+      });
+    }
+  }
+  return Array.from(out.values());
+}
+async function recordStats(events) {
+  await Promise.all(
+    events.map((e) =>
+      db("rpc/cards_record", { method: "POST", body: JSON.stringify({ p_profile_id: e.profileId, p_name: e.name, p_delta: e.delta }) }).catch(() => null)
+    )
+  );
+}
+
 function newCode() {
   return String(Math.floor(1000 + Math.random() * 9000));
 }
@@ -279,7 +339,7 @@ module.exports = async function handler(req, res) {
   const { action, playerId, secret } = body;
   if (typeof playerId !== "string" || !/^[A-Za-z0-9:_-]{4,80}$/.test(playerId)) return fail(res, 400, "bad_request");
   if (typeof secret !== "string" || secret.length < 16 || secret.length > 100) return fail(res, 400, "bad_request");
-  const me = { hash: hash(secret), name: "" };
+  const me = { hash: hash(secret), name: "", profileId: cleanProfile(body.profileId) };
   const now = Date.now();
 
   try {
@@ -293,7 +353,7 @@ module.exports = async function handler(req, res) {
         hostId: playerId,
         settings: GAMES[game].settings(body.settings || {}, null),
         open: false,
-        players: [{ id: playerId, name: me.name, bot: false, secretHash: me.hash, joinedAt: now }],
+        players: [{ id: playerId, name: me.name, bot: false, secretHash: me.hash, profileId: me.profileId, joinedAt: now }],
         createdAt: now,
       };
       for (let attempt = 0; attempt < 12; attempt++) {
@@ -321,7 +381,11 @@ module.exports = async function handler(req, res) {
       const result = act(row.state, body, me, now);
       if (result.error) return fail(res, 409, result.error);
       if (result.state === row.state) return send(res, code, row.version, row.state, playerId);
-      if (await saveRoom(code, row.version, result.state)) return send(res, code, row.version + 1, result.state, playerId);
+      const events = statsEvents(row.state, result.state);
+      if (await saveRoom(code, row.version, result.state)) {
+        if (events.length) await recordStats(events);
+        return send(res, code, row.version + 1, result.state, playerId);
+      }
       // Someone else moved first: read again and re-apply.
     }
     return fail(res, 409, "busy");
@@ -335,4 +399,4 @@ function send(res, code, version, state, playerId) {
   res.status(200).json({ ok: true, code, version, view: gameOf(state).engine.viewFor(state, playerId) });
 }
 
-module.exports._internals = { act, runBots, deal, hash, TURN_MS, SCORE_MS, GAMES };
+module.exports._internals = { act, runBots, deal, hash, statsEvents, TURN_MS, SCORE_MS, GAMES };
