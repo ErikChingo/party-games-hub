@@ -16314,7 +16314,10 @@ const DURAK_LOCAL_KEY = "hatsit_durak_local_v1";
 const DURAK_POLL_MS = 2500;
 const DURAK_BOT_DELAY_MS = 900;
 const DURAK_SUIT_SYMBOL = { S: "♠", C: "♣", D: "♦", H: "♥" };
-const DURAK_RANK_LETTERS = { ru: { 11: "В", 12: "Д", 13: "К", 14: "Т" }, en: { 11: "J", 12: "Q", 13: "K", 14: "A" }, hy: { 11: "J", 12: "Q", 13: "K", 14: "A" } };
+// Letters on the cards: Russian (В Д К Т) or English (J Q K A). Armenian
+// players are used to the Russian deck, so Armenian shows the Russian one.
+const DURAK_RANK_LETTERS = { ru: { 11: "В", 12: "Д", 13: "К", 14: "Т" }, en: { 11: "J", 12: "Q", 13: "K", 14: "A" } };
+DURAK_RANK_LETTERS.hy = DURAK_RANK_LETTERS.ru;
 
 let cardsIdentityCache = null;
 function getCardsIdentity() {
@@ -16343,11 +16346,167 @@ function durakRankLabel(r, lang) {
   return letters[r] || String(r);
 }
 
+// ---------- card faces (drawn here, no image files) ----------
+// One drawing for every card game: corner indexes, pips laid out like a
+// real deck on 2..10, one large pip on the ace, and an original two-headed
+// figure on the jack, queen and king. Drawn in a 100 x 145 box and scaled
+// to whatever size the card is shown at.
+const CARD_RED = "#c8323c";
+const CARD_BLACK = "#1b1d24";
+const CARD_GOLD = "#d4a640";
+const CARD_PAPER = "#fbf8f1";
+// Suit shapes in a 10 x 12 box.
+const CARD_SUIT_PATHS = {
+  H: "M5 11.6C5 11.6 0 7.6 0 3.8C0 1.6 1.6 0 3.3 0C4.3 0 4.8 .6 5 1.5C5.2 .6 5.7 0 6.7 0C8.4 0 10 1.6 10 3.8C10 7.6 5 11.6 5 11.6Z",
+  D: "M5 0L9.6 6L5 12L.4 6Z",
+  S: "M5 0C5 0 0 4.3 0 7.1C0 8.8 1.3 9.9 2.8 9.9C3.6 9.9 4.3 9.5 4.6 8.9C4.5 10.1 4 11.1 3.1 12H6.9C6 11.1 5.5 10.1 5.4 8.9C5.7 9.5 6.4 9.9 7.2 9.9C8.7 9.9 10 8.8 10 7.1C10 4.3 5 0 5 0Z",
+  C: "M5 0.2A2.7 2.7 0 0 1 7.6 3.6A2.7 2.7 0 1 1 6.1 8.6C6.2 9.9 6.7 11 7.4 12H2.6C3.3 11 3.8 9.9 3.9 8.6A2.7 2.7 0 1 1 2.4 3.6A2.7 2.7 0 0 1 5 .2Z",
+};
+const cardInk = (s) => (s === "D" || s === "H" ? CARD_RED : CARD_BLACK);
+// A pip centred on (x, y), `size` = its width.
+function CardPip({ s, x, y, size, flip }) {
+  const k = size / 10;
+  return <path d={CARD_SUIT_PATHS[s]} fill={cardInk(s)} transform={`translate(${x} ${y})${flip ? " rotate(180)" : ""} scale(${k}) translate(-5 -6)`} />;
+}
+const CARD_L = 36;
+const CARD_C = 50;
+const CARD_R = 64;
+const CARD_MID = 72.5;
+const CARD_PIPS = (() => {
+  const top = 30;
+  const bot = 115;
+  const q1 = (top + CARD_MID) / 2;
+  const q3 = (bot + CARD_MID) / 2;
+  const r = [29, 57.5, 87.5, 116];
+  const pair = (y) => [[CARD_L, y], [CARD_R, y]];
+  return {
+    2: [[CARD_C, top], [CARD_C, bot]],
+    3: [[CARD_C, top], [CARD_C, CARD_MID], [CARD_C, bot]],
+    4: [...pair(top), ...pair(bot)],
+    5: [...pair(top), [CARD_C, CARD_MID], ...pair(bot)],
+    6: [...pair(top), ...pair(CARD_MID), ...pair(bot)],
+    7: [...pair(top), [CARD_C, q1], ...pair(CARD_MID), ...pair(bot)],
+    8: [...pair(top), [CARD_C, q1], ...pair(CARD_MID), [CARD_C, q3], ...pair(bot)],
+    9: [...pair(r[0]), ...pair(r[1]), [CARD_C, CARD_MID], ...pair(r[2]), ...pair(r[3])],
+    10: [...pair(r[0]), [CARD_C, (r[0] + r[1]) / 2], ...pair(r[1]), ...pair(r[2]), [CARD_C, (r[2] + r[3]) / 2], ...pair(r[3])],
+  };
+})();
+// The upper half of a court figure, drawn inside the frame (22..78 x 20..72.5);
+// the lower half is the same drawing turned upside down.
+function CardCourtHalf({ r, s }) {
+  const ink = cardInk(s);
+  const cloth = s === "D" || s === "H" ? "#b8303a" : "#2b3a67";
+  const trim = s === "D" || s === "H" ? "#2b3a67" : "#b8303a";
+  return (
+    <g>
+      {/* shoulders and robe */}
+      <path d="M27 72.5C27 63 31 56 39 54L50 58L61 54C69 56 73 63 73 72.5Z" fill={cloth} stroke={CARD_BLACK} strokeWidth="0.8" />
+      <path d="M39 54L50 72.5L61 54L56 53L50 62L44 53Z" fill={CARD_GOLD} stroke={CARD_BLACK} strokeWidth="0.6" />
+      <path d="M27 72.5C28 66 30 62 33 59.5L36 72.5Z" fill={trim} opacity="0.85" />
+      <path d="M73 72.5C72 66 70 62 67 59.5L64 72.5Z" fill={trim} opacity="0.85" />
+      {/* neck and head */}
+      <rect x="46.5" y="47" width="7" height="8" fill="#efcfae" stroke={CARD_BLACK} strokeWidth="0.5" />
+      {r === 12 && <path d="M40 40C39 49 42 54 45 55L55 55C58 54 61 49 60 40Z" fill="#8a5a2b" stroke={CARD_BLACK} strokeWidth="0.6" />}
+      <ellipse cx="50" cy="41" rx="8.2" ry="9.4" fill="#f4d7b8" stroke={CARD_BLACK} strokeWidth="0.8" />
+      <circle cx="47" cy="40" r="0.9" fill={CARD_BLACK} />
+      <circle cx="53" cy="40" r="0.9" fill={CARD_BLACK} />
+      <path d="M48 45.5Q50 47 52 45.5" fill="none" stroke={CARD_BLACK} strokeWidth="0.7" />
+      {r === 13 && <path d="M42.5 43C43 50 46.5 53 50 53C53.5 53 57 50 57.5 43C55 46 52.5 46.5 50 46.5C47.5 46.5 45 46 42.5 43Z" fill="#7a4a22" stroke={CARD_BLACK} strokeWidth="0.6" />}
+      {r === 11 && <path d="M41.8 38C42 32 46 30.5 50 30.5C54 30.5 58 32 58.2 38C55 35 45 35 41.8 38Z" fill="#7a4a22" stroke={CARD_BLACK} strokeWidth="0.6" />}
+      {/* headwear: crown for the king, tiara for the queen, cap for the jack */}
+      {r === 13 && <path d="M40.5 33L41.5 23L45.5 28L50 21L54.5 28L58.5 23L59.5 33Z" fill={CARD_GOLD} stroke={CARD_BLACK} strokeWidth="0.7" />}
+      {r === 13 && <circle cx="50" cy="27.5" r="1.4" fill={trim} />}
+      {r === 12 && <path d="M41.5 34C44 28 56 28 58.5 34L56 32.5L53 30.5L50 29.5L47 30.5L44 32.5Z" fill={CARD_GOLD} stroke={CARD_BLACK} strokeWidth="0.6" />}
+      {r === 12 && [44, 50, 56].map((x, k) => <circle key={k} cx={x} cy={k === 1 ? 28.6 : 30.3} r="1.2" fill={trim} />)}
+      {r === 11 && <path d="M40 33C40 25 60 25 60 33Z" fill={cloth} stroke={CARD_BLACK} strokeWidth="0.7" />}
+      {r === 11 && <path d="M58 28C62 25 65 26 66 28" fill="none" stroke={CARD_GOLD} strokeWidth="1.6" strokeLinecap="round" />}
+      {/* what each one holds: sceptre, flower, halberd */}
+      {r === 13 && <path d="M66 72.5L66 36" stroke={CARD_GOLD} strokeWidth="2" strokeLinecap="round" />}
+      {r === 13 && <circle cx="66" cy="34" r="2.6" fill={CARD_GOLD} stroke={CARD_BLACK} strokeWidth="0.5" />}
+      {r === 12 && <path d="M34 72.5C34 62 35 55 33 49" fill="none" stroke="#3f7a3a" strokeWidth="1.3" />}
+      {r === 12 && <circle cx="33" cy="47" r="3" fill={trim} stroke={CARD_BLACK} strokeWidth="0.5" />}
+      {r === 11 && <path d="M33 72.5L33 30" stroke="#6b4a2a" strokeWidth="1.6" />}
+      {r === 11 && <path d="M33 30L29 36L33 34L37 36Z" fill="#c9ccd3" stroke={CARD_BLACK} strokeWidth="0.5" />}
+      {/* the suit on the chest */}
+      <CardPip s={s} x={r === 13 ? 41 : 59} y={64} size={7} />
+    </g>
+  );
+}
+function CardFace({ card, small, lang }) {
+  const r = parseInt(card, 10);
+  const s = card.slice(-1);
+  const ink = cardInk(s);
+  const label = durakRankLabel(r, lang);
+  const narrow = label.length > 1;
+  const clipId = "cc" + card;
+  if (small) {
+    // Small cards (other players' tables, the trick): big index and suit.
+    return (
+      <svg viewBox="0 0 100 145" width="100%" height="100%" aria-hidden="true">
+        <text x="9" y="40" fontSize={narrow ? 34 : 40} fontWeight="700" fill={ink} fontFamily="Inter, system-ui, sans-serif" letterSpacing={narrow ? -3 : 0}>
+          {label}
+        </text>
+        <CardPip s={s} x={60} y={100} size={50} />
+        {r >= 11 && r <= 13 && <rect x="8" y="52" width="10" height="3" rx="1.5" fill={CARD_GOLD} />}
+      </svg>
+    );
+  }
+  const corner = (
+    <g>
+      <text x="13" y="24" textAnchor="middle" fontSize={narrow ? 18 : 21} fontWeight="700" fill={ink} fontFamily="Inter, system-ui, sans-serif" letterSpacing={narrow ? -1.5 : 0}>
+        {label}
+      </text>
+      <CardPip s={s} x={13} y={35} size={10} />
+    </g>
+  );
+  let middle = null;
+  if (r === 14) {
+    middle = (
+      <g>
+        <CardPip s={s} x={50} y={CARD_MID} size={36} />
+      </g>
+    );
+  } else if (r >= 11) {
+    middle = (
+      <g>
+        <defs>
+          <clipPath id={clipId}>
+            <rect x="22" y="20" width="56" height="52.5" />
+          </clipPath>
+        </defs>
+        <rect x="22" y="20" width="56" height="105" rx="3" fill={s === "D" || s === "H" ? "#fdeeee" : "#eef1f8"} stroke={ink} strokeWidth="1" />
+        <g clipPath={`url(#${clipId})`}>
+          <CardCourtHalf r={r} s={s} />
+        </g>
+        <g clipPath={`url(#${clipId})`} transform={`rotate(180 50 ${CARD_MID})`}>
+          <CardCourtHalf r={r} s={s} />
+        </g>
+        <line x1="22" y1={CARD_MID} x2="78" y2={CARD_MID} stroke={ink} strokeWidth="0.8" opacity="0.6" />
+      </g>
+    );
+  } else {
+    const big = r >= 9 ? 13 : 15;
+    middle = (
+      <g>
+        {(CARD_PIPS[r] || []).map(([x, y], k) => (
+          <CardPip key={k} s={s} x={x} y={y} size={big} flip={y > CARD_MID + 0.5} />
+        ))}
+      </g>
+    );
+  }
+  return (
+    <svg viewBox="0 0 100 145" width="100%" height="100%" aria-hidden="true">
+      {middle}
+      {corner}
+      <g transform={`rotate(180 50 ${CARD_MID})`}>{corner}</g>
+    </svg>
+  );
+}
+
 function DurakCard({ card, small, selected, dim, highlight, onClick, label }) {
   const lang = useLang();
   const r = DurakEngine.rank(card);
   const s = DurakEngine.suit(card);
-  const red = s === "D" || s === "H";
   const w = small ? 40 : 54;
   const h = small ? 58 : 78;
   const Tag = onClick ? "button" : "div";
@@ -16355,31 +16514,44 @@ function DurakCard({ card, small, selected, dim, highlight, onClick, label }) {
     <Tag
       onClick={onClick}
       aria-label={label || durakRankLabel(r, lang) + DURAK_SUIT_SYMBOL[s]}
-      className={"relative shrink-0 rounded-lg border flex flex-col justify-between select-none transition-transform " + (selected ? "-translate-y-3 " : "") + (onClick ? "active:scale-95 " : "")}
+      className={"relative shrink-0 rounded-lg border overflow-hidden select-none transition-transform " + (selected ? "-translate-y-3 " : "") + (onClick ? "active:scale-95 " : "")}
       style={{
         width: w,
         height: h,
-        padding: small ? "3px 4px" : "4px 6px",
-        background: "#f7f3ea",
-        color: red ? "#c8323c" : "#1b1d24",
-        borderColor: selected ? "var(--accent)" : highlight ? "var(--doctor)" : "rgba(0,0,0,.25)",
+        padding: 0,
+        background: CARD_PAPER,
+        borderColor: selected ? "var(--accent)" : highlight ? "var(--doctor)" : "rgba(0,0,0,.28)",
         boxShadow: selected || highlight ? "0 0 0 2px " + (selected ? "var(--accent)" : "var(--doctor)") : "0 1px 2px rgba(0,0,0,.35)",
         filter: dim ? "brightness(0.5) saturate(0.35)" : undefined,
       }}
     >
-      <span className={"font-bold leading-none text-left " + (small ? "text-xs" : "text-sm")}>{durakRankLabel(r, lang)}</span>
-      <span className={"leading-none text-center " + (small ? "text-lg" : "text-2xl")}>{DURAK_SUIT_SYMBOL[s]}</span>
+      <CardFace card={card} small={small} lang={lang} />
     </Tag>
   );
 }
+// The back: a navy lattice with a gold frame and a small emblem.
 function DurakCardBack({ small, big }) {
   const w = small ? 22 : big ? 54 : 40;
   const h = small ? 32 : big ? 78 : 58;
   return (
     <div
-      className="shrink-0 rounded-lg"
-      style={{ width: w, height: h, border: "1px solid #18294a", background: "repeating-linear-gradient(45deg, #2c4a7a 0 4px, #24406b 4px 8px)", boxShadow: "0 1px 2px rgba(0,0,0,.35)" }}
-    />
+      className="shrink-0 rounded-lg overflow-hidden"
+      style={{
+        width: w,
+        height: h,
+        border: "1px solid #14254a",
+        background:
+          "repeating-linear-gradient(45deg, rgba(255,255,255,.08) 0 1.5px, transparent 1.5px 7px), repeating-linear-gradient(-45deg, rgba(255,255,255,.08) 0 1.5px, transparent 1.5px 7px), #22406f",
+        boxShadow: "0 1px 2px rgba(0,0,0,.35), inset 0 0 0 " + (small ? 2 : 3) + "px #22406f, inset 0 0 0 " + (small ? 2.6 : 4) + "px rgba(212,166,64,.75)",
+      }}
+    >
+      {!small && (
+        <svg viewBox="0 0 100 145" width="100%" height="100%" aria-hidden="true">
+          <path d="M50 52L64 72.5L50 93L36 72.5Z" fill="#22406f" stroke={CARD_GOLD} strokeWidth="3" />
+          <path d="M50 62L57 72.5L50 83L43 72.5Z" fill={CARD_GOLD} opacity="0.85" />
+        </svg>
+      )}
+    </div>
   );
 }
 
