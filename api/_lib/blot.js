@@ -420,7 +420,7 @@ const BlotEngine = (function () {
     }
     state.scores = [state.scores[0] + gain[0], state.scores[1] + gain[1]];
     state.result = { made, total, cards, combo, belot, capot, gain, bidValue };
-    state.history.push({ deal: state.deals, contract: c, made, gain });
+    state.history.push({ deal: state.deals, contract: c, made, gain, capot });
     if (state.history.length > 30) state.history = state.history.slice(-30);
     state.phase = "score";
     state.turn = null;
@@ -651,6 +651,7 @@ const BlotEngine = (function () {
     out.players = state.players.map((p) => {
       const q = { ...p };
       delete q.secretHash;
+      delete q.profileId;
       q.handCount = p.hand ? p.hand.length : p.handCount || 0;
       if (p.id !== playerId) delete q.hand;
       return q;
