@@ -16773,6 +16773,8 @@ function DurakApp({ dispatch }) {
   const [name, setName] = useState(() => getPlayerName() || "");
   const [code, setCode] = useState(room.inviteCode || "");
   const [rulesOpen, setRulesOpen] = useState(false);
+  // Called once, up here: a hook must run on every render, whatever is on screen.
+  const rules = useRules(DURAK_RULES);
   const view = room.view;
   const onlinePlaying = !!(view && view.status !== "lobby");
   const meOnline = view && room.meIndex >= 0 ? view.players[room.meIndex] : null;
@@ -16938,7 +16940,7 @@ function DurakApp({ dispatch }) {
           </>
         )}
         <div className="mt-2">
-          <RulesCard title={t("durak.rulesTitle")} color="var(--accent)" rules={useRules(DURAK_RULES)} />
+          <RulesCard title={t("durak.rulesTitle")} color="var(--accent)" rules={rules} />
         </div>
       </div>
     );
@@ -16946,7 +16948,7 @@ function DurakApp({ dispatch }) {
   return (
     <div className="h-full min-h-0 flex flex-col">
       <TopBar onBack={back} title={t("game.durak")} right={<IconCards size={18} className="text-[var(--accent-strong)]" />} onRightClick={() => setRulesOpen(true)} />
-      <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("durak.rulesTitle")} color="var(--accent)" rules={useRules(DURAK_RULES)} />
+      <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("durak.rulesTitle")} color="var(--accent)" rules={rules} />
       {body}
     </div>
   );
