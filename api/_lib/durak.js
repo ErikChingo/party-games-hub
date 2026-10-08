@@ -456,6 +456,7 @@ const DurakEngine = (function () {
     out.players = state.players.map((p) => {
       const q = { ...p };
       delete q.secretHash;
+      delete q.profileId;
       if (p.id !== playerId) {
         q.handCount = p.hand ? p.hand.length : p.handCount || 0;
         delete q.hand;
