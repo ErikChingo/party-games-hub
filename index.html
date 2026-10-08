@@ -1696,9 +1696,12 @@ const LEADERBOARD_COLUMNS = {
   bunker: "bunker_played",
   court: "court_played",
   mafia: "mafia_wins",
+  durak: "durak_wins",
+  blot: "blot_wins",
+  blackjack: "bj_best_chips",
 };
 // What getPlayerTitle() needs to know about every leaderboard row.
-const TITLE_PROFILE_FIELDS = ["wordless_best", "countdown_best", "streak_longest", "selected_title", "mafia_wins", "mafia_mafia_wins", "mafia_finds", "mafia_saves", "court_played", "court_judge", "court_acquitted", "court_roles_mask"];
+const TITLE_PROFILE_FIELDS = ["wordless_best", "countdown_best", "streak_longest", "selected_title", "mafia_wins", "mafia_mafia_wins", "mafia_finds", "mafia_saves", "court_played", "court_judge", "court_acquitted", "court_roles_mask", "durak_wins", "durak_fools", "blot_wins", "bj_best_chips"];
 // Drives both the ProfilePanel leaderboard tab grid and which column
 // fetchLeaderboard() above reads -- one list to keep in sync instead of two.
 const LEADERBOARD_TABS = [
@@ -1707,6 +1710,9 @@ const LEADERBOARD_TABS = [
   { key: "bunker", labelKey: "leaderboard.bunkerTab" },
   { key: "court", labelKey: "leaderboard.courtTab" },
   { key: "mafia", labelKey: "leaderboard.mafiaTab" },
+  { key: "durak", labelKey: "leaderboard.durakTab" },
+  { key: "blot", labelKey: "leaderboard.blotTab" },
+  { key: "blackjack", labelKey: "leaderboard.blackjackTab" },
 ];
 async function fetchLeaderboard(game, limit = 20) {
   const column = LEADERBOARD_COLUMNS[game] || "wordless_best";
@@ -3427,6 +3433,50 @@ const I18N = {
   "bj.out_push": { ru: "Ничья", en: "Push", hy: "Ոչ-ոքի" },
   "bj.out_lose": { ru: "Проигрыш", en: "Lose", hy: "Պարտություն" },
   "bj.out_bust": { ru: "Перебор", en: "Bust", hy: "Պերեբոր" },
+  "achievements.groupCards": { ru: "Карточные игры онлайн", en: "Online card games", hy: "Օնլայն թղթախաղեր" },
+  "achievements.durakFirst.title": { ru: "Сдавай!", en: "Deal me in!", hy: "Բաժանի՛ր" },
+  "achievements.durakFirst.desc": { ru: "Сыграйте онлайн-партию в Дурака с людьми", en: "Play an online Durak game with people", hy: "Խաղացեք Դուրակի օնլայն պարտիա մարդկանց հետ" },
+  "achievements.durakWin10.title": { ru: "Не дурак", en: "No fool", hy: "Դուրակ չէ" },
+  "achievements.durakWin10.desc": { ru: "10 раз не остаться дураком", en: "Not be the fool 10 times", hy: "10 անգամ դուրակ չմնալ" },
+  "achievements.durakWin50.title": { ru: "Козырной туз", en: "Trump ace", hy: "Կոզիր տուզ" },
+  "achievements.durakWin50.desc": { ru: "50 раз не остаться дураком", en: "Not be the fool 50 times", hy: "50 անգամ դուրակ չմնալ" },
+  "achievements.durakFirst10.title": { ru: "Первым на выход", en: "First one out", hy: "Առաջինը դուրս" },
+  "achievements.durakFirst10.desc": { ru: "10 раз избавиться от карт первым", en: "Get rid of your cards first 10 times", hy: "10 անգամ առաջինն ազատվել թղթերից" },
+  "achievements.durakFool10.title": { ru: "Почётный дурак", en: "Honorary fool", hy: "Պատվավոր դուրակ" },
+  "achievements.durakFool10.desc": { ru: "10 раз остаться дураком — тоже опыт", en: "Be the fool 10 times — that's experience too", hy: "10 անգամ դուրակ մնալ — սա էլ է փորձ" },
+  "achievements.blotFirst.title": { ru: "За столом", en: "At the table", hy: "Սեղանի շուրջ" },
+  "achievements.blotFirst.desc": { ru: "Доиграйте онлайн-партию в Блот с людьми", en: "Finish an online Blot game with people", hy: "Ավարտեք Բլոտի օնլայն պարտիա մարդկանց հետ" },
+  "achievements.blotWin10.title": { ru: "Сильная пара", en: "Strong pair", hy: "Ուժեղ զույգ" },
+  "achievements.blotWin10.desc": { ru: "Выиграйте 10 партий в Блот", en: "Win 10 Blot games", hy: "Հաղթեք Բլոտի 10 պարտիա" },
+  "achievements.blotWin50.title": { ru: "Мастер блота", en: "Blot master", hy: "Բլոտի վարպետ" },
+  "achievements.blotWin50.desc": { ru: "Выиграйте 50 партий в Блот", en: "Win 50 Blot games", hy: "Հաղթեք Բլոտի 50 պարտիա" },
+  "achievements.blotMade10.title": { ru: "Слово держит", en: "True to their word", hy: "Խոսքի տեր" },
+  "achievements.blotMade10.desc": { ru: "10 раз сыграть свою заявку", en: "Make your own contract 10 times", hy: "10 անգամ խաղացնել սեփական հայտը" },
+  "achievements.blotCapot1.title": { ru: "Капут!", en: "Capot!", hy: "Կապուտ։" },
+  "achievements.blotCapot1.desc": { ru: "Взять с партнёром все 8 взяток", en: "Take all 8 tricks with your partner", hy: "Զուգընկերոջ հետ վերցնել բոլոր 8 վերցնոցները" },
+  "achievements.bjFirst.title": { ru: "Первая ставка", en: "First bet", hy: "Առաջին խաղադրույք" },
+  "achievements.bjFirst.desc": { ru: "Сыграйте раздачу в Блэкджек за общим столом", en: "Play a Blackjack round at a shared table", hy: "Խաղացեք Բլեքջեքի բաժանում ընդհանուր սեղանի շուրջ" },
+  "achievements.bjBlackjack1.title": { ru: "Блэкджек!", en: "Blackjack!", hy: "Բլեքջեք։" },
+  "achievements.bjBlackjack1.desc": { ru: "Соберите 21 с двух карт", en: "Get 21 with two cards", hy: "Հավաքեք 21 երկու թղթից" },
+  "achievements.bjBlackjack10.title": { ru: "Счастливая рука", en: "Lucky hand", hy: "Բախտավոր ձեռք" },
+  "achievements.bjBlackjack10.desc": { ru: "10 блэкджеков", en: "10 blackjacks", hy: "10 բլեքջեք" },
+  "achievements.bjWin50.title": { ru: "Обыграл дилера", en: "Beat the dealer", hy: "Հաղթեց դիլերին" },
+  "achievements.bjWin50.desc": { ru: "Выиграйте 50 раздач", en: "Win 50 rounds", hy: "Հաղթեք 50 բաժանում" },
+  "achievements.bjChips5000.title": { ru: "Хайроллер", en: "High roller", hy: "Հայռոլեր" },
+  "achievements.bjChips5000.desc": { ru: "Наберите 5000 фишек за столом", en: "Reach 5000 chips at the table", hy: "Հավաքեք 5000 չիպ սեղանի շուրջ" },
+  "profile.cardsTitle": { ru: "Карточные игры онлайн", en: "Online card games", hy: "Օնլայն թղթախաղեր" },
+  "profile.durakGames": { ru: "Дурак: партий", en: "Durak: games", hy: "Դուրակ՝ պարտիա" },
+  "profile.durakWins": { ru: "Не дурак", en: "Not the fool", hy: "Դուրակ չէ" },
+  "profile.durakFools": { ru: "Был дураком", en: "Was the fool", hy: "Եղել է դուրակ" },
+  "profile.blotGames": { ru: "Блот: партий", en: "Blot: games", hy: "Բլոտ՝ պարտիա" },
+  "profile.blotWins": { ru: "Блот: побед", en: "Blot: wins", hy: "Բլոտ՝ հաղթանակ" },
+  "profile.blotMade": { ru: "Заявок сыграно", en: "Contracts made", hy: "Խաղացված հայտեր" },
+  "profile.bjRounds": { ru: "Блэкджек: раздач", en: "Blackjack: rounds", hy: "Բլեքջեք՝ բաժանում" },
+  "profile.bjBlackjacks": { ru: "Блэкджеков", en: "Blackjacks", hy: "Բլեքջեքներ" },
+  "profile.bjBestChips": { ru: "Рекорд фишек", en: "Most chips", hy: "Չիպերի ռեկորդ" },
+  "leaderboard.durakTab": { ru: "Дурак", en: "Durak", hy: "Դուրակ" },
+  "leaderboard.blotTab": { ru: "Блот", en: "Blot", hy: "Բլոտ" },
+  "leaderboard.blackjackTab": { ru: "Блэкджек", en: "Blackjack", hy: "Բլեքջեք" },
   "leave.hint": { ru: "Нажмите ещё раз, чтобы выйти из игры", en: "Press again to leave the game", hy: "Սեղմեք ևս մեկ անգամ՝ խաղից դուրս գալու համար" },
   "leave.hintMafia": { ru: "Если выйдете, вы выбываете из игры. Нажмите ещё раз, чтобы выйти.", en: "If you leave, you are out of the game. Press again to leave.", hy: "Եթե դուրս գաք, դուրս կմնաք խաղից։ Սեղմեք ևս մեկ անգամ՝ դուրս գալու համար։" },
   "leave.hintSite": { ru: "Нажмите «назад» ещё раз, чтобы закрыть Хатсит", en: "Press back again to close Hatsit", hy: "Սեղմեք «հետ» ևս մեկ անգամ՝ Hatsit-ը փակելու համար" },
@@ -4138,6 +4188,9 @@ const IconVolumeX = (p) => <Ic {...p}><path d="M4 9v6h4l5 4V5L8 9H4Z" /><path d=
 /* initialization error. Kept at module scope so computeUnlockedAchievementIds */
 /* is easy to unit-test standalone (see the dev notes for this feature). */
 /* ---------------------------------------------------------------- */
+const IconChip = (p) => <Ic {...p}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" /></Ic>;
+const IconSpade = (p) => <Ic {...p}><path d="M12 3c-3 3.6-7 6.3-7 10a4 4 0 0 0 6.2 3.3L10 21h4l-1.2-4.7A4 4 0 0 0 19 13c0-3.7-4-6.4-7-10Z" /></Ic>;
+const IconCards = (p) => <Ic {...p}><rect x="3" y="5" width="11" height="15" rx="2" transform="rotate(-8 8.5 12.5)" /><rect x="10" y="4" width="11" height="15" rx="2" /><path d="M15.5 9.5c-1.2-1.4-3 .2-1.6 1.6l1.6 1.6 1.6-1.6c1.4-1.4-.4-3-1.6-1.6Z" /></Ic>;
 const ACHIEVEMENTS = [
   { id: "first_steps", Icon: IconMedal, titleKey: "achievements.firstSteps.title", descKey: "achievements.firstSteps.desc", check: (p) => (p.wordless_best || 0) > 0 || (p.countdown_best || 0) > 0 },
   { id: "wordless_5", Icon: IconVolumeX, titleKey: "achievements.wordless5.title", descKey: "achievements.wordless5.desc", check: (p) => (p.wordless_best || 0) >= 5 },
@@ -4184,6 +4237,23 @@ const ACHIEVEMENTS = [
   { id: "court_justice_3", group: "court", Icon: IconTrophy, titleKey: "achievements.courtJustice3.title", descKey: "achievements.courtJustice3.desc", check: (p) => (p.court_justice || 0) >= 3 },
   { id: "court_secretary_1", group: "court", Icon: IconClipboard, titleKey: "achievements.courtSecretary1.title", descKey: "achievements.courtSecretary1.desc", check: (p) => ((p.court_roles_mask || 0) & 16) === 16 },
   { id: "court_all_roles", group: "court", Icon: IconMasks, titleKey: "achievements.courtAllRoles.title", descKey: "achievements.courtAllRoles.desc", check: (p) => ((p.court_roles_mask || 0) & 15) === 15 },
+  // Card games, online with at least two people. The numbers come from the
+  // referee (/api/cards -> cards_record); games against bots only don't count.
+  { id: "durak_first", group: "cards", Icon: IconCards, titleKey: "achievements.durakFirst.title", descKey: "achievements.durakFirst.desc", check: (p) => (p.durak_games || 0) >= 1 },
+  { id: "durak_win_10", group: "cards", Icon: IconCards, titleKey: "achievements.durakWin10.title", descKey: "achievements.durakWin10.desc", check: (p) => (p.durak_wins || 0) >= 10 },
+  { id: "durak_win_50", group: "cards", Icon: IconCrown, titleKey: "achievements.durakWin50.title", descKey: "achievements.durakWin50.desc", check: (p) => (p.durak_wins || 0) >= 50 },
+  { id: "durak_first_10", group: "cards", Icon: IconTrophy, titleKey: "achievements.durakFirst10.title", descKey: "achievements.durakFirst10.desc", check: (p) => (p.durak_firsts || 0) >= 10 },
+  { id: "durak_fool_10", group: "cards", Icon: IconMasks, titleKey: "achievements.durakFool10.title", descKey: "achievements.durakFool10.desc", check: (p) => (p.durak_fools || 0) >= 10 },
+  { id: "blot_first", group: "cards", Icon: IconSpade, titleKey: "achievements.blotFirst.title", descKey: "achievements.blotFirst.desc", check: (p) => (p.blot_games || 0) >= 1 },
+  { id: "blot_win_10", group: "cards", Icon: IconUsers, titleKey: "achievements.blotWin10.title", descKey: "achievements.blotWin10.desc", check: (p) => (p.blot_wins || 0) >= 10 },
+  { id: "blot_win_50", group: "cards", Icon: IconCrown, titleKey: "achievements.blotWin50.title", descKey: "achievements.blotWin50.desc", check: (p) => (p.blot_wins || 0) >= 50 },
+  { id: "blot_made_10", group: "cards", Icon: IconCheck, titleKey: "achievements.blotMade10.title", descKey: "achievements.blotMade10.desc", check: (p) => (p.blot_made || 0) >= 10 },
+  { id: "blot_capot_1", group: "cards", Icon: IconMedal, titleKey: "achievements.blotCapot1.title", descKey: "achievements.blotCapot1.desc", check: (p) => (p.blot_capots || 0) >= 1 },
+  { id: "bj_first", group: "cards", Icon: IconChip, titleKey: "achievements.bjFirst.title", descKey: "achievements.bjFirst.desc", check: (p) => (p.bj_rounds || 0) >= 1 },
+  { id: "bj_blackjack_1", group: "cards", Icon: IconSpade, titleKey: "achievements.bjBlackjack1.title", descKey: "achievements.bjBlackjack1.desc", check: (p) => (p.bj_blackjacks || 0) >= 1 },
+  { id: "bj_blackjack_10", group: "cards", Icon: IconMedal, titleKey: "achievements.bjBlackjack10.title", descKey: "achievements.bjBlackjack10.desc", check: (p) => (p.bj_blackjacks || 0) >= 10 },
+  { id: "bj_win_50", group: "cards", Icon: IconTrophy, titleKey: "achievements.bjWin50.title", descKey: "achievements.bjWin50.desc", check: (p) => (p.bj_wins || 0) >= 50 },
+  { id: "bj_chips_5000", group: "cards", Icon: IconChip, titleKey: "achievements.bjChips5000.title", descKey: "achievements.bjChips5000.desc", check: (p) => (p.bj_best_chips || 0) >= 5000 },
 ];
 function computeUnlockedAchievementIds(profile) {
   if (!profile) return [];
@@ -4209,7 +4279,10 @@ function computeUnlockedAchievementIds(profile) {
 const PLAYER_TITLES = [
   { achievementId: "streak_30", color: "#f6cf72", icon: "👑", rare: true, label: { ru: "Бесконечный", en: "Eternal", hy: "Անվերջ" } },
   { achievementId: "mafia_win_25", color: "#e2585a", icon: "🎩", rare: true, label: { ru: "Легенда города", en: "City Legend", hy: "Քաղաքի լեգենդ" } },
+  { achievementId: "blot_win_50", color: "#f6cf72", icon: "♠️", rare: true, label: { ru: "Мастер блота", en: "Blot Master", hy: "Բլոտի վարպետ" } },
   { achievementId: "streak_7", color: "#4bb8ac", icon: "🛡️", rare: false, label: { ru: "Преданный", en: "Devoted", hy: "Նվիրված" } },
+  { achievementId: "durak_win_50", color: "#e8b545", icon: "🃏", rare: false, label: { ru: "Козырной туз", en: "Trump Ace", hy: "Կոզիր տուզ" } },
+  { achievementId: "bj_chips_5000", color: "#8dd44c", icon: "💰", rare: false, label: { ru: "Хайроллер", en: "High Roller", hy: "Հայռոլեր" } },
   { achievementId: "mafia_godfather", color: "#d6598f", icon: "🕴️", rare: false, label: { ru: "Крёстный отец", en: "Godfather", hy: "Կնքահայր" } },
   { achievementId: "mafia_sheriff_10", color: "#a67ee8", icon: "⭐", rare: false, label: { ru: "Гроза мафии", en: "Mafia's Nightmare", hy: "Մաֆիայի սարսափ" } },
   { achievementId: "mafia_doctor_10", color: "#5ea8e6", icon: "💉", rare: false, label: { ru: "Главврач", en: "Chief Physician", hy: "Գլխավոր բժիշկ" } },
@@ -4223,6 +4296,7 @@ const PLAYER_TITLES = [
   { achievementId: "countdown_5", color: "#d6598f", icon: "🪨", rare: false, label: { ru: "Стойкий", en: "Steadfast", hy: "Կայուն" } },
   { achievementId: "court_10", color: "#e0954a", icon: "🏛️", rare: false, label: { ru: "Завсегдатай суда", en: "Court Regular", hy: "Դատարանի մշտական այցելու" } },
   { achievementId: "mafia_win_1", color: "#4bb8ac", icon: "🎭", rare: false, label: { ru: "Игрок Мафии", en: "Mafia Player", hy: "Մաֆիայի խաղացող" } },
+  { achievementId: "durak_fool_10", color: "#d6598f", icon: "🤡", rare: false, label: { ru: "Почётный дурак", en: "Honorary Fool", hy: "Պատվավոր դուրակ" } },
   { achievementId: "first_steps", color: "#e8b545", icon: "🌱", rare: false, label: { ru: "Новичок", en: "Newcomer", hy: "Սկսնակ" } },
 ];
 // Returns the { color, label } tier for the given profile row, or null if
@@ -4302,9 +4376,6 @@ function detectNewlyUnlockedAchievements(profile) {
   return freshIds.map((id) => ACHIEVEMENTS.find((a) => a.id === id)).filter(Boolean);
 }
 const IconVibrate = (p) => <Ic {...p}><rect x="8" y="4" width="8" height="16" rx="2" /><path d="M2 9v6" /><path d="M22 9v6" /><path d="M5 7v10" /><path d="M19 7v10" /></Ic>;
-const IconChip = (p) => <Ic {...p}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" /></Ic>;
-const IconSpade = (p) => <Ic {...p}><path d="M12 3c-3 3.6-7 6.3-7 10a4 4 0 0 0 6.2 3.3L10 21h4l-1.2-4.7A4 4 0 0 0 19 13c0-3.7-4-6.4-7-10Z" /></Ic>;
-const IconCards = (p) => <Ic {...p}><rect x="3" y="5" width="11" height="15" rx="2" transform="rotate(-8 8.5 12.5)" /><rect x="10" y="4" width="11" height="15" rx="2" /><path d="M15.5 9.5c-1.2-1.4-3 .2-1.6 1.6l1.6 1.6 1.6-1.6c1.4-1.4-.4-3-1.6-1.6Z" /></Ic>;
 const IconBarChart = (p) => <Ic {...p}><path d="M3 21h18" /><rect x="5" y="12" width="4" height="9" rx="1" /><rect x="10.5" y="7" width="4" height="14" rx="1" /><rect x="16" y="3" width="4" height="18" rx="1" /></Ic>;
 
 /* ---------------------------------------------------------------- */
@@ -6658,7 +6729,19 @@ function ProfilePanel({ onClose, initialTab }) {
   const bunkerPlayed = (profile && profile.bunker_played) || 0;
   const courtPlayed = (profile && profile.court_played) || 0;
   const mafiaGames = (profile && profile.mafia_games) || 0;
-  const hasAnyStats = wordlessBest > 0 || countdownBest > 0 || bunkerPlayed > 0 || courtPlayed > 0 || mafiaGames > 0;
+  const cardTiles = [
+    ["profile.durakGames", (profile && profile.durak_games) || 0],
+    ["profile.durakWins", (profile && profile.durak_wins) || 0],
+    ["profile.durakFools", (profile && profile.durak_fools) || 0],
+    ["profile.blotGames", (profile && profile.blot_games) || 0],
+    ["profile.blotWins", (profile && profile.blot_wins) || 0],
+    ["profile.blotMade", (profile && profile.blot_made) || 0],
+    ["profile.bjRounds", (profile && profile.bj_rounds) || 0],
+    ["profile.bjBlackjacks", (profile && profile.bj_blackjacks) || 0],
+    ["profile.bjBestChips", (profile && profile.bj_best_chips) || 0],
+  ];
+  const cardGames = cardTiles[0][1] + cardTiles[3][1] + cardTiles[6][1];
+  const hasAnyStats = wordlessBest > 0 || countdownBest > 0 || bunkerPlayed > 0 || courtPlayed > 0 || mafiaGames > 0 || cardGames > 0;
   const mafiaTiles = [
     ["profile.mafiaGames", mafiaGames],
     ["profile.mafiaWins", (profile && profile.mafia_wins) || 0],
@@ -6862,6 +6945,20 @@ function ProfilePanel({ onClose, initialTab }) {
                   </div>
                 )}
 
+                {cardGames > 0 && (
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2.5">{t("profile.cardsTitle")}</div>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      {cardTiles.map(([labelKey, value]) => (
+                        <div key={labelKey} className="bg-[var(--surface-2)] rounded-2xl p-3 text-center">
+                          <div className="font-display text-2xl leading-none mb-1.5" style={{ color: "var(--accent-strong)" }}>{value}</div>
+                          <div className="text-[10px] uppercase tracking-wide text-[var(--text-faint)] leading-tight">{t(labelKey)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {mafiaGames > 0 && (
                   <div>
                     <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2.5">{t("profile.mafiaTitle")}</div>
@@ -6885,6 +6982,7 @@ function ProfilePanel({ onClose, initialTab }) {
                     ["achievements.groupGeneral", ACHIEVEMENTS.filter((a) => !a.group)],
                     ["achievements.groupMafia", ACHIEVEMENTS.filter((a) => a.group === "mafia")],
                     ["achievements.groupCourt", ACHIEVEMENTS.filter((a) => a.group === "court")],
+                    ["achievements.groupCards", ACHIEVEMENTS.filter((a) => a.group === "cards")],
                   ].map(([groupKey, list]) => (
                     <div key={groupKey} className="mb-4 last:mb-0">
                       <div className="text-[11px] text-[var(--text-dim)] mb-2">
@@ -16257,6 +16355,7 @@ const DurakEngine = (function () {
     out.players = state.players.map((p) => {
       const q = { ...p };
       delete q.secretHash;
+      delete q.profileId;
       if (p.id !== playerId) {
         q.handCount = p.hand ? p.hand.length : p.handCount || 0;
         delete q.hand;
@@ -17130,13 +17229,13 @@ function useCardRoom(game, predict, sessionKey) {
     rememberRoomName(name);
     codeRef.current = null;
     versionRef.current = 0;
-    return call("create", { name, settings, game });
+    return call("create", { name, settings, game, profileId: getPlayerId() });
   }, [call]);
   const join = useCallback((name, joinCode) => {
     rememberRoomName(name);
     codeRef.current = joinCode;
     versionRef.current = 0;
-    return call("join", { name, code: joinCode }).then((data) => {
+    return call("join", { name, code: joinCode, profileId: getPlayerId() }).then((data) => {
       if (!data || !data.ok) {
         codeRef.current = null;
       }
@@ -17179,6 +17278,42 @@ function useCardRoom(game, predict, sessionKey) {
   );
   return { identity, code, view: shown, busy, error, setError, inviteCode, meIndex, isHost, call, move, create, join, leave };
 }
+// After an online card game (or a Blot deal, a Blackjack round) the referee
+// has added it to the profile; whatever that unlocked is celebrated here.
+function useCardAchievements(view) {
+  const [queue, setQueue] = useState([]);
+  let key = "";
+  if (view && view.status !== "lobby") {
+    if (view.game === "blackjack") key = view.phase === "score" ? "r" + view.round : "";
+    else if (view.status === "ended") key = "end" + (view.round || 0);
+    else if (view.game === "blot" && view.history) key = "d" + view.history.length;
+  }
+  const seen = useRef(key);
+  const people = view && view.players ? view.players.filter((p) => !p.bot).length : 0;
+  const counted = !!view && (view.game === "blackjack" ? people >= 2 : (view.humans || 0) >= 2);
+  useEffect(() => {
+    if (!key || key === seen.current) {
+      seen.current = key;
+      return undefined;
+    }
+    seen.current = key;
+    if (!counted) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const profile = await fetchMyProfile();
+      if (cancelled || !profile) return;
+      const fresh = detectNewlyUnlockedAchievements(profile);
+      if (fresh.length > 0) setQueue((q) => q.concat(fresh));
+    }, 1500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return queue.length > 0 ? <AchievementUnlockToast achievement={queue[0]} onDone={() => setQueue((q) => q.slice(1))} /> : null;
+}
+
 function useDurakRoom() {
   return useCardRoom("durak", durakPredict, DURAK_SESSION_KEY);
 }
@@ -17280,6 +17415,7 @@ function DurakApp({ dispatch }) {
   // Called once, up here: a hook must run on every render, whatever is on screen.
   const rules = useRules(DURAK_RULES);
   const view = room.view;
+  const achievementToast = useCardAchievements(view);
   const onlinePlaying = !!(view && view.status !== "lobby");
   const meOnline = view && room.meIndex >= 0 ? view.players[room.meIndex] : null;
   useLeaveGuard(!!(view && view.status === "playing" && meOnline && !meOnline.bot), {
@@ -17451,6 +17587,7 @@ function DurakApp({ dispatch }) {
   }
   return (
     <div className="h-full min-h-0 flex flex-col">
+      {achievementToast}
       <TopBar onBack={back} title={t("game.durak")} right={<IconCards size={18} className="text-[var(--accent-strong)]" />} onRightClick={() => setRulesOpen(true)} />
       <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("durak.rulesTitle")} color="var(--accent)" rules={rules} />
       {body}
@@ -17841,7 +17978,7 @@ const BlotEngine = (function () {
     }
     state.scores = [state.scores[0] + gain[0], state.scores[1] + gain[1]];
     state.result = { made, total, cards, combo, belot, capot, gain, bidValue };
-    state.history.push({ deal: state.deals, contract: c, made, gain });
+    state.history.push({ deal: state.deals, contract: c, made, gain, capot });
     if (state.history.length > 30) state.history = state.history.slice(-30);
     state.phase = "score";
     state.turn = null;
@@ -18072,6 +18209,7 @@ const BlotEngine = (function () {
     out.players = state.players.map((p) => {
       const q = { ...p };
       delete q.secretHash;
+      delete q.profileId;
       q.handCount = p.hand ? p.hand.length : p.handCount || 0;
       if (p.id !== playerId) delete q.hand;
       return q;
@@ -18619,6 +18757,7 @@ function BlotApp({ dispatch }) {
   const [rulesOpen, setRulesOpen] = useState(false);
   const rules = useRules(BLOT_RULES);
   const view = room.view;
+  const achievementToast = useCardAchievements(view);
   const onlinePlaying = !!(view && view.status !== "lobby");
   const meOnline = view && room.meIndex >= 0 ? view.players[room.meIndex] : null;
   useLeaveGuard(!!(view && view.status === "playing" && meOnline && !meOnline.bot), {
@@ -18775,6 +18914,7 @@ function BlotApp({ dispatch }) {
   }
   return (
     <div className="h-full min-h-0 flex flex-col">
+      {achievementToast}
       <TopBar onBack={back} title={t("game.blot")} right={<IconSpade size={18} className="text-[var(--accent-strong)]" />} onRightClick={() => setRulesOpen(true)} />
       <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("blot.rulesTitle")} color="var(--accent)" rules={rules} />
       {body}
@@ -19121,6 +19261,7 @@ const BlackjackEngine = (function () {
     out.players = state.players.map((p) => {
       const q = { ...p };
       delete q.secretHash;
+      delete q.profileId;
       return q;
     });
     return out;
@@ -19481,6 +19622,7 @@ function BlackjackApp({ dispatch }) {
   const [rulesOpen, setRulesOpen] = useState(false);
   const rules = useRules(BLACKJACK_RULES);
   const view = room.view;
+  const achievementToast = useCardAchievements(view);
   const onlinePlaying = !!(view && view.status !== "lobby");
   const meOnline = view && room.meIndex >= 0 ? view.players[room.meIndex] : null;
   // An open table stays on the public list while there are free seats.
@@ -19632,6 +19774,7 @@ function BlackjackApp({ dispatch }) {
   }
   return (
     <div className="h-full min-h-0 flex flex-col">
+      {achievementToast}
       <TopBar onBack={back} title={t("game.blackjack")} right={<IconChip size={18} className="text-[var(--accent-strong)]" />} onRightClick={() => setRulesOpen(true)} />
       <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("bj.rulesTitle")} color="var(--accent)" rules={rules} />
       {body}
