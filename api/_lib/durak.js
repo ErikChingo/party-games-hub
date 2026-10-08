@@ -20,6 +20,11 @@
 // Optional "transfer" rule (переводной): before beating anything the
 // defender may lay a card of the same rank and pass the whole attack to the
 // next player.
+//
+// Throwing in goes in turn, as in "Дурак Онлайн": the main attacker first;
+// only when they say "Бито"/"Хватит" may the next player (clockwise from the
+// defender) throw in, and so on. A new card on the table -- thrown, beaten
+// or taken -- gives the main attacker the first word again.
 
 /* DURAK-ENGINE-BEGIN */
 const DurakEngine = (function () {
@@ -93,6 +98,25 @@ const DurakEngine = (function () {
   function attackers(state) {
     return state.players.map((p, i) => i).filter((i) => i !== state.defender && isActive(state.players[i]));
   }
+  // Who may throw in, in order: the main attacker, then everyone else
+  // clockwise starting after the defender.
+  function throwOrder(state) {
+    const n = state.players.length;
+    const order = [state.attacker];
+    for (let k = 1; k < n; k++) {
+      const i = (state.defender + k) % n;
+      if (i !== state.attacker && i !== state.defender) order.push(i);
+    }
+    return order.filter((i) => isActive(state.players[i]));
+  }
+  // Whose turn it is to throw in or pass right now: the first in that order
+  // who has not passed yet; -1 with an empty table or when all have passed.
+  function thrower(state) {
+    if (state.status !== "playing" || state.table.length === 0) return -1;
+    const order = throwOrder(state);
+    for (let k = 0; k < order.length; k++) if (!state.players[order[k]].passed) return order[k];
+    return -1;
+  }
   // Room left on the table this bout.
   function canAddMore(state) {
     if (state.table.length >= state.boutLimit) return false;
@@ -101,13 +125,18 @@ const DurakEngine = (function () {
   }
 
   // ---------- what a player may do ----------
-  function canPlay(state, i, card) {
+  // Could this card go on the table at all (ignoring whose turn it is)?
+  function canThrow(state, i, card) {
     if (state.status !== "playing" || i === state.defender) return false;
     const p = state.players[i];
-    if (!isActive(p) || !p.hand.includes(card)) return false;
+    if (!isActive(p) || !p.hand || !p.hand.includes(card)) return false;
     if (state.table.length === 0) return i === state.attacker;
     if (!canAddMore(state)) return false;
     return ranksOnTable(state).has(rank(card));
+  }
+  function canPlay(state, i, card) {
+    if (!canThrow(state, i, card)) return false;
+    return state.table.length === 0 || thrower(state) === i;
   }
   function canBeat(state, i, card, target) {
     if (state.status !== "playing" || i !== state.defender || state.taking) return false;
@@ -131,7 +160,7 @@ const DurakEngine = (function () {
   }
   function canPass(state, i) {
     if (state.status !== "playing" || i === state.defender || !isActive(state.players[i])) return false;
-    return state.table.length > 0 && !state.players[i].passed;
+    return state.table.length > 0 && !state.players[i].passed && thrower(state) === i;
   }
   // Cards this player could legally throw in right now.
   function playableCards(state, i) {
@@ -258,7 +287,8 @@ const DurakEngine = (function () {
   function settle(state) {
     if (state.status !== "playing" || state.table.length === 0) return;
     attackers(state).forEach((i) => {
-      if (!state.players[i].passed && playableCards(state, i).length === 0) state.players[i].passed = true;
+      const p = state.players[i];
+      if (!p.passed && !p.hand.some((c) => canThrow(state, i, c))) p.passed = true;
     });
     const allPassed = attackers(state).every((i) => state.players[i].passed);
     const allBeaten = uncovered(state) === 0;
@@ -331,27 +361,22 @@ const DurakEngine = (function () {
   }
 
   // ---------- a player who does not move in time ----------
-  // Leading with nothing on the table: the lowest card goes. A defender with
-  // unbeaten cards takes them. Everyone else simply passes.
+  // Whoever the game is waiting for: leading with nothing on the table, the
+  // lowest card goes; a defender with unbeaten cards takes them; the player
+  // whose turn it is to throw in passes. The next one gets a fresh timer.
   function timeout(input) {
-    let state = clone(input);
+    const state = clone(input);
     if (state.status !== "playing") return { state, idle: [] };
-    const idle = [];
     if (state.table.length === 0) {
       const lead = sortHand(state.players[state.attacker].hand, state.trump)[0];
-      idle.push(state.attacker);
-      return { state: apply(state, state.attacker, { type: "play", card: lead }).state, idle };
+      return { state: apply(state, state.attacker, { type: "play", card: lead }).state, idle: [state.attacker] };
     }
     if (!state.taking && uncovered(state) > 0) {
-      idle.push(state.defender);
-      state = apply(state, state.defender, { type: "take" }).state;
+      return { state: apply(state, state.defender, { type: "take" }).state, idle: [state.defender] };
     }
-    attackers(state).forEach((i) => {
-      if (state.status === "playing" && canPass(state, i)) {
-        state = apply(state, i, { type: "pass" }).state;
-      }
-    });
-    return { state, idle };
+    const t = thrower(state);
+    if (t >= 0) return { state: apply(state, t, { type: "pass" }).state, idle: [t] };
+    return { state, idle: [] };
   }
 
   // ---------- bots ----------
@@ -445,7 +470,7 @@ const DurakEngine = (function () {
   return {
     SUITS, RANKS, HAND, MAX_TABLE, MAX_PLAYERS, MAX_BOUTS,
     rank, suit, beats, sortHand, makeDeck, shuffle, nextActive, activeCount, uncovered, attackers, ranksOnTable,
-    canPlay, canBeat, canTransfer, canTake, canPass, playableCards, handSize,
+    throwOrder, thrower, canThrow, canPlay, canBeat, canTransfer, canTake, canPass, playableCards, handSize,
     newGame, apply, timeout, botMove, nextBotMove, viewFor,
   };
 })();
