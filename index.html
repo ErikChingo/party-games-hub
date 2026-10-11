@@ -1731,9 +1731,10 @@ const LEADERBOARD_COLUMNS = {
   durak: "durak_wins",
   blot: "blot_wins",
   blackjack: "bj_best_chips",
+  nardy: "nardy_wins",
 };
 // What getPlayerTitle() needs to know about every leaderboard row.
-const TITLE_PROFILE_FIELDS = ["wordless_best", "countdown_best", "streak_longest", "selected_title", "mafia_wins", "mafia_mafia_wins", "mafia_finds", "mafia_saves", "court_played", "court_judge", "court_acquitted", "court_roles_mask", "durak_wins", "durak_fools", "blot_wins", "bj_best_chips"];
+const TITLE_PROFILE_FIELDS = ["wordless_best", "countdown_best", "streak_longest", "selected_title", "mafia_wins", "mafia_mafia_wins", "mafia_finds", "mafia_saves", "court_played", "court_judge", "court_acquitted", "court_roles_mask", "durak_wins", "durak_fools", "blot_wins", "bj_best_chips", "nardy_wins", "nardy_mars"];
 // Drives both the ProfilePanel leaderboard tab grid and which column
 // fetchLeaderboard() above reads -- one list to keep in sync instead of two.
 const LEADERBOARD_TABS = [
@@ -1745,6 +1746,7 @@ const LEADERBOARD_TABS = [
   { key: "durak", labelKey: "leaderboard.durakTab" },
   { key: "blot", labelKey: "leaderboard.blotTab" },
   { key: "blackjack", labelKey: "leaderboard.blackjackTab" },
+  { key: "nardy", labelKey: "leaderboard.nardyTab" },
 ];
 async function fetchLeaderboard(game, limit = 20) {
   const column = LEADERBOARD_COLUMNS[game] || "wordless_best";
@@ -3499,6 +3501,24 @@ const I18N = {
   "nardy.marsStamp": { ru: "МАРС!", en: "MARS!", hy: "ՄԱՐՍ։" },
   "nardy.marsLose": { ru: "Марс: вы не успели вывести ни одной шашки", en: "Mars: you did not bear off a single checker", hy: "Մարս. դուք ոչ մի քար չհասցրիք հանել" },
   "achievements.groupCards": { ru: "Карточные игры онлайн", en: "Online card games", hy: "Օնլայն թղթախաղեր" },
+  "achievements.groupNardy": { ru: "Нарды онлайн", en: "Online nardy", hy: "Օնլայն նարդի" },
+  "achievements.nardyFirst.title": { ru: "Первый бросок", en: "First Roll", hy: "Առաջին գցում" },
+  "achievements.nardyFirst.desc": { ru: "Сыграйте партию в нарды онлайн с живым соперником", en: "Play a game of nardy online against a real opponent", hy: "Խաղացեք նարդու պարտիա օնլայն իրական մրցակցի հետ" },
+  "achievements.nardyWin10.title": { ru: "Десять побед", en: "Ten Wins", hy: "Տասը հաղթանակ" },
+  "achievements.nardyWin10.desc": { ru: "Выиграйте 10 партий в нарды онлайн", en: "Win 10 games of nardy online", hy: "Հաղթեք նարդու 10 պարտիա օնլայն" },
+  "achievements.nardyWin50.title": { ru: "Мастер нард", en: "Nardy Master", hy: "Նարդու վարպետ" },
+  "achievements.nardyWin50.desc": { ru: "Выиграйте 50 партий в нарды онлайн", en: "Win 50 games of nardy online", hy: "Հաղթեք նարդու 50 պարտիա օնլայն" },
+  "achievements.nardyMars1.title": { ru: "Марс!", en: "Mars!", hy: "Մարս։" },
+  "achievements.nardyMars1.desc": { ru: "Выиграйте, пока соперник не вывел ни одной шашки", en: "Win before your opponent bears off a single checker", hy: "Հաղթեք, քանի դեռ մրցակիցը ոչ մի քար չի հանել" },
+  "achievements.nardyMars10.title": { ru: "Марсианин", en: "Martian", hy: "Մարսեցի" },
+  "achievements.nardyMars10.desc": { ru: "10 побед марсом", en: "10 wins by mars", hy: "10 հաղթանակ մարսով" },
+  "achievements.nardyBoth.title": { ru: "Короткие и длинные", en: "Short and Long", hy: "Կարճ և երկար" },
+  "achievements.nardyBoth.desc": { ru: "Выиграйте и в короткие, и в длинные нарды", en: "Win at both short and long nardy", hy: "Հաղթեք և՛ կարճ, և՛ երկար նարդիում" },
+  "profile.nardyTitle": { ru: "Нарды онлайн", en: "Online nardy", hy: "Օնլայն նարդի" },
+  "profile.nardyGames": { ru: "Партий", en: "Games", hy: "Պարտիա" },
+  "profile.nardyWins": { ru: "Побед", en: "Wins", hy: "Հաղթանակ" },
+  "profile.nardyMars": { ru: "Марсов", en: "Mars wins", hy: "Մարսեր" },
+  "leaderboard.nardyTab": { ru: "Нарды", en: "Nardy", hy: "Նարդի" },
   "achievements.durakFirst.title": { ru: "Сдавай!", en: "Deal me in!", hy: "Բաժանի՛ր" },
   "achievements.durakFirst.desc": { ru: "Сыграйте онлайн-партию в Дурака с людьми", en: "Play an online Durak game with people", hy: "Խաղացեք Դուրակի օնլայն պարտիա մարդկանց հետ" },
   "achievements.durakWin10.title": { ru: "Не дурак", en: "No fool", hy: "Դուրակ չէ" },
@@ -4319,6 +4339,13 @@ const ACHIEVEMENTS = [
   { id: "bj_blackjack_10", group: "cards", Icon: IconMedal, titleKey: "achievements.bjBlackjack10.title", descKey: "achievements.bjBlackjack10.desc", check: (p) => (p.bj_blackjacks || 0) >= 10 },
   { id: "bj_win_50", group: "cards", Icon: IconTrophy, titleKey: "achievements.bjWin50.title", descKey: "achievements.bjWin50.desc", check: (p) => (p.bj_wins || 0) >= 50 },
   { id: "bj_chips_5000", group: "cards", Icon: IconChip, titleKey: "achievements.bjChips5000.title", descKey: "achievements.bjChips5000.desc", check: (p) => (p.bj_best_chips || 0) >= 5000 },
+  // Nardy online: counted by the referee, only games of two people.
+  { id: "nardy_first", group: "nardy", Icon: IconDice, titleKey: "achievements.nardyFirst.title", descKey: "achievements.nardyFirst.desc", check: (p) => (p.nardy_games || 0) >= 1 },
+  { id: "nardy_win_10", group: "nardy", Icon: IconTrophy, titleKey: "achievements.nardyWin10.title", descKey: "achievements.nardyWin10.desc", check: (p) => (p.nardy_wins || 0) >= 10 },
+  { id: "nardy_win_50", group: "nardy", Icon: IconCrown, titleKey: "achievements.nardyWin50.title", descKey: "achievements.nardyWin50.desc", check: (p) => (p.nardy_wins || 0) >= 50 },
+  { id: "nardy_mars_1", group: "nardy", Icon: IconFlame, titleKey: "achievements.nardyMars1.title", descKey: "achievements.nardyMars1.desc", check: (p) => (p.nardy_mars || 0) >= 1 },
+  { id: "nardy_mars_10", group: "nardy", Icon: IconMedal, titleKey: "achievements.nardyMars10.title", descKey: "achievements.nardyMars10.desc", check: (p) => (p.nardy_mars || 0) >= 10 },
+  { id: "nardy_both", group: "nardy", Icon: IconCheck, titleKey: "achievements.nardyBoth.title", descKey: "achievements.nardyBoth.desc", check: (p) => (p.nardy_short_wins || 0) >= 1 && (p.nardy_long_wins || 0) >= 1 },
 ];
 function computeUnlockedAchievementIds(profile) {
   if (!profile) return [];
@@ -4345,9 +4372,11 @@ const PLAYER_TITLES = [
   { achievementId: "streak_30", color: "#f6cf72", icon: "👑", rare: true, label: { ru: "Бесконечный", en: "Eternal", hy: "Անվերջ" } },
   { achievementId: "mafia_win_25", color: "#e2585a", icon: "🎩", rare: true, label: { ru: "Легенда города", en: "City Legend", hy: "Քաղաքի լեգենդ" } },
   { achievementId: "blot_win_50", color: "#f6cf72", icon: "♠️", rare: true, label: { ru: "Мастер блота", en: "Blot Master", hy: "Բլոտի վարպետ" } },
+  { achievementId: "nardy_win_50", color: "#f6cf72", icon: "🎲", rare: true, label: { ru: "Мастер нард", en: "Nardy Master", hy: "Նարդու վարպետ" } },
   { achievementId: "streak_7", color: "#4bb8ac", icon: "🛡️", rare: false, label: { ru: "Преданный", en: "Devoted", hy: "Նվիրված" } },
   { achievementId: "durak_win_50", color: "#e8b545", icon: "🃏", rare: false, label: { ru: "Козырной туз", en: "Trump Ace", hy: "Կոզիր տուզ" } },
   { achievementId: "bj_chips_5000", color: "#8dd44c", icon: "💰", rare: false, label: { ru: "Хайроллер", en: "High Roller", hy: "Հայռոլեր" } },
+  { achievementId: "nardy_mars_10", color: "#e2585a", icon: "👽", rare: false, label: { ru: "Марсианин", en: "Martian", hy: "Մարսեցի" } },
   { achievementId: "mafia_godfather", color: "#d6598f", icon: "🕴️", rare: false, label: { ru: "Крёстный отец", en: "Godfather", hy: "Կնքահայր" } },
   { achievementId: "mafia_sheriff_10", color: "#a67ee8", icon: "⭐", rare: false, label: { ru: "Гроза мафии", en: "Mafia's Nightmare", hy: "Մաֆիայի սարսափ" } },
   { achievementId: "mafia_doctor_10", color: "#5ea8e6", icon: "💉", rare: false, label: { ru: "Главврач", en: "Chief Physician", hy: "Գլխավոր բժիշկ" } },
@@ -6812,7 +6841,13 @@ function ProfilePanel({ onClose, initialTab }) {
     ["profile.bjBestChips", (profile && profile.bj_best_chips) || 0],
   ];
   const cardGames = cardTiles[0][1] + cardTiles[3][1] + cardTiles[6][1];
-  const hasAnyStats = wordlessBest > 0 || countdownBest > 0 || bunkerPlayed > 0 || courtPlayed > 0 || mafiaGames > 0 || cardGames > 0;
+  const nardyGames = (profile && profile.nardy_games) || 0;
+  const nardyTiles = [
+    ["profile.nardyGames", nardyGames],
+    ["profile.nardyWins", (profile && profile.nardy_wins) || 0],
+    ["profile.nardyMars", (profile && profile.nardy_mars) || 0],
+  ];
+  const hasAnyStats = wordlessBest > 0 || countdownBest > 0 || bunkerPlayed > 0 || courtPlayed > 0 || mafiaGames > 0 || cardGames > 0 || nardyGames > 0;
   const mafiaTiles = [
     ["profile.mafiaGames", mafiaGames],
     ["profile.mafiaWins", (profile && profile.mafia_wins) || 0],
@@ -7030,6 +7065,20 @@ function ProfilePanel({ onClose, initialTab }) {
                   </div>
                 )}
 
+                {nardyGames > 0 && (
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2.5">{t("profile.nardyTitle")}</div>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      {nardyTiles.map(([labelKey, value]) => (
+                        <div key={labelKey} className="bg-[var(--surface-2)] rounded-2xl p-3 text-center">
+                          <div className="font-display text-2xl leading-none mb-1.5" style={{ color: "var(--accent-strong)" }}>{value}</div>
+                          <div className="text-[10px] uppercase tracking-wide text-[var(--text-faint)] leading-tight">{t(labelKey)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {mafiaGames > 0 && (
                   <div>
                     <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2.5">{t("profile.mafiaTitle")}</div>
@@ -7054,6 +7103,7 @@ function ProfilePanel({ onClose, initialTab }) {
                     ["achievements.groupMafia", ACHIEVEMENTS.filter((a) => a.group === "mafia")],
                     ["achievements.groupCourt", ACHIEVEMENTS.filter((a) => a.group === "court")],
                     ["achievements.groupCards", ACHIEVEMENTS.filter((a) => a.group === "cards")],
+                    ["achievements.groupNardy", ACHIEVEMENTS.filter((a) => a.group === "nardy")],
                   ].map(([groupKey, list]) => (
                     <div key={groupKey} className="mb-4 last:mb-0">
                       <div className="text-[11px] text-[var(--text-dim)] mb-2">
@@ -21156,6 +21206,8 @@ function NardyApp({ dispatch }) {
   const onlinePlaying = !!(view && view.status !== "lobby");
   const meOnline = view && room.meIndex >= 0 ? view.players[room.meIndex] : null;
   const showEnd = useDelayedFlag(!!(view && view.status === "ended"), nardyEndDelay(view, room.meIndex));
+  // After an online game of two people the referee has added it to the profile.
+  const achievementToast = useCardAchievements(view);
   // A room on the public list while the second seat is free.
   useOpenRoomBeacon({ game: "nardy", code: room.code, active: !!(view && room.isHost && view.open && view.status === "lobby" && view.players.length < 2), name: meOnline ? meOnline.name : "", players: view ? view.players.length : 0, max: 2 });
   useLeaveGuard(!!(view && view.status === "playing" && meOnline && !meOnline.bot), {
@@ -21331,6 +21383,7 @@ function NardyApp({ dispatch }) {
   }
   return (
     <div className="h-full min-h-0 flex flex-col">
+      {achievementToast}
       <TopBar onBack={back} title={t("game.nardy")} right={<IconDice size={18} className="text-[var(--accent-strong)]" />} onRightClick={() => setRulesOpen(true)} />
       <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("nardy.rulesTitle")} color="var(--accent)" rules={rules} />
       {body}

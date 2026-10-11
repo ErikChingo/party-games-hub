@@ -20,8 +20,8 @@
 // A player who leaves a running game, or lets the timer run out twice, is
 // replaced by a bot -- the game goes on for everyone else.
 //
-// Statistics: when an online game with at least two people ends (and after
-// every Blot deal and every Blackjack round), the referee adds what it saw
+// Statistics: when an online game with at least two people ends (Durak, Blot,
+// Nardy; and after every Blot deal and every Blackjack round), the referee adds what it saw
 // to each person's profile through cards_record(). Games against bots only
 // do not count.
 
@@ -311,6 +311,14 @@ function statsEvents(prev, next) {
       if (prev.status === "playing" && next.status === "ended") {
         next.players.forEach((p, i) => add(p, { blot_games: 1, blot_wins: next.winner !== null && i % 2 === next.winner ? 1 : 0 }));
       }
+    }
+  } else if (next.game === "nardy") {
+    if (prev.status === "playing" && next.status === "ended" && (next.humans || 0) >= 2) {
+      const variant = next.settings && next.settings.variant;
+      next.players.forEach((p, i) => {
+        const won = next.winner === i ? 1 : 0;
+        add(p, { nardy_games: 1, nardy_wins: won, nardy_mars: won && next.mars ? 1 : 0, nardy_short_wins: won && variant === "short" ? 1 : 0, nardy_long_wins: won && variant === "long" ? 1 : 0 });
+      });
     }
   } else if (next.game === "blackjack") {
     if (next.phase === "score" && next.statsRound !== next.round && humansNow >= 2) {

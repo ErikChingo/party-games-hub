@@ -560,7 +560,7 @@ function mkView(over = {}, meOver = {}, playersOver = {}) {
     const A = e.C.ACHIEVEMENTS;
     const mafia = A.filter((a) => a.group === "mafia");
     eq(mafia.length, 21, "21 Mafia achievements");
-    eq(A.length, 56, "56 achievements in total (8 general, 21 Mafia, 12 Court, 15 card games)");
+    eq(A.length, 62, "62 achievements in total (8 general, 21 Mafia, 12 Court, 15 card games, 6 nardy)");
     eq(A.filter((a) => a.group === "cards").length, 15, "15 for the card games");
     eq(new Set(A.map((a) => a.id)).size, A.length, "achievement ids are unique");
     const un = (p) => e.C.computeUnlockedAchievementIds(p).filter((id) => id.startsWith("mafia_"));

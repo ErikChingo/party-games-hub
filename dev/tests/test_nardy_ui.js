@@ -4,7 +4,7 @@ const ROOT = require("path").resolve(__dirname, "../..");
 // /api/cards handler (with a fake database in memory).
 const fs = require("fs");
 const head = fs.readFileSync(__dirname + "/test_mafia_room_client.js", "utf8").split("// ---------- views shaped")[0]
-  .replace('const names = [', 'const names = ["NardyEngine", "NardyApp", "NardyTable", "NardyLocalGame", "NardyLobby", "NardyResult", "NardyBoard", "nardyPredict", "nardyLocalPlayers", "nardyReplayPlan", "nardyStepArrivals", "nardyEndDelay", "useCardRoom", "NARDY_SESSION_KEY", "GAMES", "loadHubSection", "HUB_SECTIONS", "SCREEN_COMPONENTS", "LAUNCH_ACTION_TO_GAME", ');
+  .replace('const names = [', 'const names = ["NardyEngine", "NardyApp", "NardyTable", "NardyLocalGame", "NardyLobby", "NardyResult", "NardyBoard", "nardyPredict", "nardyLocalPlayers", "nardyReplayPlan", "nardyStepArrivals", "nardyEndDelay", "ACHIEVEMENTS", "PLAYER_TITLES", "TITLE_PROFILE_FIELDS", "LEADERBOARD_TABS", "LEADERBOARD_COLUMNS", "computeUnlockedAchievementIds", "getPlayerTitle", "useCardRoom", "NARDY_SESSION_KEY", "GAMES", "loadHubSection", "HUB_SECTIONS", "SCREEN_COMPONENTS", "LAUNCH_ACTION_TO_GAME", ');
 const m = { exports: {} };
 new Function("require", "module", "__dirname", head + "\nmodule.exports = { load, React, RDS, makeRuntime, wait };")(require, m, __dirname);
 const { load, React, RDS, makeRuntime, wait } = m.exports;
@@ -21,11 +21,13 @@ const N = require(ROOT + "/api/_lib/nardy.js");
 const handler = require(ROOT + "/api/cards.js");
 process.env.SUPABASE_SERVICE_ROLE_KEY = "svc";
 const rooms = {};
+const recorded = [];
 let apiDelay = 0;
 const json = (status, body) => ({ ok: status < 300, status, json: async () => body });
 async function rest(url, init) {
   const path = url.match(/\/rest\/v1\/(.*)$/)[1];
   if (path.startsWith("rpc/moderate_display_name")) return json(200, JSON.parse(init.body).p_name);
+  if (path.startsWith("rpc/cards_record")) { recorded.push(JSON.parse(init.body)); return json(200, { ok: true }); }
   if (path.startsWith("rpc/")) return json(200, null);
   const q = new URLSearchParams(path.split("?")[1] || "");
   const code = (q.get("code") || "").replace("eq.", "");
@@ -219,7 +221,7 @@ global.setTimeout = (fn, ms, ...rest) => realSetTimeout(fn, fast && ms >= 500 ? 
   {
     const mk = (id) => {
       const rt = makeRuntime();
-      const e = load({ react: { ...React, ...rt.hooks }, local: { ...RU, hatsit_cards_identity_v1: JSON.stringify({ id, secret: "secret-secret-" + id }) }, rpcAny });
+      const e = load({ react: { ...React, ...rt.hooks }, local: { ...RU, hatsit_cards_identity_v1: JSON.stringify({ id, secret: "secret-secret-" + id }), hatsit_player_id_v1: "anon:p-" + id }, rpcAny });
       rt.mount(() => e.C.useCardRoom("nardy", e.C.nardyPredict, e.C.NARDY_SESSION_KEY));
       return { rt, e, get room() { return rt.result; } };
     };
@@ -255,6 +257,14 @@ global.setTimeout = (fn, ms, ...rest) => realSetTimeout(fn, fast && ms >= 500 ? 
     }
     const end = rooms[code].state;
     ok(end.status === "ended" && end.off[end.winner] === 15, "the online game is played to the end (" + end.turns + " turns)");
+    // The referee wrote the game into both profiles.
+    const forNardy = recorded.filter((r) => r.p_delta.nardy_games);
+    eq(forNardy.length, 2, "the result goes into both players' profiles");
+    const winnerRow = forNardy.find((r) => r.p_delta.nardy_wins === 1);
+    const loserRow = forNardy.find((r) => r.p_delta.nardy_wins === 0);
+    ok(winnerRow && loserRow && winnerRow.p_profile_id !== loserRow.p_profile_id, "one win, one loss");
+    ok(winnerRow && winnerRow.p_delta.nardy_long_wins === 1 && winnerRow.p_delta.nardy_short_wins === 0 && winnerRow.p_delta.nardy_mars === (end.mars ? 1 : 0), "the winner's long-nardy win and mars are counted");
+    ok(loserRow && loserRow.p_delta.nardy_mars === 0 && loserRow.p_delta.nardy_long_wins === 0, "the loser gets only the game");
     await wait(2700);
     ok(B.room.view.status === "ended", "Боря sees the end");
     eq((await B.room.call("rematch")).error, "forbidden", "only the host starts a rematch");
@@ -265,6 +275,37 @@ global.setTimeout = (fn, ms, ...rest) => realSetTimeout(fn, fast && ms >= 500 ? 
     const after = rooms[code].state;
     ok(after.players[1].bot && after.status === "playing", "Боря left: a bot plays on");
     A.rt.unmount(); B.rt.unmount();
+  }
+
+  /* ---------- statistics: only games of two people count ---------- */
+  {
+    const { statsEvents } = handler._internals;
+    const base = (humans, players) => ({ game: "nardy", status: "ended", winner: 0, mars: true, humans, settings: { variant: "short" }, players });
+    const two = [{ id: "a", profileId: "anon:a", name: "A" }, { id: "b", profileId: "anon:b", name: "B" }];
+    const ev = statsEvents({ status: "playing" }, base(2, two));
+    eq(ev.map((e) => [e.profileId, e.delta.nardy_wins, e.delta.nardy_mars, e.delta.nardy_short_wins]), [["anon:a", 1, 1, 1], ["anon:b", 0, 0, 0]], "two people: both counted, the winner with mars and a short win");
+    eq(statsEvents({ status: "playing" }, base(1, [two[0], { id: "bot-1", bot: true }])).length, 0, "against a bot: nothing counted");
+    eq(statsEvents({ status: "ended" }, base(2, two)).length, 0, "an ended game is counted only once");
+    eq(statsEvents({ status: "playing" }, base(2, [two[0], { ...two[1], bot: true, left: true }])).map((e) => e.profileId), ["anon:a"], "someone who left (a bot played on) gets nothing");
+  }
+
+  /* ---------- achievements, titles, profile, leaderboard ---------- */
+  {
+    const A = C.ACHIEVEMENTS.filter((a) => a.group === "nardy");
+    eq(A.map((a) => a.id), ["nardy_first", "nardy_win_10", "nardy_win_50", "nardy_mars_1", "nardy_mars_10", "nardy_both"], "six nardy achievements");
+    for (const a of A) ok(typeof a.Icon === "function" && ["ru", "en", "hy"].every((l) => C.t_lookup(a.titleKey, l) !== a.titleKey && C.t_lookup(a.descKey, l) !== a.descKey), "achievement has an icon and 3-language texts: " + a.id);
+    const ids = (p) => C.computeUnlockedAchievementIds(p).filter((x) => x.startsWith("nardy_"));
+    eq(ids({ nardy_games: 1 }), ["nardy_first"], "one game: the first one");
+    eq(ids({ nardy_games: 60, nardy_wins: 50, nardy_mars: 10, nardy_short_wins: 30, nardy_long_wins: 20 }), ["nardy_first", "nardy_win_10", "nardy_win_50", "nardy_mars_1", "nardy_mars_10", "nardy_both"], "all six");
+    eq(ids({ nardy_games: 5, nardy_wins: 5, nardy_short_wins: 5 }), ["nardy_first"], "short wins only: not «both»");
+    const titles = C.PLAYER_TITLES.filter((x) => x.achievementId.startsWith("nardy_"));
+    eq(titles.map((x) => x.achievementId).sort(), ["nardy_mars_10", "nardy_win_50"], "two nardy titles");
+    const sql = fs.readFileSync(ROOT + "/supabase/nardy_stats.sql", "utf8");
+    ok(titles.every((x) => sql.includes("'" + x.achievementId + "'") && x.label.ru && x.label.en && x.label.hy), "the server knows both titles; each has 3 languages");
+    ok(["nardy_wins", "nardy_mars"].every((k) => C.TITLE_PROFILE_FIELDS.includes(k)), "leaderboard rows carry what nardy titles need");
+    eq(C.getPlayerTitle({ nardy_wins: 50 }).label.ru, "Мастер нард", "50 wins -> «Мастер нард»");
+    ok(C.LEADERBOARD_TABS.some((x) => x.key === "nardy") && C.LEADERBOARD_COLUMNS.nardy === "nardy_wins", "a «Нарды» leaderboard tab, by wins");
+    ok(["nardy_games", "nardy_wins", "nardy_mars", "nardy_short_wins", "nardy_long_wins"].every((k) => sql.includes(k)), "the database has the columns");
   }
 
   /* ---------- the referee knows the game ---------- */

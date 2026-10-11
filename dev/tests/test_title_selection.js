@@ -101,11 +101,11 @@ const PLAYER_TITLES = captured.PLAYER_TITLES;
 const setSelectedTitle = captured.setSelectedTitle;
 
 /* ---- PLAYER_TITLES: icon + rare fields ---- */
-ok(Array.isArray(PLAYER_TITLES) && PLAYER_TITLES.length === 21, "PLAYER_TITLES has 21 tiers (8 original + 5 for online Mafia + 4 for Court + 4 for card games)");
+ok(Array.isArray(PLAYER_TITLES) && PLAYER_TITLES.length === 23, "PLAYER_TITLES has 23 tiers (8 original + 5 for online Mafia + 4 for Court + 4 for card games + 2 for nardy)");
 ok(PLAYER_TITLES.every((t) => typeof t.icon === "string" && t.icon.length > 0), "every tier has a non-empty icon");
 ok(PLAYER_TITLES.every((t) => typeof t.rare === "boolean"), "every tier has a boolean rare flag");
 const rareTiers = PLAYER_TITLES.filter((t) => t.rare);
-check(rareTiers.map((x) => x.achievementId).join(), "streak_30,mafia_win_25,blot_win_50", "the rare tiers: month streak, Mafia legend, Blot master");
+check(rareTiers.map((x) => x.achievementId).join(), "streak_30,mafia_win_25,blot_win_50,nardy_win_50", "the rare tiers: month streak, Mafia legend, Blot master, Nardy master");
 check(rareTiers[0] && rareTiers[0].achievementId, "streak_30", "the rare tier is streak_30 (the top/rarest achievement)");
 
 /* ---- getPlayerTitle(): selected_title support ---- */
