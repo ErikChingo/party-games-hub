@@ -162,7 +162,7 @@ global.setTimeout = (fn, ms, ...rest) => realSetTimeout(fn, fast && ms >= 500 ? 
   /* ---------- animations: the other side's turn played back ---------- */
   {
     const E2 = C.NardyEngine;
-    let all = 0, planned = 0, exact = 0, hits = 0, offs = 0;
+    let all = 0, planned = 0, exact = 0, offs = 0;
     for (const variant of ["short", "long"]) {
       let g = E2.newGame(C.nardyLocalPlayers(t), { variant });
       for (let k = 0; k < 400 && g.status === "playing"; k++) {
@@ -176,15 +176,21 @@ global.setTimeout = (fn, ms, ...rest) => realSetTimeout(fn, fast && ms >= 500 ? 
         planned++;
         const lastFrame = plan.frames[plan.frames.length - 1];
         if (plan.frames.length === g.last.steps.length && lastFrame.b.join() === g.board.join() && lastFrame.off.join() === g.off.join()) exact++;
-        plan.arrivals.forEach((a) => { if (a.some((x) => x.kind === "bar")) hits++; if (a.some((x) => x.kind === "off")) offs++; });
+        plan.arrivals.forEach((a) => { if (a.some((x) => x.kind === "off")) offs++; });
       }
     }
     ok(all > 50 && planned === all && exact === all, `every bot turn plays back step by step to the new position (${exact}/${all})`);
-    ok(hits > 0 && offs > 0, `hit checkers fly to the bar (${hits}) and borne-off ones to the tray (${offs})`);
+    ok(offs > 0, `borne-off checkers fly to the tray (${offs})`);
+    // A hit, on a position made for it: seat 0 from 13 lands on seat 1's blot on 10 (its own 15).
+    const hb = new Array(24).fill(0);
+    hb[E2.abs("short", 0, 13)] = 1;
+    hb[E2.abs("short", 1, 15)] = -1;
+    const hitArr = C.nardyStepArrivals({ b: hb, bar: [0, 0], off: [14, 14] }, "short", 0, 0, { from: 13, to: 10, die: 3, hit: true });
+    eq(hitArr.map((a) => a.kind + ":" + a.seat), ["point:0", "bar:1"], "a hit checker flies to the bar after the mover lands");
     const g = E2.newGame(C.nardyLocalPlayers(t), { variant: "short" });
     ok(C.nardyReplayPlan(null, g, 0) === null, "nothing is played back on the first look");
     ok(C.nardyReplayPlan({ b: g.board, bar: g.bar, off: g.off }, g, 0) === null, "nothing is played back when the position did not change (my own turn)");
-    eq([C.nardyEndDelay({ last: { seat: 0, steps: [1, 2] } }, 0), C.nardyEndDelay({ last: { seat: 1, steps: [1, 2, 3, 4] } }, 0)], [700, 4 * 460 + 500], "the result waits for the last move to play out");
+    eq([C.nardyEndDelay({ last: { seat: 0, steps: [1, 2] } }, 0), C.nardyEndDelay({ last: { seat: 1, steps: [1, 2, 3, 4] } }, 0)], [700, 4 * 600 + 500], "the result waits for the last move to play out");
   }
 
   /* ---------- a whole game against the bot on the phone ---------- */

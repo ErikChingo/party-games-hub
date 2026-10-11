@@ -170,19 +170,17 @@
   .durak-turn{ animation:durakTurn 1.4s ease-in-out infinite; }
   @keyframes durakBump{ 0%{ transform:scale(1);} 40%{ transform:scale(1.45); color:var(--accent-strong);} 100%{ transform:scale(1);} }
   .durak-bump{ display:inline-block; animation:durakBump .35s ease-out; }
-  /* Nardy: dice tumble in, a checker drops onto its point. */
-  @keyframes nardyRoll{ 0%{ opacity:0; transform:translateY(-14px) rotate(-200deg) scale(.6);} 70%{ transform:rotate(12deg) scale(1.08);} 100%{ opacity:1; transform:none;} }
-  .nardy-roll{ transform-box:fill-box; transform-origin:center; animation:nardyRoll .5s cubic-bezier(.2,.8,.2,1) both; }
-  /* A checker flies in from (--fx, --fy), lifted off the board halfway. */
-  @keyframes nardyFly{ 0%{ transform:translate(var(--fx), var(--fy));} 50%{ transform:translate(calc(var(--fx) * .5), calc(var(--fy) * .5 - 22px)) scale(1.22);} 100%{ transform:none;} }
-  .nardy-fly{ transform-box:fill-box; transform-origin:center; animation:nardyFly .44s cubic-bezier(.35,.75,.3,1) both; }
+  /* Nardy: a checker that is still flying (drawn over the board, see
+     NardyFlyingChecker) shows on its point only once it has landed. */
+  @keyframes nardyAppear{ from{ opacity:0;} to{ opacity:1;} }
+  .nardy-wait{ animation:nardyAppear 1ms linear var(--wait) both; }
   @keyframes nardyConfetti{ 0%{ transform:translate3d(0,-20px,0) rotate(0); opacity:1;} 85%{ opacity:1;} 100%{ transform:translate3d(var(--cx),105vh,0) rotate(var(--cr)); opacity:0;} }
   .nardy-confetti{ position:absolute; top:-16px; width:8px; animation-name:nardyConfetti; animation-timing-function:cubic-bezier(.25,.6,.5,1); animation-fill-mode:both; }
   @keyframes nardyStamp{ 0%{ opacity:0; transform:scale(2.6) rotate(-24deg);} 100%{ opacity:1; transform:scale(1) rotate(-8deg);} }
   .nardy-stamp{ transform:rotate(-8deg); animation:nardyStamp .5s cubic-bezier(.2,1.5,.4,1) .25s both; }
 
   @media (prefers-reduced-motion: reduce){
-    .pop, .pulse, .flash-badge, .breathe, .neon-pulse, .typing-dot, .title-frame-rare, .durak-in, .durak-draw, .durak-out-discard, .durak-out-take, .durak-turn, .durak-bump, .nardy-roll, .nardy-fly, .nardy-stamp{ animation:none !important; }
+    .pop, .pulse, .flash-badge, .breathe, .neon-pulse, .typing-dot, .title-frame-rare, .durak-in, .durak-draw, .durak-out-discard, .durak-out-take, .durak-turn, .durak-bump, .nardy-wait, .nardy-stamp{ animation:none !important; }
     .nardy-confetti{ display:none; }
   }
 
@@ -20328,49 +20326,141 @@ function nardySlotY(top, k) {
   return top ? M + R + 1 + k * STEP : H - M - R - 1 - k * STEP;
 }
 const NARDY_PIPS = { 1: [[0, 0]], 2: [[-1, -1], [1, 1]], 3: [[-1, -1], [0, 0], [1, 1]], 4: [[-1, -1], [1, -1], [-1, 1], [1, 1]], 5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]], 6: [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]] };
-const NARDY_ROLL_MS = 520;
-const NARDY_STEP_MS = 460;
-// A die tumbles in and flicks through faces for a moment before it settles.
-function NardyDie({ x, y, value, used, size, delay, rollKey }) {
-  const s = size || 24;
-  const [face, setFace] = useState(null);
+// Animation timing. Everything that moves is drawn on a layer of plain
+// elements over the board and moved with transforms, which the phone's
+// graphics chip does by itself -- moving parts of the SVG made the phone
+// redraw the whole board every frame, which is what looked jerky.
+const NARDY_FLY_MS = 430;
+const NARDY_HIT_DELAY_MS = 230;
+const NARDY_STEP_MS = 600;
+const NARDY_ROLL_MS = 640;
+const nardyEase = (u) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
+const nardyReducedMotion = () => {
+  try {
+    return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  } catch (e) {
+    return false;
+  }
+};
+// Board units -> CSS: a share of the board's width/height.
+const nardyPctX = (x) => (x / NARDY_G.WIDTH) * 100 + "%";
+const nardyPctY = (y) => (y / NARDY_G.H) * 100 + "%";
+
+// A checker flying from `from` to `to` (board units) in one smooth arc:
+// eased start and landing, lifted and a little bigger in the middle.
+function NardyFlyingChecker({ seat, from, to, r, delay, duration }) {
+  const ref = useRef(null);
   useEffect(() => {
-    if (!rollKey) return undefined;
-    let left = Math.round(NARDY_ROLL_MS / 70);
-    setFace(1 + Math.floor(Math.random() * 6));
-    const timer = setInterval(() => {
-      left -= 1;
-      if (left <= 0) {
-        clearInterval(timer);
-        setFace(null);
-      } else setFace(1 + Math.floor(Math.random() * 6));
-    }, 70);
-    return () => clearInterval(timer);
+    const el = ref.current;
+    if (!el || typeof el.animate !== "function" || nardyReducedMotion()) {
+      if (el) el.style.visibility = "hidden";
+      return undefined;
+    }
+    const scale = el.parentElement.getBoundingClientRect().width / NARDY_G.WIDTH;
+    const dx = (from.x - to.x) * scale;
+    const dy = (from.y - to.y) * scale;
+    const lift = Math.min(48, 8 + Math.hypot(dx, dy) * 0.22);
+    const frames = [];
+    for (let i = 0; i <= 30; i++) {
+      const u = i / 30;
+      const e = nardyEase(u);
+      const arc = Math.sin(Math.PI * e);
+      frames.push({ offset: u, transform: `translate(-50%, -50%) translate(${dx * (1 - e)}px, ${dy * (1 - e) - lift * arc}px) scale(${1 + 0.18 * arc})` });
+    }
+    const animation = el.animate(frames, { duration, delay, easing: "linear", fill: "both" });
+    // Stays a moment after landing, until the board's own checker shows.
+    let timer = null;
+    animation.onfinish = () => {
+      timer = setTimeout(() => {
+        if (ref.current) ref.current.style.visibility = "hidden";
+      }, 60);
+    };
+    return () => {
+      clearTimeout(timer);
+      animation.cancel();
+    };
+  }, []);
+  const size = (2 * (r || NARDY_G.R)) / NARDY_G.WIDTH * 100 + "%";
+  const fill = seat === 0 ? NARDY_COLORS.white : NARDY_COLORS.black;
+  const edge = seat === 0 ? NARDY_COLORS.whiteEdge : NARDY_COLORS.blackEdge;
+  return (
+    <div
+      ref={ref}
+      className="absolute rounded-full pointer-events-none"
+      style={{
+        left: nardyPctX(to.x),
+        top: nardyPctY(to.y),
+        width: size,
+        aspectRatio: "1 / 1",
+        transform: "translate(-50%, -50%)",
+        background: fill,
+        border: "1.5px solid " + edge,
+        boxShadow: `inset 0 0 0 3px ${fill}, inset 0 0 0 4px ${seat === 0 ? "rgba(156,144,125,.4)" : "rgba(0,0,0,.4)"}, 0 6px 12px rgba(0,0,0,.35)`,
+        willChange: "transform",
+        zIndex: 2,
+      }}
+    />
+  );
+}
+
+// A die that rolls in: it tumbles from the side and slows down, and its
+// face changes a few times, less and less often, before it settles.
+const NARDY_ROLL_FLIPS = [70, 80, 95, 115, 140, 170];
+function NardyRollingDie({ x, y, value, used, size, index, rollKey }) {
+  const ref = useRef(null);
+  const [face, setFace] = useState(() => (rollKey && !nardyReducedMotion() ? 1 + Math.floor(Math.random() * 6) : null));
+  useEffect(() => {
+    if (!rollKey || nardyReducedMotion()) return undefined;
+    const el = ref.current;
+    let animation = null;
+    if (el && typeof el.animate === "function") {
+      const side = index % 2 === 0 ? -1 : 1;
+      animation = el.animate(
+        [
+          { offset: 0, opacity: 0, transform: `translate(${side * 46}px, -34px) rotate(${side * -320}deg) scale(.7)` },
+          { offset: 0.55, opacity: 1, transform: `translate(${side * 6}px, 3px) rotate(${side * 18}deg) scale(1.06)` },
+          { offset: 0.8, transform: "translate(0px, -2px) rotate(-4deg) scale(.98)" },
+          { offset: 1, opacity: 1, transform: "none" },
+        ],
+        { duration: NARDY_ROLL_MS, delay: index * 60, easing: "cubic-bezier(.2,.7,.3,1)", fill: "backwards" }
+      );
+    }
+    const timers = [];
+    let at = index * 60;
+    NARDY_ROLL_FLIPS.forEach((gap, k) => {
+      at += gap;
+      timers.push(setTimeout(() => setFace(k === NARDY_ROLL_FLIPS.length - 1 ? null : 1 + Math.floor(Math.random() * 6)), at));
+    });
+    return () => {
+      timers.forEach(clearTimeout);
+      if (animation) animation.cancel();
+    };
   }, [rollKey]);
   const shown = face || value;
   return (
-    // Faded on the outer group: the roll animation sets opacity on the inner one.
-    <g opacity={used ? 0.3 : 1} style={{ transition: "opacity .2s" }}>
-      <g className="nardy-roll" style={{ animationDelay: (delay || 0) + "ms" }}>
-        <rect x={x - s / 2} y={y - s / 2} width={s} height={s} rx={s * 0.22} fill="#fffdf8" stroke="#7a6a55" strokeWidth="1" />
-        {(NARDY_PIPS[shown] || []).map(([dx, dy], i) => (
-          <circle key={i} cx={x + dx * s * 0.26} cy={y + dy * s * 0.26} r={s * 0.085} fill={NARDY_COLORS.pip} />
-        ))}
-      </g>
-    </g>
+    <div
+      className="absolute pointer-events-none"
+      style={{ left: nardyPctX(x), top: nardyPctY(y), width: (size / NARDY_G.WIDTH) * 100 + "%", aspectRatio: "1 / 1", transform: "translate(-50%, -50%)", zIndex: 1 }}
+    >
+      <div ref={ref} className="absolute inset-0" style={{ willChange: "transform" }}>
+        <div className="w-full h-full rounded-[22%] relative" style={{ background: "#fffdf8", border: "1px solid #7a6a55", boxShadow: "0 3px 6px rgba(0,0,0,.3)", opacity: used ? 0.3 : 1, transition: "opacity .25s" }}>
+          {(NARDY_PIPS[shown] || []).map(([dx, dy], i) => (
+            <span key={i} className="absolute rounded-full" style={{ width: "17%", height: "17%", left: 50 + dx * 26 + "%", top: 50 + dy * 26 + "%", transform: "translate(-50%, -50%)", background: NARDY_COLORS.pip }} />
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
-// A checker (or a borne-off bar in the tray) that has just arrived flies in
-// from where it was: fly = { dx, dy } is that place relative to this one.
-function nardyFlyStyle(fly) {
-  return fly ? { "--fx": fly.dx + "px", "--fy": fly.dy + "px" } : undefined;
-}
-function NardyChecker({ cx, cy, seat, r, label, ring, fly }) {
+
+// A checker on the board. wait (ms): it has just arrived and shows once the
+// flying one has landed on it.
+function NardyChecker({ cx, cy, seat, r, label, ring, wait }) {
   const fill = seat === 0 ? NARDY_COLORS.white : NARDY_COLORS.black;
   const edge = seat === 0 ? NARDY_COLORS.whiteEdge : NARDY_COLORS.blackEdge;
   const rr = r || NARDY_G.R;
   return (
-    <g className={fly ? "nardy-fly" : undefined} style={nardyFlyStyle(fly)}>
+    <g className={wait ? "nardy-wait" : undefined} style={wait ? { "--wait": wait + "ms" } : undefined}>
       <circle cx={cx} cy={cy} r={rr} fill={fill} stroke={edge} strokeWidth="1.2" />
       <circle cx={cx} cy={cy} r={rr * 0.62} fill="none" stroke={edge} strokeOpacity="0.35" strokeWidth="1" />
       {ring && <circle cx={cx} cy={cy} r={rr + 2.2} fill="none" stroke={ring} strokeWidth="2.2" />}
@@ -20477,13 +20567,33 @@ function NardyBoard({ variant, pos, me, selected, movable, targets, marks, arriv
   const boardRight = WIDTH - TRAY;
   const barX = M + 6 * W;
   const midY = H / 2;
-  // The flight of whatever is drawn at (x, y) as the newest of its kind.
-  const flyTo = (kind, q, seat, x, y) => {
-    const a = (arrivals || []).find((r) => r.kind === kind && r.seat === seat && (kind !== "point" || r.q === q));
-    return a ? { dx: a.x - x, dy: a.y - y } : null;
+  const trayW = TRAY - M - 8;
+  // What is flying in, and where it lands (where the board draws its newest
+  // checker of that kind). The mover goes first; a checker it hits leaves
+  // for the bar a moment later, as if knocked off.
+  const flights = (arrivals || []).map((a, i) => {
+    let to;
+    let r = R;
+    if (a.kind === "point") {
+      const n = nardyCountAt(pos, variant, me, a.q, a.seat);
+      to = nardyPlaceXY("point", a.q, Math.min(n, 5) - 1, a.seat, me);
+    } else if (a.kind === "bar") {
+      to = nardyPlaceXY("bar", null, Math.min(pos.bar[a.seat], 4) - 1, a.seat, me);
+      r = 8.5;
+    } else {
+      const top = nardyPlaceXY("off", null, pos.off[a.seat] - 1, a.seat, me);
+      to = { x: top.x + trayW / 2, y: top.y + 2.5 };
+    }
+    const delay = a.kind === "bar" && i > 0 ? NARDY_HIT_DELAY_MS : 0;
+    return { ...a, to, r, delay, wait: delay + NARDY_FLY_MS };
+  });
+  const waitFor = (kind, q, seat) => {
+    const f = flights.find((x) => x.kind === kind && x.seat === seat && (kind !== "point" || x.q === q));
+    return f ? f.wait : 0;
   };
   return (
-    <svg viewBox={`0 0 ${WIDTH} ${H}`} className="w-full h-auto select-none" role="img" aria-label={t("game.nardy")} style={{ maxHeight: "100%", touchAction: "manipulation" }}>
+    <div className="relative w-full select-none" style={{ touchAction: "manipulation" }}>
+    <svg viewBox={`0 0 ${WIDTH} ${H}`} className="block w-full h-auto" role="img" aria-label={t("game.nardy")}>
       <rect x="0" y="0" width={WIDTH} height={H} rx="10" fill={NARDY_COLORS.frame} />
       <rect x={M} y={M} width={6 * W} height={H - 2 * M} fill={NARDY_COLORS.field} />
       <rect x={barX + BAR} y={M} width={6 * W} height={H - 2 * M} fill={NARDY_COLORS.field} />
@@ -20514,9 +20624,8 @@ function NardyBoard({ variant, pos, me, selected, movable, targets, marks, arriv
         for (let k = 0; k < shown; k++) {
           const isTop = k === shown - 1;
           const ring = isTop && selected === q ? accent : isTop && selected === null && movable.includes(q) ? "rgba(232,181,69,.65)" : null;
-          const cy = nardySlotY(top, k);
-          const fly = isTop ? flyTo("point", q, seat, cx, cy) : null;
-          out.push(<NardyChecker key={q + "-" + k + (fly ? "-" + flightKey : "")} cx={cx} cy={cy} seat={seat} ring={ring} label={isTop && n > 5 ? String(n) : null} fly={fly} />);
+          const wait = isTop ? waitFor("point", q, seat) : 0;
+          out.push(<NardyChecker key={q + "-" + k + (wait ? "-" + flightKey : "")} cx={cx} cy={nardySlotY(top, k)} seat={seat} ring={ring} label={isTop && n > 5 ? String(n) : null} wait={wait} />);
         }
         return <g key={"c" + q}>{out}</g>;
       })}
@@ -20529,8 +20638,8 @@ function NardyBoard({ variant, pos, me, selected, movable, targets, marks, arriv
         for (let k = 0; k < Math.min(n, 4); k++) {
           const cy = mineBar ? midY + 40 + k * 17 : midY - 40 - k * 17;
           const isTop = k === Math.min(n, 4) - 1;
-          const fly = isTop ? flyTo("bar", null, s, cx, cy) : null;
-          out.push(<NardyChecker key={"bar" + s + k + (fly ? "-" + flightKey : "")} cx={cx} cy={cy} seat={s} r={8.5} ring={mineBar && isTop && (selected === 25 || (selected === null && movable.includes(25))) ? accent : null} label={isTop && n > 1 ? String(n) : null} fly={fly} />);
+          const wait = isTop ? waitFor("bar", null, s) : 0;
+          out.push(<NardyChecker key={"bar" + s + k + (wait ? "-" + flightKey : "")} cx={cx} cy={cy} seat={s} r={8.5} ring={mineBar && isTop && (selected === 25 || (selected === null && movable.includes(25))) ? accent : null} label={isTop && n > 1 ? String(n) : null} wait={wait} />);
         }
         return <g key={"bar" + s}>{out}</g>;
       })}
@@ -20540,10 +20649,8 @@ function NardyBoard({ variant, pos, me, selected, movable, targets, marks, arriv
         const out = [];
         for (let k = 0; k < n; k++) {
           const y = mineOff ? H - M - 6 - k * 6.5 : M + 1 + k * 6.5;
-          const w = TRAY - M - 8;
-          // The newest one flies in from the checker's point, centred on it.
-          const fly = k === n - 1 ? flyTo("off", null, s, boardRight + 5 + w / 2, y + 2.5) : null;
-          out.push(<rect key={"off" + s + k + (fly ? "-" + flightKey : "")} className={fly ? "nardy-fly" : undefined} style={nardyFlyStyle(fly)} x={boardRight + 5} y={y} width={w} height="5" rx="1.5" fill={s === 0 ? NARDY_COLORS.white : NARDY_COLORS.black} stroke={s === 0 ? NARDY_COLORS.whiteEdge : "#5a4a3a"} strokeWidth="0.6" />);
+          const wait = k === n - 1 ? waitFor("off", null, s) : 0;
+          out.push(<rect key={"off" + s + k + (wait ? "-" + flightKey : "")} className={wait ? "nardy-wait" : undefined} style={wait ? { "--wait": wait + "ms" } : undefined} x={boardRight + 5} y={y} width={trayW} height="5" rx="1.5" fill={s === 0 ? NARDY_COLORS.white : NARDY_COLORS.black} stroke={s === 0 ? NARDY_COLORS.whiteEdge : "#5a4a3a"} strokeWidth="0.6" />);
         }
         return <g key={"off" + s}>{out}</g>;
       })}
@@ -20554,17 +20661,6 @@ function NardyBoard({ variant, pos, me, selected, movable, targets, marks, arriv
         const k = p.n > 0 && p.seat === me ? Math.min(p.n, 4) : 0;
         return <circle key={"t" + x.to} cx={cx} cy={nardySlotY(top, k)} r={R} fill={accent} fillOpacity="0.55" stroke={accent} strokeWidth="2.5" className="pulse" />;
       })}
-      {dice.length > 0 && (
-        <g key={diceKey}>
-          {dice.map((d, i) => {
-            const size = dice.length > 2 ? 20 : 26;
-            const gap = size + 6;
-            const centre = diceRight ? barX + BAR + 3 * W : M + 3 * W;
-            const x = centre + (i - (dice.length - 1) / 2) * gap;
-            return <NardyDie key={i} x={x} y={midY} value={d.v} used={d.used} size={size} delay={i * 70} rollKey={diceKey} />;
-          })}
-        </g>
-      )}
       {points.map(({ q }) => {
         const { top, c } = nardyPointPlace(q);
         return <rect key={"hit" + q} x={nardyColumnX(c)} y={top ? M : midY} width={W} height={H / 2 - M} fill="transparent" onClick={() => onPoint(q)} style={{ cursor: "pointer" }} />;
@@ -20572,6 +20668,17 @@ function NardyBoard({ variant, pos, me, selected, movable, targets, marks, arriv
       <rect x={barX} y={M} width={BAR} height={H - 2 * M} fill="transparent" onClick={onBar} />
       <rect x={boardRight} y={M} width={TRAY} height={H - 2 * M} fill="transparent" onClick={onOff} />
     </svg>
+    <div className="absolute inset-0 pointer-events-none overflow-visible">
+      {dice.map((d, i) => {
+        const size = dice.length > 2 ? 20 : 26;
+        const centre = diceRight ? barX + BAR + 3 * W : M + 3 * W;
+        return <NardyRollingDie key={diceKey + ":" + i} x={centre + (i - (dice.length - 1) / 2) * (size + 6)} y={midY} value={d.v} used={d.used} size={size} index={i} rollKey={diceKey} />;
+      })}
+      {flights.map((f, i) => (
+        <NardyFlyingChecker key={flightKey + ":" + i} seat={f.seat} from={{ x: f.x, y: f.y }} to={f.to} r={f.r} delay={f.delay} duration={NARDY_FLY_MS} />
+      ))}
+    </div>
+    </div>
   );
 }
 
@@ -20585,7 +20692,7 @@ function NardyPlayerRow({ t, view, seat, meIndex, active, pos }) {
   const E = NardyEngine;
   const variant = view.settings.variant;
   return (
-    <div className={"flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-colors duration-300 " + (active ? "durak-turn border-[var(--accent)] bg-[var(--accent)]/10" : "border-transparent")}>
+    <div className={"flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-colors duration-300 " + (active ? "border-[var(--accent)] bg-[var(--accent)]/10" : "border-transparent")}>
       <span className="w-4 h-4 rounded-full shrink-0 border" style={{ background: seat === 0 ? NARDY_COLORS.white : NARDY_COLORS.black, borderColor: seat === 0 ? NARDY_COLORS.whiteEdge : "#777" }} />
       <span className="text-sm font-medium truncate">{nardyPlayerName(t, view, seat, meIndex)}</span>
       <span className="ml-auto shrink-0 text-xs font-mono text-[var(--text-dim)]">
