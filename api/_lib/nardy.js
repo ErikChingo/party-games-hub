@@ -377,7 +377,9 @@ const NardyEngine = (function () {
     const turns = allTurns(state);
     if (turns.length === 0) return [];
     const variant = state.settings.variant;
-    const noise = state.settings.level === "easy" ? 14 : 0;
+    // The easy bot judges with its eyes half closed; short nardy needs more of
+    // that for the difference to be felt.
+    const noise = state.settings.level === "easy" ? (variant === "short" ? 34 : 14) : 0;
     let best = null;
     let bestScore = -Infinity;
     turns.forEach((ctx) => {
