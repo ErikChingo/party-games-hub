@@ -2,8 +2,8 @@
 --
 -- set_selected_title() only stores a title the player has really unlocked;
 -- the check repeats ACHIEVEMENTS in index.html for the ids that carry a
--- title. Already applied to the live database on 7 Oct 2026 (the Mafia
--- titles were added then) -- this file is the copy for the repository.
+-- title. Already applied to the live database (Mafia titles on 7 Oct 2026,
+-- Court titles later the same day) -- this file is the copy for the repository.
 
 create or replace function public.set_selected_title(p_id text, p_title_id text)
 returns void language plpgsql security definer set search_path to 'public' as $function$
@@ -36,6 +36,10 @@ begin
     when 'mafia_godfather'  then p.mafia_mafia_wins >= 5
     when 'mafia_sheriff_10' then p.mafia_finds >= 10
     when 'mafia_doctor_10'  then p.mafia_saves >= 10
+    when 'court_10'         then p.court_played >= 10
+    when 'court_judge_10'   then p.court_judge >= 10
+    when 'court_acquitted_5' then p.court_acquitted >= 5
+    when 'court_all_roles'  then (p.court_roles_mask & 15) = 15
     else false
   end;
 

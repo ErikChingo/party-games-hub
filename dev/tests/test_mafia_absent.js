@@ -1,0 +1,20 @@
+// Host phrases for players who leave or vanish in online Mafia.
+const fs = require("fs");
+const head = fs.readFileSync(__dirname + "/test_mafia_room_client.js", "utf8");
+const m = { exports: {} };
+new Function("require", "module", "__dirname", head.split("(async () => {")[0] + "\nmodule.exports = { load, React, mkView };")(require, m, __dirname);
+const { load, React, mkView } = m.exports;
+let p = 0, f = 0;
+const ok = (c, msg) => { if (c) p++; else { f++; console.log("FAIL: " + msg); } };
+const { C } = load({ react: React });
+const view = mkView();
+const parts = (entry, lang = "ru") => C.mafiaHostParts(entry, view, lang).map((x) => (typeof x === "string" ? x : x.fallback)).join(" ");
+let s = parts({ key: "left", params: { seat: 2, role: "doctor" } });
+ok(/Вика покидает игру и выбывает/.test(s) && /Доктор/i.test(s), "walked out, role shown: " + s);
+s = parts({ key: "left", params: { seat: 2, role: null } });
+ok(/Вика покидает игру и выбывает/.test(s) && !/Доктор|Роль/i.test(s), "walked out, hidden roles: " + s);
+s = parts({ key: "gone", params: { seat: 1, role: "don" } });
+ok(/Боря пропал со связи и выбывает/.test(s), "vanished: " + s);
+ok(/lost connection/.test(parts({ key: "gone", params: { seat: 1 } }, "en")) && /լքում/.test(parts({ key: "left", params: { seat: 1 } }, "hy")), "English and Armenian phrases exist");
+console.log(`${p} passed, ${f} failed`);
+process.exit(f ? 1 : 0);

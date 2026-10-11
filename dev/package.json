@@ -1,0 +1,14 @@
+{
+  "name": "hatsit-dev",
+  "private": true,
+  "description": "Checks for the Hatsit site. Not deployed; run locally: npm install, then npm test (build the site first: npm run build in the repo root).",
+  "scripts": {
+    "test": "node run-all.js",
+    "sync-engines": "node sync-engines.js",
+    "check": "node tests/static_check.js"
+  },
+  "devDependencies": {
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  }
+}
