@@ -108,7 +108,8 @@ async function playDurak(code, humans) {
   eq(sum("anon:prof-anya", "blot_wins") + sum("tg:12345", "blot_wins"), bs.winner === null ? 0 : 1, "seats 0 and 1 are on different teams: exactly one of them wins");
   const madeByUs = bs.history.filter((h) => h.made && (h.contract.seat === 0 || h.contract.seat === 1)).length;
   const histDeals = bs.history.length;
-  ok(histDeals === bs.deals || bs.deals > 30, "history covers the deals");
+  // every scored deal is in the history; deals where all four passed are redealt and leave none
+  ok((histDeals >= deals && histDeals <= bs.deals) || bs.deals > 30, `history covers the deals (${histDeals} in history, ${deals} scored, ${bs.deals} dealt)`);
   eq(sum("anon:prof-anya", "blot_made") + sum("tg:12345", "blot_made"), madeByUs, "each contract a person made is counted once (" + madeByUs + ")");
   const capotsUs = bs.history.filter((h) => h.capot !== null && h.capot !== undefined).length;
   eq(sum("anon:prof-anya", "blot_capots") + sum("tg:12345", "blot_capots"), capotsUs, "every капут counted for the person on that team (" + capotsUs + ")");

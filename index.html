@@ -990,7 +990,24 @@ function tg() {
 /* pressed. Wrapped in try/catch and a typeof check so a slow/blocked  */
 /* script, an ad-blocker, or Vercel changing the shim's shape can      */
 /* never break the app itself -- analytics is strictly best-effort.   */
+// "game_completed" pairs with the "game_started" this device logged last: at
+// most one per started game, so a game with many rounds (Blackjack, Alias,
+// Charades) or a refresh on an end screen can't count twice, and a guest
+// in an online room (whose start the host logged) adds nothing. Kept in
+// sessionStorage so a page refresh mid-game still finds the open game.
+const OPEN_GAME_KEY = "hatsitOpenGame";
+function pairGameEvent(name, game) {
+  try {
+    if (name === "game_started") sessionStorage.setItem(OPEN_GAME_KEY, String(game || ""));
+    else if (name === "game_completed") {
+      if (!game || sessionStorage.getItem(OPEN_GAME_KEY) !== game) return false;
+      sessionStorage.removeItem(OPEN_GAME_KEY);
+    }
+  } catch (e) {}
+  return true;
+}
 function trackEvent(name, data) {
+  if (!pairGameEvent(name, data && data.game)) return;
   try {
     if (typeof window !== "undefined" && typeof window.va === "function") {
       window.va("event", { name, data: data || {} });
@@ -1369,10 +1386,8 @@ async function recordCountdownScore(rounds) {
 // plain games-played counter. See useRecordGamePlayedOnStart() below for
 // where it's called from (once per room actually starting play).
 async function recordGamePlayed(game) {
-  // Bunker/Court have no separate "game over" moment (see the doc comment
-  // above), so unlike the offline games there's no matching
-  // "game_completed" call to pair this with -- this single event is the
-  // only signal available, so it's tracked as "game_started".
+  // The matching "game_completed" is useTrackGameCompleted() below: the
+  // bunker sealed / the court's verdict.
   trackEvent("game_started", { game });
   try {
     await supabaseClient.rpc("record_game_played", { p_id: getPlayerId(), p_name: getPlayerName(), p_game: game });
@@ -1624,6 +1639,14 @@ function useRecordGamePlayedOnStart(status, game) {
     }
     prevRef.current = status;
   }, [status, game]);
+}
+
+// Logs "game_completed" once when `finished` turns true (pairGameEvent keeps
+// it to one per started game). Used where the end is a state, not a screen.
+function useTrackGameCompleted(finished, game, extra) {
+  useEffect(() => {
+    if (finished) trackEvent("game_completed", { game, ...extra });
+  }, [finished, game]);
 }
 
 // Local mirror of the server's streak_current/streak_longest, cached so the
@@ -5183,6 +5206,9 @@ const LAUNCH_ACTION_TO_GAME = {
   TELEPHONE_LAUNCH: "telephone",
   MAFIA_LAUNCH: "mafia",
 };
+// Screens that mean "this game was played through". Alias and Charades loop
+// rounds forever, so one full round counts.
+const SCREEN_COMPLETES_GAME = { "alias-round-end": "alias", "croc-round-end": "croc", "telephone-end": "telephone" };
 
 function reducer(state, action) {
   switch (action.type) {
@@ -14318,6 +14344,10 @@ function BunkerApp({ dispatch }) {
   // room.status flip to "playing" via the realtime broadcast, so each
   // participant is counted once, not just the host.
   useRecordGamePlayedOnStart(room && room.status, "bunker");
+  // Over the same way BunkerVotingCard shows "the bunker is sealed".
+  const bunkerSealed = !!(room && room.status === "playing" && room.players && !room.voting &&
+    Object.values(room.players).filter((p) => !p.exiled).length <= Math.max(1, room.capacity || 1));
+  useTrackGameCompleted(bunkerSealed, "bunker");
   useLeaveGuard(!!(roomCode && room && (room.status !== "lobby" || room.hostId === playerId)), { messageKey: "leave.hint" });
 
   function handleStart() {
@@ -15816,6 +15846,7 @@ function CourtApp({ dispatch }) {
   // (handleNewCase below flips status "playing" -> "verdict" -> "playing"
   // again), and the edge-triggered hook correctly counts each new case.
   useRecordGamePlayedOnStart(room && room.status, "court");
+  useTrackGameCompleted(!!(room && room.status === "verdict"), "court");
   useLeaveGuard(!!(roomCode && room && (room.status !== "lobby" || room.hostId === playerId)), { messageKey: "leave.hint" });
 
   function handleStart() {
@@ -17068,6 +17099,8 @@ function useCardRoom(game, predict, sessionKey) {
   const pendingRef = useRef([]);
   const sendingRef = useRef(false);
   const [pending, setPending] = useState([]);
+  // Online end: the game over, or in Blackjack (endless rounds) the first scored round.
+  useTrackGameCompleted(!!view && (view.status === "ended" || (game === "blackjack" && view.phase === "score")), game, { mode: "online" });
 
   const accept = useCallback((data) => {
     if (!data || !data.ok || !data.view) return;
@@ -19819,6 +19852,9 @@ function App() {
       document.documentElement.setAttribute("data-feedback", feedbackShown ? "1" : "0");
     } catch (e) {}
   }, [feedbackShown]);
+
+  // "game_completed" for the games whose end is just a screen (see SCREEN_COMPLETES_GAME).
+  useTrackGameCompleted(!!SCREEN_COMPLETES_GAME[state.screen], SCREEN_COMPLETES_GAME[state.screen]);
 
   // "game_started" analytics: this is the single choke point every game
   // launch passes through, so wrapping dispatch here (rather than editing
