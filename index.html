@@ -170,9 +170,14 @@
   .durak-turn{ animation:durakTurn 1.4s ease-in-out infinite; }
   @keyframes durakBump{ 0%{ transform:scale(1);} 40%{ transform:scale(1.45); color:var(--accent-strong);} 100%{ transform:scale(1);} }
   .durak-bump{ display:inline-block; animation:durakBump .35s ease-out; }
+  /* Nardy: dice tumble in, a checker drops onto its point. */
+  @keyframes nardyRoll{ 0%{ opacity:0; transform:translateY(-14px) rotate(-200deg) scale(.6);} 70%{ transform:rotate(12deg) scale(1.08);} 100%{ opacity:1; transform:none;} }
+  .nardy-roll{ transform-box:fill-box; transform-origin:center; animation:nardyRoll .5s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes nardyLand{ from{ opacity:.2; transform:scale(1.35);} to{ opacity:1; transform:none;} }
+  .nardy-land{ transform-box:fill-box; transform-origin:center; animation:nardyLand .28s ease-out both; }
 
   @media (prefers-reduced-motion: reduce){
-    .pop, .pulse, .flash-badge, .breathe, .neon-pulse, .typing-dot, .title-frame-rare, .durak-in, .durak-draw, .durak-out-discard, .durak-out-take, .durak-turn, .durak-bump{ animation:none !important; }
+    .pop, .pulse, .flash-badge, .breathe, .neon-pulse, .typing-dot, .title-frame-rare, .durak-in, .durak-draw, .durak-out-discard, .durak-out-take, .durak-turn, .durak-bump, .nardy-roll, .nardy-land{ animation:none !important; }
   }
 
   .no-scrollbar::-webkit-scrollbar{ display:none; }
@@ -3316,7 +3321,7 @@ const I18N = {
   "game.durak": { ru: "Дурак", en: "Durak", hy: "Դուրակ" },
   "hub.durakSubtitle": { ru: "2–6 игроков · с ботами или онлайн", en: "2–6 players · with bots or online", hy: "2–6 խաղացող · բոտերի հետ կամ օնլայն" },
   "hub.sectionParty": { ru: "Для компании", en: "Party games", hy: "Ընկերության համար" },
-  "hub.sectionCards": { ru: "Карточные", en: "Card games", hy: "Թղթախաղեր" },
+  "hub.sectionCards": { ru: "Карты и нарды", en: "Cards & nardy", hy: "Թղթեր և նարդի" },
   "hub.cardsSoon": { ru: "Скоро здесь появятся и другие карточные игры", en: "More card games are coming here soon", hy: "Շուտով այստեղ կհայտնվեն նաև այլ թղթախաղեր" },
   "durak.subtitle": { ru: "Подкидной и переводной · 2–6 игроков", en: "Classic and transfer · 2–6 players", hy: "Դասական և փոխանցովի · 2–6 խաղացող" },
   "durak.you": { ru: "Вы", en: "You", hy: "Դուք" },
@@ -3456,6 +3461,38 @@ const I18N = {
   "bj.out_push": { ru: "Ничья", en: "Push", hy: "Ոչ-ոքի" },
   "bj.out_lose": { ru: "Проигрыш", en: "Lose", hy: "Պարտություն" },
   "bj.out_bust": { ru: "Перебор", en: "Bust", hy: "Պերեբոր" },
+  "game.nardy": { ru: "Нарды", en: "Nardy", hy: "Նարդի" },
+  "hub.nardySubtitle": { ru: "Короткие и длинные · с ботом или онлайн", en: "Short and long · with a bot or online", hy: "Կարճ և երկար · բոտի հետ կամ օնլայն" },
+  "nardy.subtitle": { ru: "Короткие и длинные нарды · с ботом или вдвоём онлайн", en: "Short and long nardy · with a bot or two online", hy: "Կարճ և երկար նարդի · բոտի հետ կամ երկուսով օնլայն" },
+  "nardy.playBot": { ru: "Играть с ботом", en: "Play a bot", hy: "Խաղալ բոտի հետ" },
+  "nardy.playBotDesc": { ru: "Вы против бота, без интернета", en: "You against a bot, no internet needed", hy: "Դուք բոտի դեմ, առանց ինտերնետի" },
+  "nardy.playOnlineDesc": { ru: "Вдвоём, каждый со своего телефона", en: "Two players, each on their own phone", hy: "Երկուսով, յուրաքանչյուրն իր հեռախոսից" },
+  "nardy.short": { ru: "Короткие", en: "Short", hy: "Կարճ" },
+  "nardy.shortDesc": { ru: "Навстречу друг другу, шашки можно сбивать", en: "Towards each other, checkers can be hit", hy: "Իրար ընդառաջ, քարերը կարելի է խփել" },
+  "nardy.long": { ru: "Длинные", en: "Long", hy: "Երկար" },
+  "nardy.longDesc": { ru: "Все с головы, в одну сторону, без сбивания", en: "All from the head, one way round, no hitting", hy: "Բոլորը գլխից, մեկ ուղղությամբ, առանց խփելու" },
+  "nardy.level": { ru: "Сила бота", en: "Bot strength", hy: "Բոտի ուժը" },
+  "nardy.level_easy": { ru: "Лёгкий бот", en: "Easy bot", hy: "Թեթև բոտ" },
+  "nardy.level_normal": { ru: "Средний бот", en: "Normal bot", hy: "Միջին բոտ" },
+  "nardy.createDesc": { ru: "Получите код комнаты и позовите друга", en: "Get a room code and invite a friend", hy: "Ստացեք սենյակի կոդը և հրավիրեք ընկերոջը" },
+  "nardy.joinDesc": { ru: "Войти в комнату друга по коду", en: "Join a friend's room by code", hy: "Մտնել ընկերոջ սենյակ կոդով" },
+  "nardy.needTwo": { ru: "Нужны двое: позовите друга или добавьте бота", en: "Two are needed: invite a friend or add a bot", hy: "Պետք է երկու հոգի. հրավիրեք ընկերոջը կամ ավելացրեք բոտ" },
+  "nardy.rulesTitle": { ru: "Правила нард", en: "Nardy rules", hy: "Նարդու կանոններ" },
+  "nardy.yourTurn": { ru: "Ваш ход — нажмите на шашку", en: "Your turn — tap a checker", hy: "Ձեր քայլն է — սեղմեք քարին" },
+  "nardy.keepGoing": { ru: "Ходите дальше", en: "Keep going", hy: "Շարունակեք" },
+  "nardy.confirm": { ru: "Кубики сыграны — нажмите «Готово»", en: "Dice played — tap “Done”", hy: "Զառերը խաղացված են — սեղմեք «Պատրաստ է»" },
+  "nardy.turnOf": { ru: "Ходит {name}", en: "{name} to play", hy: "Քայլում է {name}-ը" },
+  "nardy.noMoves": { ru: "{name}: выпало {dice}, ходов нет", en: "{name} rolled {dice}: no moves", hy: "{name}-ը գցեց {dice}, քայլ չկա" },
+  "nardy.noMovesMe": { ru: "У вас выпало {dice} — ходов нет", en: "You rolled {dice}: no moves", hy: "Դուք գցեցիք {dice} — քայլ չկա" },
+  "nardy.done": { ru: "Готово", en: "Done", hy: "Պատրաստ է" },
+  "nardy.undo": { ru: "Отменить", en: "Undo", hy: "Չեղարկել" },
+  "nardy.pips": { ru: "осталось {n}", en: "{n} to go", hy: "մնաց {n}" },
+  "nardy.offN": { ru: "выведено {n}", en: "{n} off", hy: "հանված՝ {n}" },
+  "nardy.win": { ru: "Победа!", en: "You win!", hy: "Հաղթանակ։" },
+  "nardy.lose": { ru: "Поражение", en: "You lose", hy: "Պարտություն" },
+  "nardy.winner": { ru: "Победил {name}", en: "{name} won", hy: "Հաղթեց {name}-ը" },
+  "nardy.marsWin": { ru: "Марс! Соперник не вывел ни одной шашки — победа вдвойне", en: "Mars! Your opponent bore off nothing — a double win", hy: "Մարս։ Մրցակիցը ոչ մի քար չհանեց — կրկնակի հաղթանակ" },
+  "nardy.marsLose": { ru: "Марс: вы не успели вывести ни одной шашки", en: "Mars: you did not bear off a single checker", hy: "Մարս. դուք ոչ մի քար չհասցրիք հանել" },
   "achievements.groupCards": { ru: "Карточные игры онлайн", en: "Online card games", hy: "Օնլայն թղթախաղեր" },
   "achievements.durakFirst.title": { ru: "Сдавай!", en: "Deal me in!", hy: "Բաժանի՛ր" },
   "achievements.durakFirst.desc": { ru: "Сыграйте онлайн-партию в Дурака с людьми", en: "Play an online Durak game with people", hy: "Խաղացեք Դուրակի օնլայն պարտիա մարդկանց հետ" },
@@ -4947,7 +4984,7 @@ let pendingInviteParams = (() => {
     const params = new URLSearchParams(window.location.search);
     const room = (params.get("room") || "").replace(/\D/g, "").slice(0, 4);
     const game = params.get("game");
-    if (room && (game === "bunker" || game === "court" || game === "mafiaroom" || game === "durak" || game === "blot" || game === "blackjack")) return { room, game };
+    if (room && (game === "bunker" || game === "court" || game === "mafiaroom" || game === "durak" || game === "blot" || game === "blackjack" || game === "nardy")) return { room, game };
   } catch (e) {}
   // Same invite, Telegram's own shape: a Mini App opened via
   // t.me/<bot>/<app>?startapp=bunker_1234 gets that "bunker_1234" back as
@@ -4956,7 +4993,7 @@ let pendingInviteParams = (() => {
   try {
     const telegram = tg();
     const startParam = telegram && telegram.initDataUnsafe && telegram.initDataUnsafe.start_param;
-    const match = typeof startParam === "string" && startParam.match(/^(bunker|court|mafiaroom|durak|blot|blackjack)_(\d{4})$/);
+    const match = typeof startParam === "string" && startParam.match(/^(bunker|court|mafiaroom|durak|blot|blackjack|nardy)_(\d{4})$/);
     if (match) return { room: match[2], game: match[1] };
   } catch (e) {}
   return null;
@@ -5237,6 +5274,7 @@ function reducer(state, action) {
         : leftScreen === "durak" ? "durak"
         : leftScreen === "blot" ? "blot"
         : leftScreen === "blackjack" ? "blackjack"
+        : leftScreen === "nardy" ? "nardy"
         : null;
       return { ...initialState, config: state.config, feedbackPending };
     }
@@ -5256,6 +5294,8 @@ function reducer(state, action) {
       return { ...state, screen: "blot" };
     case "OPEN_BLACKJACK":
       return { ...state, screen: "blackjack" };
+    case "OPEN_NARDY":
+      return { ...state, screen: "nardy" };
     case "SET_COUNT": {
       const count = Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, action.value));
       const maxSpies = Math.max(MIN_SPY_COUNT, Math.floor((count - 1) / 2));
@@ -7630,8 +7670,9 @@ const GAMES = [
     badgeClassName: "bg-[var(--court)]/15 text-[var(--court)]",
     isNew: true,
   },
-  // section: "cards" puts a game under the Hub's «Карточные» tab; without it
+  // section: "cards" puts a game under the Hub's «Карты и нарды» tab; without it
   // a game is in «Для компании».
+  { id: "nardy", titleKey: "game.nardy", subtitleKey: "hub.nardySubtitle", Icon: IconDice, openAction: "OPEN_NARDY", section: "cards", isNew: true },
   { id: "blot", titleKey: "game.blot", subtitleKey: "hub.blotSubtitle", Icon: IconSpade, openAction: "OPEN_BLOT", section: "cards", isNew: true },
   { id: "blackjack", titleKey: "game.blackjack", subtitleKey: "hub.blackjackSubtitle", Icon: IconChip, openAction: "OPEN_BLACKJACK", section: "cards", isNew: true },
   { id: "durak", titleKey: "game.durak", subtitleKey: "hub.durakSubtitle", Icon: IconCards, openAction: "OPEN_DURAK", section: "cards", isNew: true },
@@ -7675,7 +7716,7 @@ function hubGameOrder(games) {
 const OWNER_STATS_PASSWORD_KEY = "hatsit_owner_stats_pw_v1";
 const OWNER_STATS_GAME_NAMES = {
   spy: "Шпион", alias: "Алиас", croc: "Крокодил", wordless: "Без слов", countdown: "Обратный отсчёт",
-  telephone: "Испорченный телефон", mafia: "Мафия (один телефон)", mafiaroom: "Мафия онлайн", bunker: "Бункер", court: "Суд", durak: "Дурак", blot: "Блот", blackjack: "Блэкджек",
+  telephone: "Испорченный телефон", mafia: "Мафия (один телефон)", mafiaroom: "Мафия онлайн", bunker: "Бункер", court: "Суд", durak: "Дурак", blot: "Блот", blackjack: "Блэкджек", nardy: "Нарды",
 };
 function ownerStatsDay(day) {
   const parts = String(day || "").split("-");
@@ -7997,9 +8038,10 @@ const SCREEN_COMPONENTS = {
   durak: DurakApp,
   blot: BlotApp,
   blackjack: BlackjackApp,
+  nardy: NardyApp,
 };
 
-const FEEDBACK_GAME_LABEL_KEY = { spy: "game.spy", alias: "game.alias", croc: "game.croc", wordless: "game.wordless", countdown: "game.countdown", telephone: "game.telephone", mafia: "game.mafia", bunker: "game.bunker", court: "game.court", durak: "game.durak", blot: "game.blot", blackjack: "game.blackjack" };
+const FEEDBACK_GAME_LABEL_KEY = { spy: "game.spy", alias: "game.alias", croc: "game.croc", wordless: "game.wordless", countdown: "game.countdown", telephone: "game.telephone", mafia: "game.mafia", bunker: "game.bunker", court: "game.court", durak: "game.durak", blot: "game.blot", blackjack: "game.blackjack", nardy: "game.nardy" };
 
 // Small bottom-sheet card rendered on the Hub when state.feedbackPending is
 // set (see the GO_HUB reducer case). Star tap -> optional comment -> one
@@ -19810,6 +19852,1160 @@ function BlackjackApp({ dispatch }) {
       {achievementToast}
       <TopBar onBack={back} title={t("game.blackjack")} right={<IconChip size={18} className="text-[var(--accent-strong)]" />} onRightClick={() => setRulesOpen(true)} />
       <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("bj.rulesTitle")} color="var(--accent)" rules={rules} />
+      {body}
+    </div>
+  );
+}
+
+/* Nardy rules engine: a verbatim copy of api/_lib/nardy.js (run
+   dev/sync-engines.js after editing that file). */
+/* NARDY-ENGINE-BEGIN */
+const NardyEngine = (function () {
+  const CHECKERS = 15;
+  const BAR = 25;
+  const VARIANTS = ["short", "long"];
+  const LEVELS = ["easy", "normal"];
+
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+  const rollDie = (random) => 1 + Math.floor((random || Math.random)() * 6);
+
+  // A seat's own point (1..24) <-> the shared board index (0..23).
+  function abs(variant, seat, p) {
+    if (seat === 0) return p - 1;
+    return variant === "long" ? (p + 11) % 24 : 24 - p;
+  }
+  function own(variant, seat, a) {
+    if (seat === 0) return a + 1;
+    return variant === "long" ? ((a + 12) % 24) + 1 : 24 - a;
+  }
+  const sign = (seat) => (seat === 0 ? 1 : -1);
+  function mine(pos, variant, seat, p) {
+    const v = pos.b[abs(variant, seat, p)] * sign(seat);
+    return v > 0 ? v : 0;
+  }
+  function theirs(pos, variant, seat, p) {
+    const v = pos.b[abs(variant, seat, p)] * sign(seat);
+    return v < 0 ? -v : 0;
+  }
+  const posKey = (pos) => pos.b.join(",") + "|" + pos.bar.join(",") + "|" + pos.off.join(",");
+  const copyPos = (pos) => ({ b: pos.b.slice(), bar: pos.bar.slice(), off: pos.off.slice() });
+
+  function startPosition(variant) {
+    const pos = { b: new Array(24).fill(0), bar: [0, 0], off: [0, 0] };
+    const layout = variant === "long" ? [[24, 15]] : [[24, 2], [13, 5], [8, 3], [6, 5]];
+    [0, 1].forEach((seat) => layout.forEach(([p, n]) => (pos.b[abs(variant, seat, p)] += n * sign(seat))));
+    return pos;
+  }
+
+  // Everything at home (points 1..6), nothing on the bar.
+  function allHome(pos, variant, seat) {
+    if (pos.bar[seat] > 0) return false;
+    for (let p = 7; p <= 24; p++) if (mine(pos, variant, seat, p) > 0) return false;
+    return true;
+  }
+  function pips(pos, variant, seat) {
+    let n = pos.bar[seat] * 25;
+    for (let p = 1; p <= 24; p++) n += mine(pos, variant, seat, p) * p;
+    return n;
+  }
+
+  // Long nardy: six of my points in a row are fine only if one of the other
+  // player's checkers is already past them (only a run that really is six in
+  // a row on the other player's way can shut it in). Only rows through
+  // point `at` (where a checker just landed) are checked: a row made earlier,
+  // when it was allowed, never blocks later moves.
+  function blockAllowed(pos, seat, at) {
+    const other = 1 - seat;
+    let run = 0;
+    for (let p = 24; p >= 1; p--) {
+      run = mine(pos, "long", seat, p) > 0 ? run + 1 : 0;
+      if (run < 6 || at < p || at > p + 5) continue;
+      const theirsPts = [];
+      for (let k = p; k < p + 6; k++) theirsPts.push(own("long", other, abs("long", seat, k)));
+      const lo = Math.min.apply(null, theirsPts);
+      if (Math.max.apply(null, theirsPts) - lo !== 5) continue; // split on their way: shuts nothing in
+      let past = false;
+      for (let q = 1; q < lo && !past; q++) if (mine(pos, "long", other, q) > 0) past = true;
+      if (!past) return false;
+    }
+    return true;
+  }
+
+  // ---------- one turn: a position plus the dice still to use ----------
+  // ctx = { variant, seat, pos, dice: [remaining], used: [], headMoves, headLimit, steps: [] }
+  function turnContext(state) {
+    const seat = state.turn;
+    const variant = state.settings.variant;
+    const d = state.dice || [];
+    const dice = d.length === 2 && d[0] === d[1] ? [d[0], d[0], d[0], d[0]] : d.slice();
+    const first = variant === "long" && state.firstTurn && state.firstTurn[seat];
+    const headLimit = variant === "long" ? (first && d[0] === d[1] && [6, 4, 3].includes(d[0]) ? 2 : 1) : 99;
+    return { variant, seat, pos: copyPos({ b: state.board, bar: state.bar, off: state.off }), dice, headMoves: 0, headLimit, steps: [] };
+  }
+
+  // Where one checker would go with one die, or null if it may not.
+  function stepTarget(ctx, from, die) {
+    const { pos, variant, seat } = ctx;
+    if (variant === "short" && pos.bar[seat] > 0 && from !== BAR) return null;
+    if (from === BAR) {
+      if (variant !== "short" || pos.bar[seat] === 0) return null;
+      const to = 25 - die;
+      return theirs(pos, variant, seat, to) <= 1 ? to : null;
+    }
+    if (from < 1 || from > 24 || mine(pos, variant, seat, from) === 0) return null;
+    if (variant === "long" && from === 24 && ctx.headMoves >= ctx.headLimit) return null;
+    const to = from - die;
+    if (to >= 1) {
+      const t = theirs(pos, variant, seat, to);
+      if (variant === "long" ? t > 0 : t > 1) return null;
+      return to;
+    }
+    if (!allHome(pos, variant, seat)) return null;
+    if (to === 0) return 0;
+    for (let p = from + 1; p <= 6; p++) if (mine(pos, variant, seat, p) > 0) return null;
+    return 0;
+  }
+  function applyStep(ctx, from, die) {
+    const to = stepTarget(ctx, from, die);
+    if (to === null) return null;
+    const { variant, seat } = ctx;
+    const pos = copyPos(ctx.pos);
+    const s = sign(seat);
+    let hit = false;
+    if (from === BAR) pos.bar[seat] -= 1;
+    else pos.b[abs(variant, seat, from)] -= s;
+    if (to === 0) pos.off[seat] += 1;
+    else {
+      const a = abs(variant, seat, to);
+      if (pos.b[a] * s < 0) {
+        pos.b[a] = 0;
+        pos.bar[1 - seat] += 1;
+        hit = true;
+      }
+      pos.b[a] += s;
+    }
+    if (variant === "long" && to > 0 && !blockAllowed(pos, seat, to)) return null;
+    const k = ctx.dice.indexOf(die);
+    const dice = ctx.dice.slice();
+    dice.splice(k, 1);
+    return {
+      ...ctx,
+      pos,
+      dice,
+      headMoves: ctx.headMoves + (variant === "long" && from === 24 ? 1 : 0),
+      steps: ctx.steps.concat([{ from, die, to, hit }]),
+    };
+  }
+  function rawSteps(ctx) {
+    const out = [];
+    const seen = new Set();
+    ctx.dice.forEach((die) => {
+      if (seen.has(die)) return;
+      seen.add(die);
+      const froms = ctx.variant === "short" && ctx.pos.bar[ctx.seat] > 0 ? [BAR] : [];
+      if (!froms.length) for (let p = 24; p >= 1; p--) if (mine(ctx.pos, ctx.variant, ctx.seat, p) > 0) froms.push(p);
+      froms.forEach((from) => {
+        const next = applyStep(ctx, from, die);
+        if (next) out.push({ from, die, to: next.steps[next.steps.length - 1].to, next });
+      });
+    });
+    return out;
+  }
+  const ctxKey = (ctx) => posKey(ctx.pos) + "#" + ctx.dice.slice().sort().join("") + "#" + ctx.headMoves;
+  // How many of the remaining dice can still be used, at most.
+  function maxUse(ctx, memo) {
+    if (ctx.dice.length === 0) return 0;
+    const key = ctxKey(ctx);
+    if (memo.has(key)) return memo.get(key);
+    let best = 0;
+    const steps = rawSteps(ctx);
+    for (let i = 0; i < steps.length && best < ctx.dice.length; i++) best = Math.max(best, 1 + maxUse(steps[i].next, memo));
+    memo.set(key, best);
+    return best;
+  }
+  // The single moves allowed now: each one keeps the most dice playable.
+  function legalSteps(ctx) {
+    const memo = new Map();
+    const need = maxUse(ctx, memo);
+    if (need === 0) return [];
+    let steps = rawSteps(ctx).filter((s) => 1 + maxUse(s.next, memo) === need);
+    // Only one of two different dice can be played: the larger one if it can.
+    if (need === 1 && ctx.steps.length === 0 && ctx.dice.length === 2 && ctx.dice[0] !== ctx.dice[1]) {
+      const big = Math.max(ctx.dice[0], ctx.dice[1]);
+      if (steps.some((s) => s.die === big)) steps = steps.filter((s) => s.die === big);
+    }
+    return steps;
+  }
+  function ctxStep(ctx, from, die) {
+    const s = legalSteps(ctx).find((x) => x.from === from && x.die === die);
+    return s ? s.next : null;
+  }
+  const turnOver = (ctx) => legalSteps(ctx).length === 0;
+
+  // ---------- setting up ----------
+  function note(state, entry) {
+    state.seq += 1;
+    state.log.push({ seq: state.seq, ...entry });
+    if (state.log.length > 40) state.log = state.log.slice(-40);
+  }
+  function newGame(players, settings, random) {
+    random = random || Math.random;
+    const variant = VARIANTS.includes(settings && settings.variant) ? settings.variant : "short";
+    const level = LEVELS.includes(settings && settings.level) ? settings.level : "normal";
+    const pos = startPosition(variant);
+    let a = rollDie(random);
+    let b = rollDie(random);
+    while (a === b) {
+      a = rollDie(random);
+      b = rollDie(random);
+    }
+    const state = {
+      v: 1,
+      game: "nardy",
+      status: "playing",
+      settings: { variant, level },
+      players: players.slice(0, 2).map((p) => ({ ...p, afk: p.afk || 0 })),
+      board: pos.b,
+      bar: pos.bar,
+      off: pos.off,
+      opening: [a, b],
+      turn: a > b ? 0 : 1,
+      dice: null,
+      firstTurn: [true, true],
+      turns: 0,
+      last: null,
+      winner: null,
+      mars: false,
+      points: 0,
+      seq: 0,
+      log: [],
+    };
+    note(state, { t: "opening", dice: [a, b] });
+    // Short nardy plays the opening roll itself; long nardy rolls afresh.
+    beginTurn(state, random, variant === "short" ? [Math.max(a, b), Math.min(a, b)] : null);
+    return state;
+  }
+  // Rolls for state.turn; a roll that cannot be played at all passes on
+  // (it stays in state.last so it can be shown).
+  function beginTurn(state, random, given) {
+    for (let guard = 0; guard < 12; guard++) {
+      state.dice = given || [rollDie(random), rollDie(random)];
+      given = null;
+      if (!turnOver(turnContext(state))) return;
+      state.last = { seat: state.turn, dice: state.dice.slice(), steps: [], blocked: true };
+      note(state, { t: "blocked", p: state.turn, dice: state.dice.slice() });
+      state.firstTurn[state.turn] = false;
+      state.turns += 1;
+      state.turn = 1 - state.turn;
+    }
+  }
+
+  // ---------- doing things ----------
+  // action: { type: "turn", steps: [{ from, die }, ...] } -- a whole turn.
+  function apply(input, seat, action, random) {
+    if (!input || input.status !== "playing") return { ok: false, error: "not_playing" };
+    if (!action || action.type !== "turn" || !Array.isArray(action.steps) || action.steps.length > 4) return { ok: false, error: "bad_request" };
+    if (input.turn !== seat || !input.dice) return { ok: false, error: "illegal" };
+    let ctx = turnContext(input);
+    for (const s of action.steps) {
+      const next = s && ctxStep(ctx, Number(s.from), Number(s.die));
+      if (!next) return { ok: false, error: "illegal" };
+      ctx = next;
+    }
+    if (!turnOver(ctx)) return { ok: false, error: "illegal" };
+    const state = clone(input);
+    state.board = ctx.pos.b;
+    state.bar = ctx.pos.bar;
+    state.off = ctx.pos.off;
+    state.last = { seat, dice: input.dice.slice(), steps: ctx.steps.map((s) => ({ from: s.from, to: s.to, die: s.die, hit: s.hit })) };
+    note(state, { t: "turn", p: seat, dice: input.dice.slice(), n: ctx.steps.length });
+    state.firstTurn[seat] = false;
+    state.turns += 1;
+    if (state.off[seat] >= CHECKERS) {
+      state.status = "ended";
+      state.winner = seat;
+      state.mars = state.off[1 - seat] === 0;
+      state.points = state.mars ? 2 : 1;
+      state.dice = null;
+      state.turn = null;
+      note(state, { t: "won", p: seat, mars: state.mars });
+      return { ok: true, state };
+    }
+    state.turn = 1 - seat;
+    beginTurn(state, random);
+    return { ok: true, state };
+  }
+
+  // ---------- bots ----------
+  // Every different way to play the whole roll, ending positions deduplicated.
+  function allTurns(state) {
+    const out = new Map();
+    const seen = new Set();
+    (function walk(ctx) {
+      const key = ctxKey(ctx);
+      if (seen.has(key)) return;
+      seen.add(key);
+      const steps = legalSteps(ctx);
+      if (steps.length === 0) {
+        const k = posKey(ctx.pos);
+        if (!out.has(k)) out.set(k, ctx);
+        return;
+      }
+      steps.forEach((s) => walk(s.next));
+    })(turnContext(state));
+    return Array.from(out.values());
+  }
+  // How good a position is for `seat` (bigger is better).
+  function evaluate(pos, variant, seat) {
+    const other = 1 - seat;
+    if (pos.off[seat] >= CHECKERS) return 1e6;
+    let score = pips(pos, variant, other) - pips(pos, variant, seat) + 4 * (pos.off[seat] - pos.off[other]);
+    // The other player's checkers, as points in their own numbering.
+    const theirOwn = [];
+    for (let q = 1; q <= 24; q++) if (mine(pos, variant, other, q) > 0) theirOwn.push(q);
+    if (pos.bar[other] > 0) theirOwn.push(BAR);
+    let made = 0;
+    let run = 0;
+    let bestRun = 0;
+    for (let p = 1; p <= 24; p++) {
+      const n = mine(pos, variant, seat, p);
+      // My point p in their numbering: they still have to pass it from any higher point.
+      const op = own(variant, other, abs(variant, seat, p));
+      if (n > 3) score -= 0.6 * (n - 3);
+      if (variant === "short") {
+        if (n >= 2) {
+          made += p <= 7 ? 3 : 2;
+          run += 1;
+        } else run = 0;
+        if (n === 1) {
+          // A blot: what being hit costs, times how many of theirs are in reach.
+          let near = 0;
+          let far = 0;
+          theirOwn.forEach((q) => {
+            const dist = q - op;
+            if (dist >= 1 && dist <= 6) near += 1;
+            else if (dist >= 7 && dist <= 12) far += 1;
+          });
+          score -= (near + far * 0.35) * ((25 - p) / 8);
+        }
+      } else if (n > 0) {
+        made += 0.5;
+        // A run of mine that their checkers still have to get past holds them up.
+        run = theirOwn.some((q) => q > op) ? run + 1 : 0;
+      } else run = 0;
+      bestRun = Math.max(bestRun, run);
+    }
+    score += made + (variant === "short" ? 0.8 : 0.9) * bestRun * bestRun;
+    if (variant === "short") score += 6 * pos.bar[other] - 6 * pos.bar[seat];
+    return score;
+  }
+  function chooseTurn(state, seat, random) {
+    random = random || Math.random;
+    const turns = allTurns(state);
+    if (turns.length === 0) return [];
+    const variant = state.settings.variant;
+    const noise = state.settings.level === "easy" ? 14 : 0;
+    let best = null;
+    let bestScore = -Infinity;
+    turns.forEach((ctx) => {
+      const s = evaluate(ctx.pos, variant, seat) + (noise ? (random() - 0.5) * noise : 0);
+      if (s > bestScore) {
+        bestScore = s;
+        best = ctx;
+      }
+    });
+    return best.steps.map((s) => ({ from: s.from, die: s.die }));
+  }
+  function botMove(state, seat, random) {
+    if (!state || state.status !== "playing" || state.turn !== seat || !state.dice) return null;
+    return { type: "turn", steps: chooseTurn(state, seat, random) };
+  }
+  function nextBotMove(state, isBot) {
+    if (!state || state.status !== "playing" || state.turn === null || !isBot(state.turn)) return null;
+    const m = botMove(state, state.turn);
+    return m ? [state.turn, m] : null;
+  }
+
+  // ---------- a player who does not move in time ----------
+  // The turn is played for them (the way the easy bot would).
+  function timeout(input, random) {
+    if (!input || input.status !== "playing" || input.turn === null) return { state: input, idle: [] };
+    const seat = input.turn;
+    const easy = { ...input, settings: { ...input.settings, level: "easy" } };
+    const result = apply(input, seat, { type: "turn", steps: chooseTurn(easy, seat, random) }, random);
+    return { state: result.ok ? result.state : input, idle: [seat] };
+  }
+
+  // ---------- what one player is allowed to see ----------
+  // Nothing is hidden in nardy; only the seats' secrets are taken out.
+  function viewFor(state) {
+    const out = clone(state);
+    out.players = state.players.map((p) => {
+      const q = { ...p };
+      delete q.secretHash;
+      delete q.profileId;
+      return q;
+    });
+    return out;
+  }
+
+  return {
+    CHECKERS, BAR, VARIANTS, LEVELS,
+    abs, own, startPosition, pips, allHome, blockAllowed, posKey,
+    turnContext, legalSteps, ctxStep, turnOver, allTurns, evaluate, chooseTurn,
+    newGame, apply, timeout, botMove, nextBotMove, viewFor,
+  };
+})();
+/* NARDY-ENGINE-END */
+
+/* ---------------------------------------------------------------- */
+/* Nardy (backgammon), short and long. With a bot on this phone, or   */
+/* online for two through /api/cards (see api/_lib/nardy.js).         */
+/* ---------------------------------------------------------------- */
+const NARDY_RULES = {
+  ru: [
+    "Двое игроков, у каждого 15 шашек. Бросаете два кубика и ходите шашками на столько полей, сколько выпало на каждом; дубль — четыре хода. Цель — первым привести все шашки домой и вывести их с доски.",
+    "Выпавшее нужно сыграть полностью, если это хоть как-то возможно. Если получается сыграть только один кубик — играется больший.",
+    "Дом — последние шесть полей. Выводить шашки можно, когда все 15 дома. Кубик больше нужного выводит шашку с самого дальнего поля.",
+    "Короткие: игроки идут навстречу друг другу. Одинокую шашку соперника можно сбить — она уходит на бар и должна вернуться в игру раньше всех остальных. Поле, где стоят две шашки и больше, для соперника закрыто.",
+    "Длинные: все шашки стартуют с «головы», оба идут в одну сторону, сбивать нельзя — поле, где стоит хоть одна шашка соперника, закрыто. С головы за ход снимается одна шашка (в самый первый ход при 6-6, 4-4 или 3-3 — две). Нельзя занять шесть полей подряд, если впереди них нет ни одной шашки соперника.",
+    "Победа — 1 очко. Если соперник не успел вывести ни одной шашки — это марс, 2 очка.",
+    "Как ходить: нажмите на шашку, потом на подсвеченное поле. Когда кубики сыграны — «Готово»; «Отменить» возвращает последний шаг.",
+  ],
+  en: [
+    "Two players, 15 checkers each. Roll two dice and move checkers as many points as each die shows; a double is four moves. The goal is to be first to bring all checkers home and bear them off the board.",
+    "The roll must be played in full whenever that is possible at all. If only one die can be played, it must be the larger one.",
+    "Home is the last six points. You may bear off once all 15 are home. A die bigger than needed bears off from the farthest point.",
+    "Short: the players move towards each other. A lone checker can be hit — it goes to the bar and must come back in before anything else moves. A point with two or more checkers is closed to the opponent.",
+    "Long: all checkers start on the “head”, both players move the same way round, and nothing is hit — a point with even one opposing checker is closed. Only one checker may leave the head per turn (two on the very first turn with 6-6, 4-4 or 3-3). You may not hold six points in a row unless an opposing checker is already past them.",
+    "A win is 1 point. If the loser has not borne off a single checker, it is a mars: 2 points.",
+    "How to move: tap a checker, then a highlighted point. When the dice are played, tap “Done”; “Undo” takes back the last step.",
+  ],
+  hy: [
+    "Երկու խաղացող, յուրաքանչյուրը՝ 15 քար։ Գցում եք երկու զառ և քարերը տեղաշարժում այնքան դաշտ, որքան ցույց է տալիս յուրաքանչյուր զառը. դուբլը՝ չորս քայլ։ Նպատակն է առաջինը բոլոր քարերը տուն բերել և հանել տախտակից։",
+    "Գցածը պետք է խաղալ ամբողջությամբ, եթե դա հնարավոր է։ Եթե միայն մեկ զառ է հնարավոր խաղալ, խաղում է մեծը։",
+    "Տունը վերջին վեց դաշտերն են։ Քարեր հանել կարելի է, երբ բոլոր 15-ը տանն են։ Անհրաժեշտից մեծ զառը հանում է ամենահեռու դաշտի քարը։",
+    "Կարճ նարդի. խաղացողները շարժվում են իրար ընդառաջ։ Մրցակցի միայնակ քարը կարելի է խփել — այն գնում է բար և պետք է վերադառնա խաղի մեջ մնացած բոլորից առաջ։ Երկու և ավելի քարով դաշտը մրցակցի համար փակ է։",
+    "Երկար նարդի. բոլոր քարերը սկսում են «գլխից», երկուսն էլ շարժվում են նույն ուղղությամբ, խփել չի կարելի — մրցակցի գոնե մեկ քարով դաշտը փակ է։ Գլխից մեկ քայլում հանվում է մեկ քար (առաջին քայլում 6-6, 4-4 կամ 3-3 գցելիս՝ երկու)։ Չի կարելի զբաղեցնել իրար հաջորդող վեց դաշտ, եթե դրանցից առաջ մրցակցի ոչ մի քար չկա։",
+    "Հաղթանակը՝ 1 միավոր։ Եթե մրցակիցը ոչ մի քար չի հասցրել հանել, դա մարս է՝ 2 միավոր։",
+    "Ինչպես խաղալ. սեղմեք քարին, հետո՝ լուսավորված դաշտին։ Երբ զառերը խաղացված են՝ «Պատրաստ է», «Չեղարկել»-ը հետ է բերում վերջին քայլը։",
+  ],
+};
+const NARDY_SESSION_KEY = "hatsit_nardy_session_v1";
+const NARDY_LOCAL_KEY = "hatsit_nardy_local_v1";
+const NARDY_VARIANT_KEY = "hatsit_nardy_variant_v1";
+const NARDY_BOT_DELAY_MS = 900;
+
+// The board, in SVG units, always drawn from the viewer's side: their home
+// is bottom right (points 1..6), they move along the top from 24 (top
+// right) to 13, then along the bottom from 12 to 1. Bar in the middle,
+// borne-off checkers in the tray on the right.
+const NARDY_G = { M: 6, W: 26, BAR: 18, TRAY: 30, H: 340, PT: 132, R: 11.5, STEP: 23 };
+NARDY_G.WIDTH = NARDY_G.M * 2 + NARDY_G.W * 12 + NARDY_G.BAR + NARDY_G.TRAY;
+const NARDY_COLORS = {
+  frame: "#4a2f1a", field: "#d8ba8a", ptDark: "#8a3b26", ptLight: "#f2e3c4",
+  white: "#faf6ec", whiteEdge: "#9c907d", black: "#2b2622", blackEdge: "#0b0908", pip: "#1d1a17",
+};
+function nardyColumnX(c) {
+  const { M, W, BAR } = NARDY_G;
+  return M + (c < 6 ? c * W : 6 * W + BAR + (c - 6) * W);
+}
+// The viewer's own point q (1..24) -> where it is drawn.
+function nardyPointPlace(q) {
+  const top = q >= 13;
+  const c = top ? q - 13 : 12 - q;
+  return { top, c, cx: nardyColumnX(c) + NARDY_G.W / 2 };
+}
+function nardySlotY(top, k) {
+  const { M, H, R, STEP } = NARDY_G;
+  return top ? M + R + 1 + k * STEP : H - M - R - 1 - k * STEP;
+}
+const NARDY_PIPS = { 1: [[0, 0]], 2: [[-1, -1], [1, 1]], 3: [[-1, -1], [0, 0], [1, 1]], 4: [[-1, -1], [1, -1], [-1, 1], [1, 1]], 5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]], 6: [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]] };
+function NardyDie({ x, y, value, used, size, delay }) {
+  const s = size || 24;
+  return (
+    // Faded on the outer group: the roll animation sets opacity on the inner one.
+    <g opacity={used ? 0.3 : 1} style={{ transition: "opacity .2s" }}>
+      <g className="nardy-roll" style={{ animationDelay: (delay || 0) + "ms" }}>
+        <rect x={x - s / 2} y={y - s / 2} width={s} height={s} rx={s * 0.22} fill="#fffdf8" stroke="#7a6a55" strokeWidth="1" />
+        {(NARDY_PIPS[value] || []).map(([dx, dy], i) => (
+          <circle key={i} cx={x + dx * s * 0.26} cy={y + dy * s * 0.26} r={s * 0.085} fill={NARDY_COLORS.pip} />
+        ))}
+      </g>
+    </g>
+  );
+}
+function NardyChecker({ cx, cy, seat, r, label, ring, landed }) {
+  const fill = seat === 0 ? NARDY_COLORS.white : NARDY_COLORS.black;
+  const edge = seat === 0 ? NARDY_COLORS.whiteEdge : NARDY_COLORS.blackEdge;
+  const rr = r || NARDY_G.R;
+  return (
+    <g className={landed ? "nardy-land" : undefined}>
+      <circle cx={cx} cy={cy} r={rr} fill={fill} stroke={edge} strokeWidth="1.2" />
+      <circle cx={cx} cy={cy} r={rr * 0.62} fill="none" stroke={edge} strokeOpacity="0.35" strokeWidth="1" />
+      {ring && <circle cx={cx} cy={cy} r={rr + 2.2} fill="none" stroke={ring} strokeWidth="2.2" />}
+      {label && (
+        <text x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fontWeight="700" fill={seat === 0 ? "#3a3128" : "#f4efe6"} fontFamily="ui-monospace, monospace">
+          {label}
+        </text>
+      )}
+    </g>
+  );
+}
+
+// pos = { b, bar, off } (see the engine). me = the viewer's seat.
+function NardyBoard({ variant, pos, me, selected, movable, targets, marks, landed, dice, diceRight, diceKey, onPoint, onBar, onOff }) {
+  const t = useT();
+  const { M, W, BAR, TRAY, H, PT, R, WIDTH } = NARDY_G;
+  const E = NardyEngine;
+  const accent = "var(--accent)";
+  const points = [];
+  for (let q = 1; q <= 24; q++) {
+    const v = pos.b[E.abs(variant, me, q)];
+    points.push({ q, seat: v > 0 ? 0 : 1, n: Math.abs(v) });
+  }
+  const targetAt = (q) => targets.find((x) => x.to === q);
+  const boardRight = WIDTH - TRAY;
+  const barX = M + 6 * W;
+  const midY = H / 2;
+  return (
+    <svg viewBox={`0 0 ${WIDTH} ${H}`} className="w-full h-auto select-none" role="img" aria-label={t("game.nardy")} style={{ maxHeight: "100%", touchAction: "manipulation" }}>
+      <rect x="0" y="0" width={WIDTH} height={H} rx="10" fill={NARDY_COLORS.frame} />
+      <rect x={M} y={M} width={6 * W} height={H - 2 * M} fill={NARDY_COLORS.field} />
+      <rect x={barX + BAR} y={M} width={6 * W} height={H - 2 * M} fill={NARDY_COLORS.field} />
+      <rect x={boardRight + 2} y={M} width={TRAY - M - 2} height={H - 2 * M} rx="4" fill="#3a2414" />
+      {targets.some((x) => x.to === 0) && (
+        <rect x={boardRight + 2} y={midY} width={TRAY - M - 2} height={H / 2 - M} rx="4" fill={accent} opacity="0.35" className="pulse" />
+      )}
+      {points.map(({ q }) => {
+        const { top, c } = nardyPointPlace(q);
+        const x0 = nardyColumnX(c);
+        const yBase = top ? M : H - M;
+        const yTip = top ? M + PT : H - M - PT;
+        const dark = c % 2 === (top ? 0 : 1);
+        const marked = marks.includes(q);
+        return (
+          <g key={"p" + q}>
+            <path d={`M${x0 + 1} ${yBase} L${x0 + W - 1} ${yBase} L${x0 + W / 2} ${yTip} Z`} fill={dark ? NARDY_COLORS.ptDark : NARDY_COLORS.ptLight} opacity={dark ? 0.92 : 1} />
+            {marked && <path d={`M${x0 + 1} ${yBase} L${x0 + W - 1} ${yBase} L${x0 + W / 2} ${yTip} Z`} fill={accent} opacity="0.32" />}
+          </g>
+        );
+      })}
+      <rect x={barX} y={M} width={BAR} height={H - 2 * M} fill={NARDY_COLORS.frame} />
+      {points.map(({ q, seat, n }) => {
+        if (n === 0) return null;
+        const { top, cx } = nardyPointPlace(q);
+        const shown = Math.min(n, 5);
+        const out = [];
+        for (let k = 0; k < shown; k++) {
+          const isTop = k === shown - 1;
+          const ring = isTop && selected === q ? accent : isTop && selected === null && movable.includes(q) ? "rgba(232,181,69,.65)" : null;
+          out.push(<NardyChecker key={q + "-" + k} cx={cx} cy={nardySlotY(top, k)} seat={seat} ring={ring} label={isTop && n > 5 ? String(n) : null} landed={isTop && landed === q} />);
+        }
+        return <g key={"c" + q}>{out}</g>;
+      })}
+      {[0, 1].map((s) => {
+        const n = pos.bar[s];
+        if (!n) return null;
+        const mineBar = s === me;
+        const cx = barX + BAR / 2;
+        const out = [];
+        for (let k = 0; k < Math.min(n, 4); k++) {
+          const cy = mineBar ? midY + 40 + k * 17 : midY - 40 - k * 17;
+          const isTop = k === Math.min(n, 4) - 1;
+          out.push(<NardyChecker key={"bar" + s + k} cx={cx} cy={cy} seat={s} r={8.5} ring={mineBar && isTop && (selected === 25 || (selected === null && movable.includes(25))) ? accent : null} label={isTop && n > 1 ? String(n) : null} />);
+        }
+        return <g key={"bar" + s}>{out}</g>;
+      })}
+      {[0, 1].map((s) => {
+        const n = pos.off[s];
+        const mineOff = s === me;
+        const out = [];
+        for (let k = 0; k < n; k++) {
+          const y = mineOff ? H - M - 6 - k * 6.5 : M + 1 + k * 6.5;
+          out.push(<rect key={"off" + s + k} x={boardRight + 5} y={y} width={TRAY - M - 8} height="5" rx="1.5" fill={s === 0 ? NARDY_COLORS.white : NARDY_COLORS.black} stroke={s === 0 ? NARDY_COLORS.whiteEdge : "#5a4a3a"} strokeWidth="0.6" />);
+        }
+        return <g key={"off" + s}>{out}</g>;
+      })}
+      {targets.map((x) => {
+        if (x.to < 1) return null;
+        const { top, cx } = nardyPointPlace(x.to);
+        const p = points[x.to - 1];
+        const k = p.n > 0 && p.seat === me ? Math.min(p.n, 4) : 0;
+        return <circle key={"t" + x.to} cx={cx} cy={nardySlotY(top, k)} r={R} fill={accent} fillOpacity="0.55" stroke={accent} strokeWidth="2.5" className="pulse" />;
+      })}
+      {dice.length > 0 && (
+        <g key={diceKey}>
+          {dice.map((d, i) => {
+            const size = dice.length > 2 ? 20 : 26;
+            const gap = size + 6;
+            const centre = diceRight ? barX + BAR + 3 * W : M + 3 * W;
+            const x = centre + (i - (dice.length - 1) / 2) * gap;
+            return <NardyDie key={i} x={x} y={midY} value={d.v} used={d.used} size={size} delay={i * 70} />;
+          })}
+        </g>
+      )}
+      {points.map(({ q }) => {
+        const { top, c } = nardyPointPlace(q);
+        return <rect key={"hit" + q} x={nardyColumnX(c)} y={top ? M : midY} width={W} height={H / 2 - M} fill="transparent" onClick={() => onPoint(q)} style={{ cursor: "pointer" }} />;
+      })}
+      <rect x={barX} y={M} width={BAR} height={H - 2 * M} fill="transparent" onClick={onBar} />
+      <rect x={boardRight} y={M} width={TRAY} height={H - 2 * M} fill="transparent" onClick={onOff} />
+    </svg>
+  );
+}
+
+function nardyPlayerName(t, view, seat, meIndex) {
+  const p = view.players[seat];
+  if (seat === meIndex) return t("durak.you");
+  return durakPlayerName(t, p);
+}
+// One player's strip above or below the board.
+function NardyPlayerRow({ t, view, seat, meIndex, active, pos }) {
+  const E = NardyEngine;
+  const variant = view.settings.variant;
+  return (
+    <div className={"flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-colors duration-300 " + (active ? "durak-turn border-[var(--accent)] bg-[var(--accent)]/10" : "border-transparent")}>
+      <span className="w-4 h-4 rounded-full shrink-0 border" style={{ background: seat === 0 ? NARDY_COLORS.white : NARDY_COLORS.black, borderColor: seat === 0 ? NARDY_COLORS.whiteEdge : "#777" }} />
+      <span className="text-sm font-medium truncate">{nardyPlayerName(t, view, seat, meIndex)}</span>
+      <span className="ml-auto shrink-0 text-xs font-mono text-[var(--text-dim)]">
+        {t("nardy.pips").replace("{n}", E.pips(pos, variant, seat))}
+        {pos.off[seat] > 0 ? " · " + t("nardy.offN").replace("{n}", pos.off[seat]) : ""}
+      </span>
+    </div>
+  );
+}
+
+// The table: the board, both players, the dice, and my turn being put together
+// one step at a time (sent whole with «Готово»).
+function NardyTable({ view, meIndex, onTurn, deadline }) {
+  const t = useT();
+  const E = NardyEngine;
+  const seconds = useSecondsLeft(deadline || null);
+  const me = meIndex >= 0 ? meIndex : 0;
+  const variant = view.settings.variant;
+  const playing = view.status === "playing";
+  const myTurn = playing && view.turn === me && !!view.dice;
+  const turnKey = view.turns + ":" + view.turn + ":" + (view.dice ? view.dice.join("") : "-");
+  const [steps, setSteps] = useState([]);
+  const [selected, setSelected] = useState(null);
+  useEffect(() => {
+    setSteps([]);
+    setSelected(null);
+  }, [turnKey]);
+  const ctx = useMemo(() => {
+    if (!myTurn) return null;
+    let c = E.turnContext(view);
+    for (const s of steps) {
+      const next = E.ctxStep(c, s.from, s.die);
+      if (!next) break;
+      c = next;
+    }
+    return c;
+  }, [myTurn, view, steps]);
+  const legal = useMemo(() => (ctx ? E.legalSteps(ctx) : []), [ctx]);
+  const done = !!ctx && legal.length === 0;
+  const pos = ctx ? ctx.pos : { b: view.board, bar: view.bar, off: view.off };
+  const movable = Array.from(new Set(legal.map((s) => s.from)));
+  // On the bar there is only one checker to pick: picked already.
+  const sel = selected !== null && movable.includes(selected) ? selected : movable.length === 1 && movable[0] === E.BAR ? E.BAR : null;
+  const targets = sel === null ? [] : legal.filter((s) => s.from === sel).filter((s, i, all) => all.findIndex((x) => x.to === s.to) === i);
+  const lastStep = ctx && ctx.steps.length ? ctx.steps[ctx.steps.length - 1] : null;
+
+  function step(from, die, to) {
+    setSteps((list) => list.concat([{ from, die }]));
+    setSelected(to > 0 ? to : null);
+  }
+  function onPoint(q) {
+    if (!myTurn) return;
+    const target = sel !== null && targets.find((x) => x.to === q);
+    if (target) return step(sel, target.die, target.to);
+    setSelected(movable.includes(q) && q !== sel ? q : null);
+  }
+  function onBar() {
+    if (myTurn && movable.includes(E.BAR)) setSelected(E.BAR);
+  }
+  function onOff() {
+    if (!myTurn || sel === null) return;
+    // Bearing off with the smallest die that does it keeps the bigger one.
+    const off = legal.filter((s) => s.from === sel && s.to === 0).sort((a, b) => a.die - b.die)[0];
+    if (off) step(sel, off.die, 0);
+  }
+
+  // The dice to draw: mine with the used ones faded; anyone else's as rolled.
+  let dice = [];
+  if (view.dice) {
+    const full = view.dice[0] === view.dice[1] ? [view.dice[0], view.dice[0], view.dice[0], view.dice[0]] : view.dice.slice();
+    const left = ctx ? ctx.dice.slice() : full.slice();
+    dice = full.map((v) => {
+      const k = left.indexOf(v);
+      if (k >= 0) left.splice(k, 1);
+      return { v, used: k < 0 };
+    });
+  }
+  // The last turn played, marked on the board until I start mine.
+  const marks = [];
+  if (view.last && steps.length === 0) {
+    view.last.steps.forEach((s) => {
+      [s.from, s.to].forEach((pt) => {
+        if (pt >= 1 && pt <= 24) marks.push(E.own(variant, me, E.abs(variant, view.last.seat, pt)));
+      });
+    });
+  }
+  const other = 1 - me;
+  const nameOf = (seat) => nardyPlayerName(t, view, seat, me);
+  let status = "";
+  if (playing) {
+    if (myTurn) status = done ? t("nardy.confirm") : steps.length === 0 ? t("nardy.yourTurn") : t("nardy.keepGoing");
+    else status = t("nardy.turnOf").replace("{name}", nameOf(view.turn));
+  }
+  const blocked = view.last && view.last.blocked && steps.length === 0 ? view.last : null;
+  const blockedText = blocked ? (blocked.seat === me ? t("nardy.noMovesMe") : t("nardy.noMoves").replace("{name}", nameOf(blocked.seat))).replace("{dice}", blocked.dice.join("-")) : "";
+
+  return (
+    <div className="flex-1 min-h-0 flex flex-col px-3 pt-1 pb-3 gap-1.5">
+      <div className="flex-1 min-h-0 flex flex-col justify-center gap-1.5">
+      <NardyPlayerRow t={t} view={view} seat={other} meIndex={me} active={playing && view.turn === other} pos={pos} />
+      <div className="min-h-0 flex items-center justify-center">
+        <NardyBoard
+          variant={variant}
+          pos={pos}
+          me={me}
+          selected={sel}
+          movable={myTurn ? movable : []}
+          targets={targets}
+          marks={marks}
+          landed={lastStep ? lastStep.to : null}
+          dice={dice}
+          diceRight={view.turn === me}
+          diceKey={turnKey}
+          onPoint={onPoint}
+          onBar={onBar}
+          onOff={onOff}
+        />
+      </div>
+      <NardyPlayerRow t={t} view={view} seat={me} meIndex={me} active={playing && view.turn === me} pos={pos} />
+      </div>
+      <div className="shrink-0 pt-1">
+        <p key={status + blockedText} className={"text-sm text-center min-h-[1.25rem] pop " + (myTurn ? "text-[var(--accent-strong)] font-medium" : "text-[var(--text-dim)]")}>
+          {blockedText ? blockedText + " · " : ""}
+          {status}
+          {playing && seconds !== null && deadline ? " · " + fmtTime(seconds) : ""}
+        </p>
+        {myTurn && (
+          <div className="pop grid grid-cols-2 gap-2 mt-2">
+            <button
+              onClick={() => {
+                setSteps((list) => list.slice(0, -1));
+                setSelected(null);
+              }}
+              disabled={steps.length === 0}
+              className="py-3 rounded-2xl bg-[var(--surface-2)] border border-[var(--border-strong)] font-display text-lg disabled:opacity-30 active:scale-95 transition-transform"
+            >
+              {t("nardy.undo")}
+            </button>
+            <button onClick={() => done && onTurn(steps)} disabled={!done} className="py-3 rounded-2xl bg-[var(--accent)] text-[var(--accent-ink)] font-display text-lg disabled:opacity-30 active:scale-95 transition-transform">
+              {t("nardy.done")}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NardyResult({ view, meIndex, onAgain, onExit, waitText }) {
+  const t = useT();
+  const me = meIndex >= 0 ? meIndex : 0;
+  const won = view.winner === me;
+  const note = view.mars ? (won ? t("nardy.marsWin") : t("nardy.marsLose")) : !won ? t("nardy.winner").replace("{name}", nardyPlayerName(t, view, view.winner, me)) : "";
+  return (
+    <div className="absolute inset-0 z-20 bg-black/60 flex items-center justify-center px-6">
+      <div className="pop w-full max-w-sm bg-[var(--surface)] border border-[var(--border-strong)] rounded-3xl p-6 text-center">
+        <div className="font-display text-4xl leading-none mb-3" style={{ color: won ? "var(--accent-strong)" : "var(--danger)" }}>{won ? t("nardy.win") : t("nardy.lose")}</div>
+        {note && <p className="text-sm text-[var(--text-dim)] mb-4">{note}</p>}
+        {onAgain ? (
+          <button onClick={onAgain} className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-3.5 rounded-2xl mb-2 active:scale-[0.98] transition-transform">
+            {t("durak.again")}
+          </button>
+        ) : (
+          waitText && <p className="text-xs text-[var(--text-faint)] mb-3">{waitText}</p>
+        )}
+        <button onClick={onExit} className="w-full text-sm text-[var(--text-faint)] py-2">{t("durak.toMenu")}</button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- with a bot, on this phone ----------
+function nardyLocalPlayers(t) {
+  return [{ id: "me", name: getPlayerName() || t("durak.you"), bot: false }, { id: "bot-1", name: "", bot: true, botNo: 1 }];
+}
+function loadNardyLocal() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(NARDY_LOCAL_KEY) || "null");
+    if (saved && saved.game === "nardy" && Array.isArray(saved.players)) return saved;
+  } catch (e) {}
+  return null;
+}
+function saveNardyLocal(state) {
+  try {
+    if (state) sessionStorage.setItem(NARDY_LOCAL_KEY, JSON.stringify(state));
+    else sessionStorage.removeItem(NARDY_LOCAL_KEY);
+  } catch (e) {}
+}
+function loadNardyVariant() {
+  try {
+    const saved = localStorage.getItem(NARDY_VARIANT_KEY);
+    return NardyEngine.VARIANTS.includes(saved) ? saved : "short";
+  } catch (e) {
+    return "short";
+  }
+}
+function NardyLocalGame({ initial, onExit, onAgain }) {
+  const [state, setState] = useState(initial);
+  useEffect(() => {
+    saveNardyLocal(state);
+  }, [state]);
+  // The bot (seat 1) thinks for a moment, so its move can be followed.
+  useEffect(() => {
+    if (state.status !== "playing" || state.turn !== 1) return undefined;
+    const timer = setTimeout(() => {
+      setState((current) => {
+        const move = NardyEngine.nextBotMove(current, (i) => i === 1);
+        if (!move) return current;
+        const result = NardyEngine.apply(current, move[0], move[1]);
+        return result.ok ? result.state : current;
+      });
+    }, NARDY_BOT_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [state]);
+  useEffect(() => {
+    if (state.status === "ended") trackEvent("game_completed", { game: "nardy", mode: "bots", won: state.winner === 0 });
+  }, [state.status]);
+  useLeaveGuard(state.status === "playing", { messageKey: "leave.hint" });
+  function turn(steps) {
+    setState((current) => {
+      const result = NardyEngine.apply(current, 0, { type: "turn", steps });
+      return result.ok ? result.state : current;
+    });
+  }
+  return (
+    <div className="relative flex-1 min-h-0 flex flex-col">
+      <NardyTable view={state} meIndex={0} onTurn={turn} />
+      {state.status === "ended" && <NardyResult view={state} meIndex={0} onAgain={onAgain} onExit={onExit} />}
+    </div>
+  );
+}
+
+// ---------- online ----------
+// My turn, shown before the referee answers: the moves are known; the
+// other player's roll comes with the answer.
+function nardyPredict(view, i, m) {
+  if (!view || view.status !== "playing" || i < 0 || !m || m.type !== "turn" || view.turn !== i || !view.dice) return view;
+  const E = NardyEngine;
+  let c = E.turnContext(view);
+  for (const s of m.steps || []) {
+    const next = E.ctxStep(c, s.from, s.die);
+    if (!next) return view;
+    c = next;
+  }
+  if (!E.turnOver(c)) return view;
+  return {
+    ...view,
+    board: c.pos.b,
+    bar: c.pos.bar,
+    off: c.pos.off,
+    turn: 1 - i,
+    dice: null,
+    last: { seat: i, dice: view.dice.slice(), steps: c.steps.map((s) => ({ from: s.from, to: s.to, die: s.die, hit: s.hit })) },
+  };
+}
+
+function NardyVariantPicker({ t, value, onChange, disabled }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {NardyEngine.VARIANTS.map((v) => (
+        <button
+          key={v}
+          onClick={() => onChange(v)}
+          disabled={disabled}
+          className={"rounded-2xl border p-3 text-left transition-colors disabled:opacity-60 " + (value === v ? "border-[var(--accent)] bg-[var(--accent)]/10" : "border-[var(--border)] bg-[var(--surface)]")}
+        >
+          <div className="font-display text-lg">{t("nardy." + v)}</div>
+          <div className="text-xs text-[var(--text-dim)]">{t("nardy." + v + "Desc")}</div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function NardyLobby({ room, onExit }) {
+  const t = useT();
+  const { view, code, isHost, call, busy, error, identity } = room;
+  const [copied, setCopied] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  return (
+    <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-8">
+      <div className="text-center my-5">
+        <p className="text-xs uppercase tracking-[0.25em] text-[var(--text-faint)] mb-3">{t("bunker.roomCodeLabel")}</p>
+        <div className="font-mono text-6xl tracking-[0.15em] font-semibold">{code}</div>
+        <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
+          <button
+            onClick={() =>
+              shareRoomInvite(code, "nardy", t("game.nardy"), () => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              })
+            }
+            className="inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-full bg-[var(--surface)] border border-[var(--border-strong)] text-[var(--text-dim)]"
+          >
+            <IconSend size={13} /> {copied ? t("bunker.linkCopied") : t("bunker.shareInviteLink")}
+          </button>
+          <button onClick={() => setQrOpen(true)} className="inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-full bg-[var(--surface)] border border-[var(--border-strong)] text-[var(--text-dim)]">
+            <IconQrCode size={13} /> {t("bunker.qrCode")}
+          </button>
+        </div>
+      </div>
+      <QrCodeModal open={qrOpen} onClose={() => setQrOpen(false)} code={code} game="nardy" gameLabel={t("game.nardy")} />
+      <OpenRoomSwitch isHost={isHost} isPublic={!!view.open} onToggle={() => call("settings", { settings: { open: !view.open } })} color="var(--accent)" />
+      <div className="mb-4">
+        <NardyVariantPicker t={t} value={view.settings.variant} disabled={!isHost || busy} onChange={(v) => call("settings", { settings: { variant: v, open: !!view.open } })} />
+      </div>
+      <div className="flex flex-col gap-2 mb-4">
+        {view.players.map((p, i) => (
+          <div key={p.id} className="flex items-center gap-3 bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-4 py-3">
+            <span className="w-5 h-5 rounded-full shrink-0 border" style={{ background: i === 0 ? NARDY_COLORS.white : NARDY_COLORS.black, borderColor: i === 0 ? NARDY_COLORS.whiteEdge : "#777" }} />
+            <span className="font-medium truncate">{durakPlayerName(t, p)}</span>
+            {p.id === view.hostId && <span className="ml-auto shrink-0 text-[10px] uppercase tracking-widest text-[var(--accent-strong)] bg-[var(--accent)]/10 px-2 py-0.5 rounded-full">{t("bunker.host")}</span>}
+            {p.id === identity.id && p.id !== view.hostId && <span className="ml-auto shrink-0 text-[10px] uppercase tracking-widest text-[var(--text-faint)]">{t("common.you")}</span>}
+          </div>
+        ))}
+      </div>
+      {isHost ? (
+        <div className="flex flex-col gap-3">
+          {view.players.length < 2 ? (
+            <button onClick={() => call("add_bot")} disabled={busy} className="w-full py-3 rounded-2xl bg-[var(--surface)] border border-[var(--border-strong)] text-sm disabled:opacity-40">{t("durak.addBot")}</button>
+          ) : (
+            view.players.some((p) => p.bot) && <button onClick={() => call("remove_bot")} disabled={busy} className="w-full py-3 rounded-2xl bg-[var(--surface)] border border-[var(--border-strong)] text-sm disabled:opacity-40">{t("durak.removeBot")}</button>
+          )}
+          {error && <p className="text-sm text-[var(--danger)] text-center">{t(error)}</p>}
+          <button
+            onClick={() => {
+              trackEvent("game_started", { game: "nardy", mode: "online", variant: view.settings.variant });
+              call("start");
+            }}
+            disabled={busy || view.players.length < 2}
+            className="w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl disabled:opacity-30 active:scale-[0.98] transition-transform"
+          >
+            {t("durak.start")}
+          </button>
+          {view.players.length < 2 && <p className="text-center text-xs text-[var(--text-faint)]">{t("nardy.needTwo")}</p>}
+        </div>
+      ) : (
+        <p className="text-center text-sm text-[var(--text-dim)]">{t("durak.waitHost")}</p>
+      )}
+      <button onClick={onExit} className="w-full text-sm text-[var(--text-faint)] py-4 mt-2">{t("durak.leaveRoom")}</button>
+    </div>
+  );
+}
+
+function NardyApp({ dispatch }) {
+  const t = useT();
+  const room = useCardRoom("nardy", nardyPredict, NARDY_SESSION_KEY);
+  const [mode, setMode] = useState(() => {
+    if (room.inviteCode) return "join";
+    const saved = pendingReconnectScreen === "nardy" ? loadNardyLocal() : null;
+    if (saved && saved.status === "playing") return "local";
+    return "menu";
+  }); // menu | bots | local | online | create | join
+  const [local, setLocal] = useState(() => (mode === "local" ? loadNardyLocal() : null));
+  const [variant, setVariantState] = useState(loadNardyVariant);
+  const [level, setLevel] = useState("normal");
+  const [name, setName] = useState(() => getPlayerName() || "");
+  const [code, setCode] = useState(room.inviteCode || "");
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const rules = useRules(NARDY_RULES);
+  const view = room.view;
+  const onlinePlaying = !!(view && view.status !== "lobby");
+  const meOnline = view && room.meIndex >= 0 ? view.players[room.meIndex] : null;
+  // A room on the public list while the second seat is free.
+  useOpenRoomBeacon({ game: "nardy", code: room.code, active: !!(view && room.isHost && view.open && view.status === "lobby" && view.players.length < 2), name: meOnline ? meOnline.name : "", players: view ? view.players.length : 0, max: 2 });
+  useLeaveGuard(!!(view && view.status === "playing" && meOnline && !meOnline.bot), {
+    messageKey: "leave.hintCards",
+    onLeave: () => {
+      room.leave();
+      dispatch({ type: "GO_HUB", leaveConfirmed: true });
+    },
+  });
+
+  function setVariant(v) {
+    setVariantState(v);
+    try {
+      localStorage.setItem(NARDY_VARIANT_KEY, v);
+    } catch (e) {}
+  }
+  function startLocal() {
+    const game = NardyEngine.newGame(nardyLocalPlayers(t), { variant, level });
+    game.seedKey = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    trackEvent("game_started", { game: "nardy", mode: "bots", variant, level });
+    setLocal(game);
+    setMode("local");
+  }
+  function exitLocal() {
+    saveNardyLocal(null);
+    setLocal(null);
+    setMode("menu");
+  }
+  function back() {
+    if (view && view.status === "playing" && meOnline && !meOnline.bot) {
+      confirmLeave(() => {
+        room.leave();
+        setMode("menu");
+      }, "leave.hintCards");
+      return;
+    }
+    if (view) {
+      room.leave();
+      setMode("menu");
+      return;
+    }
+    if (mode === "local") return dispatch({ type: "GO_HUB" });
+    if (mode === "create" || mode === "join") return setMode("online");
+    if (mode !== "menu") return setMode("menu");
+    dispatch({ type: "GO_HUB" });
+  }
+  const inputClass = "w-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-4 py-3.5 text-[var(--text)] outline-none focus:border-[var(--accent)]";
+  const primary = "w-full bg-[var(--accent)] text-[var(--accent-ink)] font-display text-xl tracking-wide py-4 rounded-2xl disabled:opacity-30 active:scale-[0.98] transition-transform";
+  const bigButton = "w-full bg-[var(--surface)] border border-[var(--border-strong)] rounded-2xl p-5 text-left active:scale-[0.98] transition-transform";
+
+  let body = null;
+  if (view && onlinePlaying) {
+    body = (
+      <div className="relative flex-1 min-h-0 flex flex-col">
+        <NardyTable view={view} meIndex={room.meIndex} onTurn={(steps) => room.move({ type: "turn", steps })} deadline={view.deadline} />
+        {view.status === "ended" && (
+          <NardyResult
+            view={view}
+            meIndex={room.meIndex}
+            onAgain={room.isHost ? () => room.call("rematch") : null}
+            waitText={t("durak.waitHost")}
+            onExit={() => {
+              room.leave();
+              setMode("menu");
+            }}
+          />
+        )}
+      </div>
+    );
+  } else if (view) {
+    body = (
+      <NardyLobby
+        room={room}
+        onExit={() => {
+          room.leave();
+          setMode("menu");
+        }}
+      />
+    );
+  } else if (mode === "local" && local) {
+    body = <NardyLocalGame key={local.seedKey || String(local.seq)} initial={local} onExit={exitLocal} onAgain={startLocal} />;
+  } else {
+    body = (
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-8 flex flex-col gap-4">
+        <div className="text-center mt-2 mb-2">
+          <div className="w-16 h-16 rounded-2xl bg-[var(--accent)]/15 text-[var(--accent-strong)] flex items-center justify-center mx-auto mb-3">
+            <IconDice size={30} />
+          </div>
+          <h2 className="font-display text-3xl">{t("game.nardy")}</h2>
+          <p className="text-sm text-[var(--text-dim)] mt-1">{t("nardy.subtitle")}</p>
+        </div>
+        {mode === "menu" && (
+          <>
+            <button onClick={() => setMode("bots")} className={bigButton}>
+              <div className="font-display text-xl mb-1">{t("nardy.playBot")}</div>
+              <div className="text-sm text-[var(--text-dim)]">{t("nardy.playBotDesc")}</div>
+            </button>
+            <button onClick={() => setMode("online")} className={bigButton}>
+              <div className="font-display text-xl mb-1">{t("durak.playOnline")}</div>
+              <div className="text-sm text-[var(--text-dim)]">{t("nardy.playOnlineDesc")}</div>
+            </button>
+          </>
+        )}
+        {mode === "bots" && (
+          <>
+            <NardyVariantPicker t={t} value={variant} onChange={setVariant} />
+            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-1 flex gap-1" role="radiogroup" aria-label={t("nardy.level")}>
+              {NardyEngine.LEVELS.map((lv) => (
+                <button
+                  key={lv}
+                  role="radio"
+                  aria-checked={level === lv}
+                  onClick={() => setLevel(lv)}
+                  className={"flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors " + (level === lv ? "bg-[var(--accent)] text-[var(--accent-ink)]" : "text-[var(--text-dim)]")}
+                >
+                  {t("nardy.level_" + lv)}
+                </button>
+              ))}
+            </div>
+            <button onClick={startLocal} className={primary}>
+              {t("durak.start")}
+            </button>
+          </>
+        )}
+        {mode === "online" && (
+          <>
+            <button onClick={() => setMode("create")} className={bigButton}>
+              <div className="font-display text-xl mb-1">{t("bunker.createRoom")}</div>
+              <div className="text-sm text-[var(--text-dim)]">{t("nardy.createDesc")}</div>
+            </button>
+            <button onClick={() => setMode("join")} className={bigButton}>
+              <div className="font-display text-xl mb-1">{t("bunker.joinByCode")}</div>
+              <div className="text-sm text-[var(--text-dim)]">{t("nardy.joinDesc")}</div>
+            </button>
+            <OpenRoomsList
+              game="nardy"
+              color="var(--accent)"
+              onPick={(picked) => {
+                setCode(picked.code);
+                setMode("join");
+              }}
+            />
+          </>
+        )}
+        {(mode === "create" || mode === "join") && (
+          <>
+            {mode === "create" && <NardyVariantPicker t={t} value={variant} onChange={setVariant} />}
+            <div>
+              <label className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2 block">{t("common.yourName")}</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("common.enterName")} maxLength={20} className={inputClass} />
+            </div>
+            {mode === "join" && (
+              <div>
+                <label className="text-xs uppercase tracking-[0.2em] text-[var(--text-faint)] mb-2 block">{t("bunker.roomCode")}</label>
+                <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="0000" inputMode="numeric" className={inputClass + " font-mono text-2xl tracking-[0.3em] text-center"} />
+              </div>
+            )}
+            {room.error && <p className="text-sm text-[var(--danger)] text-center">{t(room.error)}</p>}
+            <button
+              onClick={() => (mode === "create" ? room.create(name, { variant }) : room.join(name, code))}
+              disabled={room.busy || !name.trim() || (mode === "join" && code.length !== 4)}
+              className={primary}
+            >
+              {room.busy ? t("bunker.connecting") : mode === "create" ? t("bunker.create") : t("bunker.join")}
+            </button>
+          </>
+        )}
+        <div className="mt-2">
+          <RulesCard title={t("nardy.rulesTitle")} color="var(--accent)" rules={rules} />
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="h-full min-h-0 flex flex-col">
+      <TopBar onBack={back} title={t("game.nardy")} right={<IconDice size={18} className="text-[var(--accent-strong)]" />} onRightClick={() => setRulesOpen(true)} />
+      <RulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={t("nardy.rulesTitle")} color="var(--accent)" rules={rules} />
       {body}
     </div>
   );

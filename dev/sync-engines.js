@@ -7,7 +7,7 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const file = path.join(root, "index.html");
 let html = fs.readFileSync(file, "utf8");
-for (const [name, lib] of [["DURAK", "durak.js"], ["BLOT", "blot.js"], ["BLACKJACK", "blackjack.js"]]) {
+for (const [name, lib] of [["DURAK", "durak.js"], ["BLOT", "blot.js"], ["BLACKJACK", "blackjack.js"], ["NARDY", "nardy.js"]]) {
   const src = fs.readFileSync(path.join(root, "api", "_lib", lib), "utf8").replace(/\r\n/g, "\n");
   const B = `/* ${name}-ENGINE-BEGIN */`;
   const E = `/* ${name}-ENGINE-END */`;

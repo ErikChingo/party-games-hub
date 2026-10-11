@@ -77,7 +77,7 @@ global.setTimeout = (fn, ms, ...rest) => realSetTimeout(fn, fast && ms >= 500 ? 
   /* hub */
   const page = html(React.createElement(load({ react: React, local: { ...RU, hatsit_hub_section_v1: "cards" } }).C.Hub, { state: { feedbackPending: null }, dispatch: noop }));
   ok(page.indexOf(">Блот<") > 0 && page.indexOf(">Блот<") < page.indexOf(">Дурак<"), "Карточные: Блот first, then Дурак");
-  eq((page.match(/>НОВОЕ</g) || []).length, 3, "all three card games carry the NEW badge");
+  eq((page.match(/>НОВОЕ</g) || []).length, 4, "all four games in the tab (nardy and three card games) carry the NEW badge");
   eq(C.reducer(C.initialState, { type: "OPEN_BLOT" }).screen, "blot", "OPEN_BLOT opens Blot");
   ok(/blot: BlotApp,/.test(src) && /startParam\.match\(\/\^\(bunker\|court\|mafiaroom[^)]*\bblot\b[^)]*\)_\(\\d\{4\}\)\$\//.test(src), "screen routed; Telegram invite blot_1234 accepted");
   eq(C.reducer({ ...C.initialState, screen: "blot" }, { type: "GO_HUB" }).feedbackPending, "blot", "rating asked after Blot");

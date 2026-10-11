@@ -542,8 +542,8 @@ function mkView(over = {}, meOver = {}, playersOver = {}) {
     // Hub: games marked as new come first and carry a NEW badge
     const e = load({ react: React });
     const ids = e.C.hubGameOrder(e.C.GAMES).map((g) => g.id);
-    eq(ids.slice(0, 5), ["mafia", "court", "blot", "blackjack", "durak"], "new games lead the list, in their written order");
-    eq(ids.slice(5), e.C.GAMES.filter((g) => !g.isNew).map((g) => g.id), "the rest keep their order");
+    eq(ids.slice(0, 6), ["mafia", "court", "nardy", "blot", "blackjack", "durak"], "new games lead the list, in their written order");
+    eq(ids.slice(6), e.C.GAMES.filter((g) => !g.isNew).map((g) => g.id), "the rest keep their order");
     eq(ids.slice().sort(), e.C.GAMES.map((g) => g.id).sort(), "no game lost or duplicated");
     eq(e.C.hubGameOrder([{ id: "a" }, { id: "b" }]).map((g) => g.id), ["a", "b"], "nothing marked new -> order untouched");
     const hub = RDS.renderToStaticMarkup(React.createElement(e.C.Hub, { state: e.C.initialState, dispatch() {} }));

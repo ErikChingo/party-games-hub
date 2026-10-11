@@ -140,7 +140,7 @@ const noop = () => {};
   ok(/active: !!\(room && room\.status === "lobby" && room\.isPublic && room\.hostId === playerId\)/.test(src), "Bunker/Court announce only from the host, only in the lobby, only when switched on");
   ok(/active: !!\(view\.is_host && view\.status === "lobby" && settings\.public\)/.test(src), "Mafia announces only from the host, only in the lobby, only when switched on");
   ok(src.includes('setSetting({ public: !settings.public })'), "Mafia lobby has the open-room switch");
-  ok((src.match(/<OpenRoomsList/g) || []).length === 6, "the list is shown in all six online menus (incl. Durak, Blot, Blackjack)");
+  ok((src.match(/<OpenRoomsList/g) || []).length === 7, "the list is shown in all seven online menus (incl. Durak, Blot, Blackjack, Nardy)");
   ok(src.includes('openCounts[g.id] > 0 ? t("open.hubBadge")'), "the Hub cards show how many rooms are waiting");
 
   ok(src.includes('moderateDisplayNameClient(payload.name).slice(0, 20) || t("common.player")') && src.includes('moderateDisplayNameClient(payload.name).slice(0, 20) || t("court.participant")') && (src.match(/name: moderateDisplayNameClient\(name\)\.slice\(0, 20\) \|\| t\(/g) || []).length === 2, "names inside Bunker and Court rooms go through the name filter (rooms can be open to strangers now)");

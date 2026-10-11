@@ -1,4 +1,4 @@
-// Online card games (Durak, Blot, Blackjack): the referee.
+// Online card games (Durak, Blot, Blackjack) and Nardy: the referee.
 //
 //   POST /api/cards  { action, code?, playerId, secret, name?, settings?, move? }
 //   -> { ok, code, version, view }   or   { error }
@@ -29,6 +29,7 @@ const crypto = require("crypto");
 const Durak = require("./_lib/durak.js");
 const Blot = require("./_lib/blot.js");
 const Blackjack = require("./_lib/blackjack.js");
+const Nardy = require("./_lib/nardy.js");
 
 // Every game here has the same shape: newGame(players, settings, random),
 // apply(state, seat, move), timeout(state), nextBotMove(state, isBot),
@@ -56,6 +57,16 @@ const GAMES = {
     // A table you can sit down at while it is running.
     joinLate: (player) => ({ ...player, chips: Blackjack.START_CHIPS, bet: 0, lastBet: 50, cards: [], done: false, outcome: null, win: 0, afk: 0 }),
     settings: () => ({}),
+  },
+  nardy: {
+    engine: Nardy,
+    minPlayers: 2,
+    maxPlayers: 2,
+    fill: false,
+    // A whole turn (up to four moves) is one move here: a little longer to think.
+    turnMs: 45000,
+    // A bot only plays for someone who left: the normal one.
+    settings: (s, old) => ({ variant: Nardy.VARIANTS.includes(s.variant) ? s.variant : (old && old.variant) || "short", level: "normal" }),
   },
 };
 const gameOf = (state) => GAMES[state.game] || GAMES.durak;
@@ -142,7 +153,7 @@ function runBots(state) {
   return current;
 }
 function stamp(state, now) {
-  state.deadline = state.status === "playing" ? now + (state.phase === "score" ? SCORE_MS : TURN_MS) : null;
+  state.deadline = state.status === "playing" ? now + (state.phase === "score" ? SCORE_MS : gameOf(state).turnMs || TURN_MS) : null;
   return state;
 }
 function botName(state) {

@@ -78,7 +78,7 @@ global.setTimeout = (fn, ms, ...rest) => realSetTimeout(fn, fast && ms >= 500 ? 
   const at = (x) => page.indexOf(">" + x + "<");
   ok(at("Блот") > 0 && at("Блот") < at("Блэкджек") && at("Блэкджек") < at("Дурак"), "Карточные: Блот, Блэкджек, Дурак");
   eq(C.reducer(C.initialState, { type: "OPEN_BLACKJACK" }).screen, "blackjack", "OPEN_BLACKJACK");
-  ok(/blackjack: BlackjackApp,/.test(src) && /\|blackjack\)_\(/.test(src), "screen routed; Telegram invite accepted");
+  ok(/blackjack: BlackjackApp,/.test(src) && /\|blackjack(\|[a-z]+)*\)_\(/.test(src), "screen routed; Telegram invite accepted");
 
   /* hooks stable */
   {
