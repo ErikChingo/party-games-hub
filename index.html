@@ -173,11 +173,17 @@
   /* Nardy: dice tumble in, a checker drops onto its point. */
   @keyframes nardyRoll{ 0%{ opacity:0; transform:translateY(-14px) rotate(-200deg) scale(.6);} 70%{ transform:rotate(12deg) scale(1.08);} 100%{ opacity:1; transform:none;} }
   .nardy-roll{ transform-box:fill-box; transform-origin:center; animation:nardyRoll .5s cubic-bezier(.2,.8,.2,1) both; }
-  @keyframes nardyLand{ from{ opacity:.2; transform:scale(1.35);} to{ opacity:1; transform:none;} }
-  .nardy-land{ transform-box:fill-box; transform-origin:center; animation:nardyLand .28s ease-out both; }
+  /* A checker flies in from (--fx, --fy), lifted off the board halfway. */
+  @keyframes nardyFly{ 0%{ transform:translate(var(--fx), var(--fy));} 50%{ transform:translate(calc(var(--fx) * .5), calc(var(--fy) * .5 - 22px)) scale(1.22);} 100%{ transform:none;} }
+  .nardy-fly{ transform-box:fill-box; transform-origin:center; animation:nardyFly .44s cubic-bezier(.35,.75,.3,1) both; }
+  @keyframes nardyConfetti{ 0%{ transform:translate3d(0,-20px,0) rotate(0); opacity:1;} 85%{ opacity:1;} 100%{ transform:translate3d(var(--cx),105vh,0) rotate(var(--cr)); opacity:0;} }
+  .nardy-confetti{ position:absolute; top:-16px; width:8px; animation-name:nardyConfetti; animation-timing-function:cubic-bezier(.25,.6,.5,1); animation-fill-mode:both; }
+  @keyframes nardyStamp{ 0%{ opacity:0; transform:scale(2.6) rotate(-24deg);} 100%{ opacity:1; transform:scale(1) rotate(-8deg);} }
+  .nardy-stamp{ transform:rotate(-8deg); animation:nardyStamp .5s cubic-bezier(.2,1.5,.4,1) .25s both; }
 
   @media (prefers-reduced-motion: reduce){
-    .pop, .pulse, .flash-badge, .breathe, .neon-pulse, .typing-dot, .title-frame-rare, .durak-in, .durak-draw, .durak-out-discard, .durak-out-take, .durak-turn, .durak-bump, .nardy-roll, .nardy-land{ animation:none !important; }
+    .pop, .pulse, .flash-badge, .breathe, .neon-pulse, .typing-dot, .title-frame-rare, .durak-in, .durak-draw, .durak-out-discard, .durak-out-take, .durak-turn, .durak-bump, .nardy-roll, .nardy-fly, .nardy-stamp{ animation:none !important; }
+    .nardy-confetti{ display:none; }
   }
 
   .no-scrollbar::-webkit-scrollbar{ display:none; }
@@ -3492,6 +3498,7 @@ const I18N = {
   "nardy.lose": { ru: "Поражение", en: "You lose", hy: "Պարտություն" },
   "nardy.winner": { ru: "Победил {name}", en: "{name} won", hy: "Հաղթեց {name}-ը" },
   "nardy.marsWin": { ru: "Марс! Соперник не вывел ни одной шашки — победа вдвойне", en: "Mars! Your opponent bore off nothing — a double win", hy: "Մարս։ Մրցակիցը ոչ մի քար չհանեց — կրկնակի հաղթանակ" },
+  "nardy.marsStamp": { ru: "МАРС!", en: "MARS!", hy: "ՄԱՐՍ։" },
   "nardy.marsLose": { ru: "Марс: вы не успели вывести ни одной шашки", en: "Mars: you did not bear off a single checker", hy: "Մարս. դուք ոչ մի քար չհասցրիք հանել" },
   "achievements.groupCards": { ru: "Карточные игры онлайн", en: "Online card games", hy: "Օնլայն թղթախաղեր" },
   "achievements.durakFirst.title": { ru: "Сдавай!", en: "Deal me in!", hy: "Բաժանի՛ր" },
@@ -20321,26 +20328,49 @@ function nardySlotY(top, k) {
   return top ? M + R + 1 + k * STEP : H - M - R - 1 - k * STEP;
 }
 const NARDY_PIPS = { 1: [[0, 0]], 2: [[-1, -1], [1, 1]], 3: [[-1, -1], [0, 0], [1, 1]], 4: [[-1, -1], [1, -1], [-1, 1], [1, 1]], 5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]], 6: [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]] };
-function NardyDie({ x, y, value, used, size, delay }) {
+const NARDY_ROLL_MS = 520;
+const NARDY_STEP_MS = 460;
+// A die tumbles in and flicks through faces for a moment before it settles.
+function NardyDie({ x, y, value, used, size, delay, rollKey }) {
   const s = size || 24;
+  const [face, setFace] = useState(null);
+  useEffect(() => {
+    if (!rollKey) return undefined;
+    let left = Math.round(NARDY_ROLL_MS / 70);
+    setFace(1 + Math.floor(Math.random() * 6));
+    const timer = setInterval(() => {
+      left -= 1;
+      if (left <= 0) {
+        clearInterval(timer);
+        setFace(null);
+      } else setFace(1 + Math.floor(Math.random() * 6));
+    }, 70);
+    return () => clearInterval(timer);
+  }, [rollKey]);
+  const shown = face || value;
   return (
     // Faded on the outer group: the roll animation sets opacity on the inner one.
     <g opacity={used ? 0.3 : 1} style={{ transition: "opacity .2s" }}>
       <g className="nardy-roll" style={{ animationDelay: (delay || 0) + "ms" }}>
         <rect x={x - s / 2} y={y - s / 2} width={s} height={s} rx={s * 0.22} fill="#fffdf8" stroke="#7a6a55" strokeWidth="1" />
-        {(NARDY_PIPS[value] || []).map(([dx, dy], i) => (
+        {(NARDY_PIPS[shown] || []).map(([dx, dy], i) => (
           <circle key={i} cx={x + dx * s * 0.26} cy={y + dy * s * 0.26} r={s * 0.085} fill={NARDY_COLORS.pip} />
         ))}
       </g>
     </g>
   );
 }
-function NardyChecker({ cx, cy, seat, r, label, ring, landed }) {
+// A checker (or a borne-off bar in the tray) that has just arrived flies in
+// from where it was: fly = { dx, dy } is that place relative to this one.
+function nardyFlyStyle(fly) {
+  return fly ? { "--fx": fly.dx + "px", "--fy": fly.dy + "px" } : undefined;
+}
+function NardyChecker({ cx, cy, seat, r, label, ring, fly }) {
   const fill = seat === 0 ? NARDY_COLORS.white : NARDY_COLORS.black;
   const edge = seat === 0 ? NARDY_COLORS.whiteEdge : NARDY_COLORS.blackEdge;
   const rr = r || NARDY_G.R;
   return (
-    <g className={landed ? "nardy-land" : undefined}>
+    <g className={fly ? "nardy-fly" : undefined} style={nardyFlyStyle(fly)}>
       <circle cx={cx} cy={cy} r={rr} fill={fill} stroke={edge} strokeWidth="1.2" />
       <circle cx={cx} cy={cy} r={rr * 0.62} fill="none" stroke={edge} strokeOpacity="0.35" strokeWidth="1" />
       {ring && <circle cx={cx} cy={cy} r={rr + 2.2} fill="none" stroke={ring} strokeWidth="2.2" />}
@@ -20353,8 +20383,88 @@ function NardyChecker({ cx, cy, seat, r, label, ring, landed }) {
   );
 }
 
+// Where a checker is drawn: on viewer's point q at slot k, on the bar, or
+// (kind "off") the top-left of its bar in the tray.
+function nardyPlaceXY(kind, q, k, seat, me) {
+  const { M, W, BAR, TRAY, H, WIDTH } = NARDY_G;
+  if (kind === "point") {
+    const place = nardyPointPlace(q);
+    return { x: place.cx, y: nardySlotY(place.top, Math.min(k, 4)) };
+  }
+  if (kind === "bar") {
+    const kk = Math.min(k, 3);
+    return { x: M + 6 * W + BAR / 2, y: seat === me ? H / 2 + 40 + kk * 17 : H / 2 - 40 - kk * 17 };
+  }
+  return { x: WIDTH - TRAY + 5, y: seat === me ? H - M - 6 - k * 6.5 : M + 1 + k * 6.5 };
+}
+const nardyCountAt = (pos, variant, me, q, seat) => {
+  const v = pos.b[NardyEngine.abs(variant, me, q)] * (seat === 0 ? 1 : -1);
+  return v > 0 ? v : 0;
+};
+// What arrives where when `seat` plays one step on position `pos`, each with
+// the spot it flies in from: [{ kind, q, seat, x, y }].
+function nardyStepArrivals(pos, variant, seat, me, step) {
+  const E = NardyEngine;
+  const viewer = (p) => E.own(variant, me, E.abs(variant, seat, p));
+  const from = step.from === E.BAR ? nardyPlaceXY("bar", null, pos.bar[seat] - 1, seat, me) : nardyPlaceXY("point", viewer(step.from), nardyCountAt(pos, variant, me, viewer(step.from), seat) - 1, seat, me);
+  if (step.to === 0) return [{ kind: "off", q: null, seat, x: from.x, y: from.y }];
+  const q = viewer(step.to);
+  const out = [{ kind: "point", q, seat, x: from.x, y: from.y }];
+  if (step.hit) {
+    const hit = nardyPlaceXY("point", q, 0, seat, me);
+    out.push({ kind: "bar", q: null, seat: 1 - seat, x: hit.x, y: hit.y });
+  }
+  return out;
+}
+// One step on a plain position (no rules: the step is known to be legal).
+function nardyApplyStep(pos, variant, seat, step) {
+  const E = NardyEngine;
+  const s = seat === 0 ? 1 : -1;
+  const next = { b: pos.b.slice(), bar: pos.bar.slice(), off: pos.off.slice() };
+  if (step.from === E.BAR) {
+    if (next.bar[seat] <= 0) return null;
+    next.bar[seat] -= 1;
+  } else {
+    const a = E.abs(variant, seat, step.from);
+    if (next.b[a] * s <= 0) return null;
+    next.b[a] -= s;
+  }
+  if (step.to === 0) next.off[seat] += 1;
+  else {
+    const a = E.abs(variant, seat, step.to);
+    if (next.b[a] * s < 0) {
+      if (next.b[a] * s !== -1) return null;
+      next.b[a] = 0;
+      next.bar[1 - seat] += 1;
+    }
+    next.b[a] += s;
+  }
+  return next;
+}
+const nardySamePos = (a, b) => !!a && !!b && a.b.join() === b.b.join() && a.bar.join() === b.bar.join() && a.off.join() === b.off.join();
+// A finished turn from `prev` to the new view, step by step, or null if the
+// view did not come from `prev` that way (first look, a reload, a skipped turn).
+function nardyReplayPlan(prev, view, me) {
+  const last = view.last;
+  if (!prev || !last || !last.steps || last.steps.length === 0) return null;
+  const now = { b: view.board, bar: view.bar, off: view.off };
+  if (nardySamePos(prev, now)) return null;
+  const variant = view.settings.variant;
+  const frames = [];
+  const arrivals = [];
+  let pos = prev;
+  for (const st of last.steps) {
+    arrivals.push(nardyStepArrivals(pos, variant, last.seat, me, st));
+    pos = nardyApplyStep(pos, variant, last.seat, st);
+    if (!pos) return null;
+    frames.push(pos);
+  }
+  return nardySamePos(pos, now) ? { frames, arrivals, seat: last.seat, dice: last.dice, steps: last.steps } : null;
+}
+
 // pos = { b, bar, off } (see the engine). me = the viewer's seat.
-function NardyBoard({ variant, pos, me, selected, movable, targets, marks, landed, dice, diceRight, diceKey, onPoint, onBar, onOff }) {
+// arrivals = what just arrived (see nardyStepArrivals); flightKey restarts their flight.
+function NardyBoard({ variant, pos, me, selected, movable, targets, marks, arrivals, flightKey, dice, diceRight, diceKey, onPoint, onBar, onOff }) {
   const t = useT();
   const { M, W, BAR, TRAY, H, PT, R, WIDTH } = NARDY_G;
   const E = NardyEngine;
@@ -20364,10 +20474,14 @@ function NardyBoard({ variant, pos, me, selected, movable, targets, marks, lande
     const v = pos.b[E.abs(variant, me, q)];
     points.push({ q, seat: v > 0 ? 0 : 1, n: Math.abs(v) });
   }
-  const targetAt = (q) => targets.find((x) => x.to === q);
   const boardRight = WIDTH - TRAY;
   const barX = M + 6 * W;
   const midY = H / 2;
+  // The flight of whatever is drawn at (x, y) as the newest of its kind.
+  const flyTo = (kind, q, seat, x, y) => {
+    const a = (arrivals || []).find((r) => r.kind === kind && r.seat === seat && (kind !== "point" || r.q === q));
+    return a ? { dx: a.x - x, dy: a.y - y } : null;
+  };
   return (
     <svg viewBox={`0 0 ${WIDTH} ${H}`} className="w-full h-auto select-none" role="img" aria-label={t("game.nardy")} style={{ maxHeight: "100%", touchAction: "manipulation" }}>
       <rect x="0" y="0" width={WIDTH} height={H} rx="10" fill={NARDY_COLORS.frame} />
@@ -20400,7 +20514,9 @@ function NardyBoard({ variant, pos, me, selected, movable, targets, marks, lande
         for (let k = 0; k < shown; k++) {
           const isTop = k === shown - 1;
           const ring = isTop && selected === q ? accent : isTop && selected === null && movable.includes(q) ? "rgba(232,181,69,.65)" : null;
-          out.push(<NardyChecker key={q + "-" + k} cx={cx} cy={nardySlotY(top, k)} seat={seat} ring={ring} label={isTop && n > 5 ? String(n) : null} landed={isTop && landed === q} />);
+          const cy = nardySlotY(top, k);
+          const fly = isTop ? flyTo("point", q, seat, cx, cy) : null;
+          out.push(<NardyChecker key={q + "-" + k + (fly ? "-" + flightKey : "")} cx={cx} cy={cy} seat={seat} ring={ring} label={isTop && n > 5 ? String(n) : null} fly={fly} />);
         }
         return <g key={"c" + q}>{out}</g>;
       })}
@@ -20413,7 +20529,8 @@ function NardyBoard({ variant, pos, me, selected, movable, targets, marks, lande
         for (let k = 0; k < Math.min(n, 4); k++) {
           const cy = mineBar ? midY + 40 + k * 17 : midY - 40 - k * 17;
           const isTop = k === Math.min(n, 4) - 1;
-          out.push(<NardyChecker key={"bar" + s + k} cx={cx} cy={cy} seat={s} r={8.5} ring={mineBar && isTop && (selected === 25 || (selected === null && movable.includes(25))) ? accent : null} label={isTop && n > 1 ? String(n) : null} />);
+          const fly = isTop ? flyTo("bar", null, s, cx, cy) : null;
+          out.push(<NardyChecker key={"bar" + s + k + (fly ? "-" + flightKey : "")} cx={cx} cy={cy} seat={s} r={8.5} ring={mineBar && isTop && (selected === 25 || (selected === null && movable.includes(25))) ? accent : null} label={isTop && n > 1 ? String(n) : null} fly={fly} />);
         }
         return <g key={"bar" + s}>{out}</g>;
       })}
@@ -20423,7 +20540,10 @@ function NardyBoard({ variant, pos, me, selected, movable, targets, marks, lande
         const out = [];
         for (let k = 0; k < n; k++) {
           const y = mineOff ? H - M - 6 - k * 6.5 : M + 1 + k * 6.5;
-          out.push(<rect key={"off" + s + k} x={boardRight + 5} y={y} width={TRAY - M - 8} height="5" rx="1.5" fill={s === 0 ? NARDY_COLORS.white : NARDY_COLORS.black} stroke={s === 0 ? NARDY_COLORS.whiteEdge : "#5a4a3a"} strokeWidth="0.6" />);
+          const w = TRAY - M - 8;
+          // The newest one flies in from the checker's point, centred on it.
+          const fly = k === n - 1 ? flyTo("off", null, s, boardRight + 5 + w / 2, y + 2.5) : null;
+          out.push(<rect key={"off" + s + k + (fly ? "-" + flightKey : "")} className={fly ? "nardy-fly" : undefined} style={nardyFlyStyle(fly)} x={boardRight + 5} y={y} width={w} height="5" rx="1.5" fill={s === 0 ? NARDY_COLORS.white : NARDY_COLORS.black} stroke={s === 0 ? NARDY_COLORS.whiteEdge : "#5a4a3a"} strokeWidth="0.6" />);
         }
         return <g key={"off" + s}>{out}</g>;
       })}
@@ -20441,7 +20561,7 @@ function NardyBoard({ variant, pos, me, selected, movable, targets, marks, lande
             const gap = size + 6;
             const centre = diceRight ? barX + BAR + 3 * W : M + 3 * W;
             const x = centre + (i - (dice.length - 1) / 2) * gap;
-            return <NardyDie key={i} x={x} y={midY} value={d.v} used={d.used} size={size} delay={i * 70} />;
+            return <NardyDie key={i} x={x} y={midY} value={d.v} used={d.used} size={size} delay={i * 70} rollKey={diceKey} />;
           })}
         </g>
       )}
@@ -20489,10 +20609,42 @@ function NardyTable({ view, meIndex, onTurn, deadline }) {
   const turnKey = view.turns + ":" + view.turn + ":" + (view.dice ? view.dice.join("") : "-");
   const [steps, setSteps] = useState([]);
   const [selected, setSelected] = useState(null);
+  // My last step, flying in; cleared once it has landed.
+  const [myFlight, setMyFlight] = useState(null);
   useEffect(() => {
     setSteps([]);
     setSelected(null);
+    setMyFlight(null);
   }, [turnKey]);
+  useEffect(() => {
+    if (!myFlight) return undefined;
+    const timer = setTimeout(() => setMyFlight(null), 650);
+    return () => clearTimeout(timer);
+  }, [myFlight]);
+
+  // The other side's turn (or one played for me when time ran out) is played
+  // back step by step from what was on screen, before my dice roll in.
+  const posSig = view.board.join() + "|" + view.bar.join() + "|" + view.off.join();
+  const sigRef = useRef(posSig);
+  const shownRef = useRef(null);
+  const replayRef = useRef(null);
+  const [, setTick] = useState(0);
+  if (sigRef.current !== posSig) {
+    sigRef.current = posSig;
+    const plan = nardyReplayPlan(shownRef.current, view, me);
+    replayRef.current = plan ? { ...plan, start: Date.now(), id: posSig, diceKey: view.turns - 1 + ":" + plan.seat + ":" + plan.dice.join("") } : null;
+  }
+  const replay = replayRef.current;
+  const replayStep = replay ? Math.floor((Date.now() - replay.start) / NARDY_STEP_MS) : -1;
+  const replaying = !!replay && replayStep < replay.frames.length;
+  if (replay && !replaying) replayRef.current = null;
+  useEffect(() => {
+    if (!replaying) return undefined;
+    const timer = setTimeout(() => setTick((n) => n + 1), NARDY_STEP_MS - ((Date.now() - replay.start) % NARDY_STEP_MS) + 5);
+    return () => clearTimeout(timer);
+  });
+
+  const canAct = myTurn && !replaying;
   const ctx = useMemo(() => {
     if (!myTurn) return null;
     let c = E.turnContext(view);
@@ -20505,47 +20657,57 @@ function NardyTable({ view, meIndex, onTurn, deadline }) {
   }, [myTurn, view, steps]);
   const legal = useMemo(() => (ctx ? E.legalSteps(ctx) : []), [ctx]);
   const done = !!ctx && legal.length === 0;
-  const pos = ctx ? ctx.pos : { b: view.board, bar: view.bar, off: view.off };
-  const movable = Array.from(new Set(legal.map((s) => s.from)));
+  const pos = replaying ? replay.frames[replayStep] : ctx ? ctx.pos : { b: view.board, bar: view.bar, off: view.off };
+  shownRef.current = pos;
+  const movable = canAct ? Array.from(new Set(legal.map((s) => s.from))) : [];
   // On the bar there is only one checker to pick: picked already.
   const sel = selected !== null && movable.includes(selected) ? selected : movable.length === 1 && movable[0] === E.BAR ? E.BAR : null;
   const targets = sel === null ? [] : legal.filter((s) => s.from === sel).filter((s, i, all) => all.findIndex((x) => x.to === s.to) === i);
-  const lastStep = ctx && ctx.steps.length ? ctx.steps[ctx.steps.length - 1] : null;
 
-  function step(from, die, to) {
-    setSteps((list) => list.concat([{ from, die }]));
-    setSelected(to > 0 ? to : null);
+  // s: one of the legal steps (it carries the position it leads to).
+  function step(s) {
+    const played = s.next.steps[s.next.steps.length - 1];
+    setMyFlight({ key: "m" + (steps.length + 1) + ":" + turnKey, arrivals: nardyStepArrivals(ctx.pos, variant, me, me, played) });
+    setSteps((list) => list.concat([{ from: s.from, die: s.die }]));
+    setSelected(s.to > 0 ? s.to : null);
   }
   function onPoint(q) {
-    if (!myTurn) return;
+    if (!canAct) return;
     const target = sel !== null && targets.find((x) => x.to === q);
-    if (target) return step(sel, target.die, target.to);
+    if (target) return step(target);
     setSelected(movable.includes(q) && q !== sel ? q : null);
   }
   function onBar() {
-    if (myTurn && movable.includes(E.BAR)) setSelected(E.BAR);
+    if (canAct && movable.includes(E.BAR)) setSelected(E.BAR);
   }
   function onOff() {
-    if (!myTurn || sel === null) return;
+    if (!canAct || sel === null) return;
     // Bearing off with the smallest die that does it keeps the bigger one.
     const off = legal.filter((s) => s.from === sel && s.to === 0).sort((a, b) => a.die - b.die)[0];
-    if (off) step(sel, off.die, 0);
+    if (off) step(off);
   }
 
-  // The dice to draw: mine with the used ones faded; anyone else's as rolled.
-  let dice = [];
-  if (view.dice) {
-    const full = view.dice[0] === view.dice[1] ? [view.dice[0], view.dice[0], view.dice[0], view.dice[0]] : view.dice.slice();
-    const left = ctx ? ctx.dice.slice() : full.slice();
-    dice = full.map((v) => {
+  // The dice to draw: during a playback the ones being played; otherwise
+  // the current roll, mine with the used ones faded.
+  const faces = (d) => (d[0] === d[1] ? [d[0], d[0], d[0], d[0]] : d.slice());
+  const markUsed = (full, left) =>
+    full.map((v) => {
       const k = left.indexOf(v);
       if (k >= 0) left.splice(k, 1);
       return { v, used: k < 0 };
     });
-  }
+  let dice = [];
+  if (replaying) {
+    const left = faces(replay.dice);
+    replay.steps.slice(0, replayStep + 1).forEach((s) => {
+      const k = left.indexOf(s.die);
+      if (k >= 0) left.splice(k, 1);
+    });
+    dice = markUsed(faces(replay.dice), left);
+  } else if (view.dice) dice = markUsed(faces(view.dice), ctx ? ctx.dice.slice() : faces(view.dice));
   // The last turn played, marked on the board until I start mine.
   const marks = [];
-  if (view.last && steps.length === 0) {
+  if (view.last && steps.length === 0 && !replaying) {
     view.last.steps.forEach((s) => {
       [s.from, s.to].forEach((pt) => {
         if (pt >= 1 && pt <= 24) marks.push(E.own(variant, me, E.abs(variant, view.last.seat, pt)));
@@ -20555,49 +20717,52 @@ function NardyTable({ view, meIndex, onTurn, deadline }) {
   const other = 1 - me;
   const nameOf = (seat) => nardyPlayerName(t, view, seat, me);
   let status = "";
-  if (playing) {
+  if (replaying) status = t("nardy.turnOf").replace("{name}", nameOf(replay.seat));
+  else if (playing) {
     if (myTurn) status = done ? t("nardy.confirm") : steps.length === 0 ? t("nardy.yourTurn") : t("nardy.keepGoing");
     else status = t("nardy.turnOf").replace("{name}", nameOf(view.turn));
   }
-  const blocked = view.last && view.last.blocked && steps.length === 0 ? view.last : null;
+  const blocked = view.last && view.last.blocked && steps.length === 0 && !replaying ? view.last : null;
   const blockedText = blocked ? (blocked.seat === me ? t("nardy.noMovesMe") : t("nardy.noMoves").replace("{name}", nameOf(blocked.seat))).replace("{dice}", blocked.dice.join("-")) : "";
 
   return (
     <div className="flex-1 min-h-0 flex flex-col px-3 pt-1 pb-3 gap-1.5">
       <div className="flex-1 min-h-0 flex flex-col justify-center gap-1.5">
-      <NardyPlayerRow t={t} view={view} seat={other} meIndex={me} active={playing && view.turn === other} pos={pos} />
+      <NardyPlayerRow t={t} view={view} seat={other} meIndex={me} active={replaying ? replay.seat === other : playing && view.turn === other} pos={pos} />
       <div className="min-h-0 flex items-center justify-center">
         <NardyBoard
           variant={variant}
           pos={pos}
           me={me}
           selected={sel}
-          movable={myTurn ? movable : []}
+          movable={movable}
           targets={targets}
           marks={marks}
-          landed={lastStep ? lastStep.to : null}
+          arrivals={replaying ? replay.arrivals[replayStep] : myFlight ? myFlight.arrivals : null}
+          flightKey={replaying ? replay.id + ":" + replayStep : myFlight ? myFlight.key : ""}
           dice={dice}
-          diceRight={view.turn === me}
-          diceKey={turnKey}
+          diceRight={replaying ? replay.seat === me : view.turn === me}
+          diceKey={replaying ? replay.diceKey : turnKey}
           onPoint={onPoint}
           onBar={onBar}
           onOff={onOff}
         />
       </div>
-      <NardyPlayerRow t={t} view={view} seat={me} meIndex={me} active={playing && view.turn === me} pos={pos} />
+      <NardyPlayerRow t={t} view={view} seat={me} meIndex={me} active={replaying ? replay.seat === me : playing && view.turn === me} pos={pos} />
       </div>
       <div className="shrink-0 pt-1">
-        <p key={status + blockedText} className={"text-sm text-center min-h-[1.25rem] pop " + (myTurn ? "text-[var(--accent-strong)] font-medium" : "text-[var(--text-dim)]")}>
+        <p key={status + blockedText} className={"text-sm text-center min-h-[1.25rem] pop " + (canAct ? "text-[var(--accent-strong)] font-medium" : "text-[var(--text-dim)]")}>
           {blockedText ? blockedText + " · " : ""}
           {status}
           {playing && seconds !== null && deadline ? " · " + fmtTime(seconds) : ""}
         </p>
-        {myTurn && (
+        {canAct && (
           <div className="pop grid grid-cols-2 gap-2 mt-2">
             <button
               onClick={() => {
                 setSteps((list) => list.slice(0, -1));
                 setSelected(null);
+                setMyFlight(null);
               }}
               disabled={steps.length === 0}
               className="py-3 rounded-2xl bg-[var(--surface-2)] border border-[var(--border-strong)] font-display text-lg disabled:opacity-30 active:scale-95 transition-transform"
@@ -20614,6 +20779,51 @@ function NardyTable({ view, meIndex, onTurn, deadline }) {
   );
 }
 
+// The end of a game is shown once its last move has played out on the board.
+function nardyEndDelay(view, meIndex) {
+  const last = view && view.last;
+  if (!last || last.seat === meIndex) return 700;
+  return last.steps.length * NARDY_STEP_MS + 500;
+}
+function useDelayedFlag(flag, ms) {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (!flag) {
+      setOn(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setOn(true), ms);
+    return () => clearTimeout(timer);
+  }, [flag]);
+  return flag && on;
+}
+const NARDY_CONFETTI_COLORS = ["#e8b545", "#faf6ec", "#c0463a", "#4bb8ac", "#8a3b26", "#f2e3c4"];
+function NardyConfetti() {
+  const pieces = useMemo(
+    () =>
+      Array.from({ length: 46 }, (_, i) => ({
+        left: Math.random() * 100,
+        delay: Math.random() * 0.7,
+        duration: 1.8 + Math.random() * 1.4,
+        drift: Math.round((Math.random() - 0.5) * 160),
+        spin: Math.round(360 + Math.random() * 720) * (Math.random() < 0.5 ? -1 : 1),
+        color: NARDY_CONFETTI_COLORS[i % NARDY_CONFETTI_COLORS.length],
+        round: i % 3 === 0,
+      })),
+    []
+  );
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+      {pieces.map((c, i) => (
+        <span
+          key={i}
+          className="nardy-confetti"
+          style={{ left: c.left + "%", background: c.color, borderRadius: c.round ? "50%" : "2px", height: c.round ? "9px" : "14px", animationDelay: c.delay + "s", animationDuration: c.duration + "s", "--cx": c.drift + "px", "--cr": c.spin + "deg" }}
+        />
+      ))}
+    </div>
+  );
+}
 function NardyResult({ view, meIndex, onAgain, onExit, waitText }) {
   const t = useT();
   const me = meIndex >= 0 ? meIndex : 0;
@@ -20621,7 +20831,13 @@ function NardyResult({ view, meIndex, onAgain, onExit, waitText }) {
   const note = view.mars ? (won ? t("nardy.marsWin") : t("nardy.marsLose")) : !won ? t("nardy.winner").replace("{name}", nardyPlayerName(t, view, view.winner, me)) : "";
   return (
     <div className="absolute inset-0 z-20 bg-black/60 flex items-center justify-center px-6">
-      <div className="pop w-full max-w-sm bg-[var(--surface)] border border-[var(--border-strong)] rounded-3xl p-6 text-center">
+      {won && <NardyConfetti />}
+      <div className="pop relative w-full max-w-sm bg-[var(--surface)] border border-[var(--border-strong)] rounded-3xl p-6 text-center">
+        {view.mars && (
+          <div className="nardy-stamp absolute -top-5 right-4 px-3 py-1 rounded-lg border-2 font-display text-2xl tracking-widest" style={{ color: won ? "var(--accent-strong)" : "var(--danger)", borderColor: "currentColor", background: "var(--surface)" }}>
+            {t("nardy.marsStamp")}
+          </div>
+        )}
         <div className="font-display text-4xl leading-none mb-3" style={{ color: won ? "var(--accent-strong)" : "var(--danger)" }}>{won ? t("nardy.win") : t("nardy.lose")}</div>
         {note && <p className="text-sm text-[var(--text-dim)] mb-4">{note}</p>}
         {onAgain ? (
@@ -20684,6 +20900,7 @@ function NardyLocalGame({ initial, onExit, onAgain }) {
     if (state.status === "ended") trackEvent("game_completed", { game: "nardy", mode: "bots", won: state.winner === 0 });
   }, [state.status]);
   useLeaveGuard(state.status === "playing", { messageKey: "leave.hint" });
+  const showEnd = useDelayedFlag(state.status === "ended", nardyEndDelay(state, 0));
   function turn(steps) {
     setState((current) => {
       const result = NardyEngine.apply(current, 0, { type: "turn", steps });
@@ -20693,7 +20910,7 @@ function NardyLocalGame({ initial, onExit, onAgain }) {
   return (
     <div className="relative flex-1 min-h-0 flex flex-col">
       <NardyTable view={state} meIndex={0} onTurn={turn} />
-      {state.status === "ended" && <NardyResult view={state} meIndex={0} onAgain={onAgain} onExit={onExit} />}
+      {showEnd && <NardyResult view={state} meIndex={0} onAgain={onAgain} onExit={onExit} />}
     </div>
   );
 }
@@ -20829,6 +21046,7 @@ function NardyApp({ dispatch }) {
   const view = room.view;
   const onlinePlaying = !!(view && view.status !== "lobby");
   const meOnline = view && room.meIndex >= 0 ? view.players[room.meIndex] : null;
+  const showEnd = useDelayedFlag(!!(view && view.status === "ended"), nardyEndDelay(view, room.meIndex));
   // A room on the public list while the second seat is free.
   useOpenRoomBeacon({ game: "nardy", code: room.code, active: !!(view && room.isHost && view.open && view.status === "lobby" && view.players.length < 2), name: meOnline ? meOnline.name : "", players: view ? view.players.length : 0, max: 2 });
   useLeaveGuard(!!(view && view.status === "playing" && meOnline && !meOnline.bot), {
@@ -20884,7 +21102,7 @@ function NardyApp({ dispatch }) {
     body = (
       <div className="relative flex-1 min-h-0 flex flex-col">
         <NardyTable view={view} meIndex={room.meIndex} onTurn={(steps) => room.move({ type: "turn", steps })} deadline={view.deadline} />
-        {view.status === "ended" && (
+        {showEnd && (
           <NardyResult
             view={view}
             meIndex={room.meIndex}

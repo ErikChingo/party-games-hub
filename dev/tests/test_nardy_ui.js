@@ -4,7 +4,7 @@ const ROOT = require("path").resolve(__dirname, "../..");
 // /api/cards handler (with a fake database in memory).
 const fs = require("fs");
 const head = fs.readFileSync(__dirname + "/test_mafia_room_client.js", "utf8").split("// ---------- views shaped")[0]
-  .replace('const names = [', 'const names = ["NardyEngine", "NardyApp", "NardyTable", "NardyLocalGame", "NardyLobby", "NardyResult", "NardyBoard", "nardyPredict", "nardyLocalPlayers", "useCardRoom", "NARDY_SESSION_KEY", "GAMES", "loadHubSection", "HUB_SECTIONS", "SCREEN_COMPONENTS", "LAUNCH_ACTION_TO_GAME", ');
+  .replace('const names = [', 'const names = ["NardyEngine", "NardyApp", "NardyTable", "NardyLocalGame", "NardyLobby", "NardyResult", "NardyBoard", "nardyPredict", "nardyLocalPlayers", "nardyReplayPlan", "nardyStepArrivals", "nardyEndDelay", "useCardRoom", "NARDY_SESSION_KEY", "GAMES", "loadHubSection", "HUB_SECTIONS", "SCREEN_COMPONENTS", "LAUNCH_ACTION_TO_GAME", ');
 const m = { exports: {} };
 new Function("require", "module", "__dirname", head + "\nmodule.exports = { load, React, RDS, makeRuntime, wait };")(require, m, __dirname);
 const { load, React, RDS, makeRuntime, wait } = m.exports;
@@ -159,6 +159,34 @@ global.setTimeout = (fn, ms, ...rest) => realSetTimeout(fn, fast && ms >= 500 ? 
     ok(C.nardyPredict(g, g.turn, { type: "turn", steps: [] }) === g, "an unfinished turn is not guessed");
   }
 
+  /* ---------- animations: the other side's turn played back ---------- */
+  {
+    const E2 = C.NardyEngine;
+    let all = 0, planned = 0, exact = 0, hits = 0, offs = 0;
+    for (const variant of ["short", "long"]) {
+      let g = E2.newGame(C.nardyLocalPlayers(t), { variant });
+      for (let k = 0; k < 400 && g.status === "playing"; k++) {
+        const prev = { b: g.board.slice(), bar: g.bar.slice(), off: g.off.slice() };
+        const r = E2.apply(g, g.turn, E2.botMove(g, g.turn));
+        g = r.state;
+        if (!g.last || g.last.blocked || g.last.steps.length === 0) continue;
+        all++;
+        const plan = C.nardyReplayPlan(prev, g, 0);
+        if (!plan) continue;
+        planned++;
+        const lastFrame = plan.frames[plan.frames.length - 1];
+        if (plan.frames.length === g.last.steps.length && lastFrame.b.join() === g.board.join() && lastFrame.off.join() === g.off.join()) exact++;
+        plan.arrivals.forEach((a) => { if (a.some((x) => x.kind === "bar")) hits++; if (a.some((x) => x.kind === "off")) offs++; });
+      }
+    }
+    ok(all > 50 && planned === all && exact === all, `every bot turn plays back step by step to the new position (${exact}/${all})`);
+    ok(hits > 0 && offs > 0, `hit checkers fly to the bar (${hits}) and borne-off ones to the tray (${offs})`);
+    const g = E2.newGame(C.nardyLocalPlayers(t), { variant: "short" });
+    ok(C.nardyReplayPlan(null, g, 0) === null, "nothing is played back on the first look");
+    ok(C.nardyReplayPlan({ b: g.board, bar: g.bar, off: g.off }, g, 0) === null, "nothing is played back when the position did not change (my own turn)");
+    eq([C.nardyEndDelay({ last: { seat: 0, steps: [1, 2] } }, 0), C.nardyEndDelay({ last: { seat: 1, steps: [1, 2, 3, 4] } }, 0)], [700, 4 * 460 + 500], "the result waits for the last move to play out");
+  }
+
   /* ---------- a whole game against the bot on the phone ---------- */
   for (const variant of ["short", "long"]) {
     fast = true;
@@ -175,7 +203,8 @@ global.setTimeout = (fn, ms, ...rest) => realSetTimeout(fn, fast && ms >= 500 ? 
       await wait(2);
     }
     ok(ended, variant + ": a whole game against the bot on the phone (" + steps + " steps)");
-    ok(!!rt.result.props.children[1], variant + ": the result is shown at the end");
+    await wait(30);
+    ok(!!rt.result.props.children[1], variant + ": the result is shown at the end, after the last move has played out");
     rt.unmount();
     fast = false;
   }
