@@ -1,6 +1,8 @@
 # Хатсит (Hatsit) — заметки для Claude
 
-Сайт с играми для компании: https://hatsit.vercel.app, он же Telegram Mini App. Владелец — Эрик (Ереван).
+Сайт с играми для компании: https://hatsit.org (домен куплен в Vercel 19 окт 2026; старый адрес
+hatsit.vercel.app навсегда переадресует на него, кроме /api/ и sw.js — см. vercel.json), он же Telegram Mini App
+(в @BotFather адрес уже hatsit.org). Владелец — Эрик (Ереван).
 Этот файл — всё, что нужно знать, чтобы продолжить работу. Полная история прошлых разговоров — в проекте
 HatSit на claude.ai (документы `claude/*.md`, переписка — `claude/chat-log-2026-10-08.md`).
 
