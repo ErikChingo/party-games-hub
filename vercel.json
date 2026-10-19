@@ -4,6 +4,19 @@
   "regions": [
     "sin1"
   ],
+  "redirects": [
+    {
+      "source": "/((?!api/|sw\\.js).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "hatsit.vercel.app"
+        }
+      ],
+      "destination": "https://hatsit.org/$1",
+      "permanent": true
+    }
+  ],
   "functions": {
     "api/mafia-voice.js": {
       "maxDuration": 30
