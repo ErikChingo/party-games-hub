@@ -113,7 +113,7 @@ function build() {
   // Everything else the deployed site needs as a real file. Icons and the
   // manifest are inlined as data: URIs inside index.html itself (see its
   // <head>), so they don't need copying here.
-  const staticFiles = ["og-image.png", "robots.txt", "sitemap.xml", "sw.js", "google9a30da4fd0ae13b5.html", "yandex_710e03779ae07f36.html"];
+  const staticFiles = ["og-image.png", "robots.txt", "sitemap.xml", "sw.js", "google9a30da4fd0ae13b5.html", "yandex_710e03779ae07f36.html", "yandex_b4c4100e443a202e.html"];
   for (const name of staticFiles) {
     const src = path.join(ROOT, name);
     if (fs.existsSync(src)) {
