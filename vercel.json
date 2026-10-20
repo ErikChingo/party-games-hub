@@ -29,6 +29,10 @@
     {
       "source": "/:slug(nardy|durak|blot|blackjack|mafia|shpion|alias|krokodil|bez-slov|obratnyj-otschet|isporchennyj-telefon|bunker|sud)",
       "destination": "/seo/:slug.html"
+    },
+    {
+      "source": "/join/:game/:code",
+      "destination": "/api/invite?game=:game&code=:code"
     }
   ],
   "functions": {

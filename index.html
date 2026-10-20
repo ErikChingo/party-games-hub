@@ -7570,6 +7570,14 @@ function getSupportQuickChips(t) {
 // pendingInviteParams above), so the recipient never has to type a code by
 // hand. Uses the Web Share API where available (native share sheet on
 // phones), falling back to just copying the link to the clipboard.
+// The web invite address: hatsit.org/join/<game>/<code> gives messengers a
+// preview of its own («Аня зовёт играть в нарды» + the game's picture, see
+// api/invite.js) and then opens the room. Inside Telegram the t.me link is
+// used instead (it opens the Mini App), see below.
+function roomInviteUrl(game, code) {
+  const lang = HATSIT_LANGS.includes(hatsitSettings.language) ? hatsitSettings.language : "ru";
+  return `${window.location.origin}/join/${game}/${code}${lang === "ru" ? "" : "?l=" + lang}`;
+}
 function shareRoomInvite(code, game, gameLabel, onCopied) {
   trackEvent("share_clicked", { game });
   const inviteLang = HATSIT_LANGS.includes(hatsitSettings.language) ? hatsitSettings.language : "ru";
@@ -7606,7 +7614,7 @@ function shareRoomInvite(code, game, gameLabel, onCopied) {
     return;
   }
 
-  const url = `${window.location.origin}${window.location.pathname}?room=${code}&game=${game}`;
+  const url = roomInviteUrl(game, code);
   if (navigator.share) {
     navigator.share({ title: t_lookup("invite.shareTitle", inviteLang).replace("{brand}", t_lookup("brand.name", inviteLang)), text, url }).catch(() => {});
   } else {
@@ -7765,7 +7773,7 @@ function QrCodeModal({ open, onClose, code, game, gameLabel }) {
   const sheetRef = useRef(null);
   useModalA11y(sheetRef, onClose, open);
   if (!open) return null;
-  const url = `${window.location.origin}${window.location.pathname}?room=${code}&game=${game}`;
+  const url = roomInviteUrl(game, code);
   return (
     <ModalPortal>
     <div className="modal-overlay fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>

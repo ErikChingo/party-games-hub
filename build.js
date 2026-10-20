@@ -124,6 +124,9 @@ function build() {
     }
   }
 
+  // Room invite previews (og/<lang>/<game>.png, drawn by dev/make-invite-images.js).
+  fs.cpSync(path.join(ROOT, "og"), path.join(OUT_DIR, "og"), { recursive: true });
+
   // The search pages (hatsit.org/nardy, hatsit.org/hy/nardy, ...) and
   // sitemap.xml, built from seo/content.js and the rules in index.html.
   const pages = buildSeoPages(source, OUT_DIR);

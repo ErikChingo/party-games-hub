@@ -8,6 +8,7 @@
     "check": "node tests/static_check.js"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   }

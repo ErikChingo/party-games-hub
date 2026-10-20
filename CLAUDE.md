@@ -58,6 +58,10 @@ HatSit на claude.ai (документы `claude/*.md`, переписка — 
   все выполнимы с ботом), засчитывает телефон по событиям `game_completed` (любые игры, с ботами тоже — решение
   Эрика), день отправляется в `record_daily_task` (`supabase/daily_task.sql`: серия, всего, достижения daily_1/7/30,
   титул «Мастер заданий»).
+- Превью приглашений: ссылка `hatsit.org/join/<game>/<code>?l=<lang>` (`roomInviteUrl`) → `api/invite.js` отдаёт
+  мессенджерам «Аня зовёт играть в нарды» + картинку `og/<lang>/<game>.png` и перебрасывает в комнату. Картинки
+  рисует `dev/make-invite-images.js` (запустить после смены иконки/названия игры и закоммитить PNG). В Telegram
+  приглашение остаётся ссылкой t.me (превью у неё из @BotFather).
 - Уведомления в Telegram: `api/notify.js` (подписка, «кто-то ждёт», ежедневное напоминание по cron из `vercel.json`),
   «твой ход» — в `api/cards.js` (`presence` + `turnPings`), тексты и проверка подписи Telegram — `api/_lib/telegram.js`,
   база — `supabase/telegram_notify.sql`. В приложении: `NotifySettings` (Настройки), `NotifyPrompt` (Hub), `tellRoomOpen`.
