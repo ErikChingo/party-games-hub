@@ -101,7 +101,7 @@ const PLAYER_TITLES = captured.PLAYER_TITLES;
 const setSelectedTitle = captured.setSelectedTitle;
 
 /* ---- PLAYER_TITLES: icon + rare fields ---- */
-ok(Array.isArray(PLAYER_TITLES) && PLAYER_TITLES.length === 23, "PLAYER_TITLES has 23 tiers (8 original + 5 for online Mafia + 4 for Court + 4 for card games + 2 for nardy)");
+ok(Array.isArray(PLAYER_TITLES) && PLAYER_TITLES.length === 24, "PLAYER_TITLES has 24 tiers (8 original + 5 for online Mafia + 4 for Court + 4 for card games + 2 for nardy + 1 for daily tasks)");
 ok(PLAYER_TITLES.every((t) => typeof t.icon === "string" && t.icon.length > 0), "every tier has a non-empty icon");
 ok(PLAYER_TITLES.every((t) => typeof t.rare === "boolean"), "every tier has a boolean rare flag");
 const rareTiers = PLAYER_TITLES.filter((t) => t.rare);

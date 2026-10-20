@@ -1020,6 +1020,9 @@ function pairGameEvent(name, game) {
   return true;
 }
 function trackEvent(name, data) {
+  // Before the pairing below: a guest's game (the host logged its start)
+  // still counts toward the guest's daily task.
+  if (name === "game_completed") noteDailyGame(data);
   if (!pairGameEvent(name, data && data.game)) return;
   try {
     if (typeof window !== "undefined" && typeof window.va === "function") {
@@ -1048,6 +1051,99 @@ function logAppEvent(name, data) {
     });
     if (request && typeof request.then === "function") request.then(() => {}, () => {});
   } catch (e) {}
+}
+
+/* ---------------------------------------------------------------- */
+/* Daily task («Задание дня»): one task a day, the same for everyone,   */
+/* chosen from the date. Any game counts, bots included (Erik's choice), */
+/* so the phone itself notices it from the "game_completed" events and   */
+/* reports the day to record_daily_task() (supabase/daily_task.sql),     */
+/* which keeps the total and the run of days in a row for achievements.  */
+/* Every task can be done alone, with a bot.                            */
+/* ---------------------------------------------------------------- */
+const DAILY_TASKS = [
+  { id: "nardy_play", game: "nardy", check: (e) => e.game === "nardy" },
+  { id: "durak_win", game: "durak", check: (e) => e.game === "durak" && e.won },
+  { id: "blot_play", game: "blot", check: (e) => e.game === "blot" },
+  { id: "two_games", game: null, need: 2 },
+  { id: "nardy_win", game: "nardy", check: (e) => e.game === "nardy" && e.won },
+  { id: "durak_play", game: "durak", check: (e) => e.game === "durak" },
+  { id: "blackjack_play", game: "blackjack", check: (e) => e.game === "blackjack" },
+  { id: "blot_win", game: "blot", check: (e) => e.game === "blot" && e.won },
+];
+const DAILY_KEY = "hatsit_daily_v1";
+// "2026-10-20" -> the same task for everyone on that date.
+function dailyTaskFor(day) {
+  const [y, m, d] = String(day).split("-").map(Number);
+  const n = Math.floor(Date.UTC(y, m - 1, d) / 86400000);
+  return DAILY_TASKS[((n % DAILY_TASKS.length) + DAILY_TASKS.length) % DAILY_TASKS.length];
+}
+const dayBefore = (day) => {
+  const [y, m, d] = String(day).split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
+};
+// { day, done, games: [games finished today], streak, best, total, lastDone }
+function loadDaily() {
+  let saved = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(DAILY_KEY) || "{}") || {};
+  } catch (e) {}
+  const today = todayDateString();
+  const fresh = saved.day === today ? saved : { ...saved, day: today, done: false, games: [] };
+  return { streak: 0, best: 0, total: 0, lastDone: null, ...fresh, games: Array.isArray(fresh.games) ? fresh.games : [] };
+}
+function saveDaily(state) {
+  try {
+    localStorage.setItem(DAILY_KEY, JSON.stringify(state));
+  } catch (e) {}
+  dailyListeners.forEach((fn) => fn(state));
+}
+const dailyListeners = new Set();
+const dailyDoneListeners = new Set();
+// The run of days shown on the card: still alive if the last task was today or yesterday.
+function dailyStreakShown(state) {
+  return state.lastDone === state.day || state.lastDone === dayBefore(state.day) ? state.streak : 0;
+}
+function noteDailyGame(data) {
+  try {
+    const game = data && typeof data.game === "string" ? data.game : null;
+    if (!game) return;
+    const state = loadDaily();
+    if (state.done) return;
+    if (!state.games.includes(game)) state.games = state.games.concat([game]);
+    const task = dailyTaskFor(state.day);
+    const won = data.won === true || data.lost === false || Number(data.win) > 0;
+    const doneNow = task.need ? state.games.length >= task.need : task.check({ game, won });
+    if (!doneNow) return saveDaily(state);
+    // Counted here at once; the server's answer then brings the real numbers.
+    const streak = state.lastDone === dayBefore(state.day) ? state.streak + 1 : state.lastDone === state.day ? state.streak : 1;
+    const next = { ...state, done: true, lastDone: state.day, streak, best: Math.max(state.best, streak), total: state.total + 1 };
+    saveDaily(next);
+    reportDailyTask(next);
+  } catch (e) {}
+}
+async function reportDailyTask(state) {
+  let profile = null;
+  try {
+    const { data, error } = await supabaseClient.rpc("record_daily_task", { p_id: getPlayerId(), p_name: getPlayerName(), p_day: state.day });
+    if (!error && data && data.id) {
+      profile = data;
+      const now = loadDaily();
+      saveDaily({ ...now, streak: data.daily_streak || now.streak, best: data.daily_best || now.best, total: data.daily_done || now.total });
+    }
+  } catch (e) {}
+  const shown = loadDaily();
+  dailyDoneListeners.forEach((fn) => fn({ streak: dailyStreakShown(shown), achievements: profile ? detectNewlyUnlockedAchievements(profile) : [] }));
+}
+function useDailyTask() {
+  const [state, setState] = useState(loadDaily);
+  useEffect(() => {
+    dailyListeners.add(setState);
+    // A new day may have begun while the page stayed open.
+    setState(loadDaily());
+    return () => dailyListeners.delete(setState);
+  }, []);
+  return state;
 }
 
 /* ---------------------------------------------------------------- */
@@ -1738,7 +1834,7 @@ const LEADERBOARD_COLUMNS = {
   nardy: "nardy_wins",
 };
 // What getPlayerTitle() needs to know about every leaderboard row.
-const TITLE_PROFILE_FIELDS = ["wordless_best", "countdown_best", "streak_longest", "selected_title", "mafia_wins", "mafia_mafia_wins", "mafia_finds", "mafia_saves", "court_played", "court_judge", "court_acquitted", "court_roles_mask", "durak_wins", "durak_fools", "blot_wins", "bj_best_chips", "nardy_wins", "nardy_mars"];
+const TITLE_PROFILE_FIELDS = ["wordless_best", "countdown_best", "streak_longest", "selected_title", "mafia_wins", "mafia_mafia_wins", "mafia_finds", "mafia_saves", "court_played", "court_judge", "court_acquitted", "court_roles_mask", "durak_wins", "durak_fools", "blot_wins", "bj_best_chips", "nardy_wins", "nardy_mars", "daily_done"];
 // Drives both the ProfilePanel leaderboard tab grid and which column
 // fetchLeaderboard() above reads -- one list to keep in sync instead of two.
 const LEADERBOARD_TABS = [
@@ -3332,6 +3428,26 @@ const I18N = {
   "hub.durakSubtitle": { ru: "2–6 игроков · с ботами или онлайн", en: "2–6 players · with bots or online", hy: "2–6 խաղացող · բոտերի հետ կամ օնլայն" },
   "hub.sectionParty": { ru: "Для компании", en: "Party games", hy: "Ընկերության համար" },
   "hub.sectionCards": { ru: "Карты и нарды", en: "Cards & nardy", hy: "Թղթեր և նարդի" },
+  "daily.title": { ru: "Задание дня", en: "Daily task", hy: "Օրվա առաջադրանք" },
+  "daily.streak": { ru: "{n} дн. подряд", en: "{n} days in a row", hy: "{n} օր անընդմեջ" },
+  "daily.play": { ru: "Играть", en: "Play", hy: "Խաղալ" },
+  "daily.tomorrow": { ru: "Выполнено! Новое задание — завтра", en: "Done! A new task tomorrow", hy: "Կատարված է։ Նոր առաջադրանքը՝ վաղը" },
+  "daily.progress": { ru: "Сыграно: {n} из {m}", en: "Played: {n} of {m}", hy: "Խաղացված է՝ {n}-ը {m}-ից" },
+  "daily.doneToast": { ru: "Задание дня выполнено!", en: "Daily task done!", hy: "Օրվա առաջադրանքը կատարված է։" },
+  "daily.task.nardy_play": { ru: "Сыграйте партию в нарды", en: "Play a game of nardy", hy: "Խաղացեք նարդու մեկ պարտիա" },
+  "daily.task.nardy_win": { ru: "Выиграйте партию в нарды — хотя бы у бота", en: "Win a game of nardy — a bot counts", hy: "Հաղթեք նարդու պարտիա՝ թեկուզ բոտի դեմ" },
+  "daily.task.durak_play": { ru: "Сыграйте партию в дурака", en: "Play a game of durak", hy: "Խաղացեք դուրակի մեկ պարտիա" },
+  "daily.task.durak_win": { ru: "Сыграйте в дурака и не останьтесь дураком", en: "Play durak and don’t be the fool", hy: "Խաղացեք դուրակ և մի մնացեք դուրակ" },
+  "daily.task.blot_play": { ru: "Доиграйте партию в блот", en: "Finish a game of blot", hy: "Ավարտեք բլոտի մեկ պարտիա" },
+  "daily.task.blot_win": { ru: "Выиграйте партию в блот", en: "Win a game of blot", hy: "Հաղթեք բլոտի մեկ պարտիա" },
+  "daily.task.blackjack_play": { ru: "Сыграйте раздачу в блэкджек", en: "Play a round of blackjack", hy: "Խաղացեք բլեքջեքի մեկ բաժանում" },
+  "daily.task.two_games": { ru: "Сыграйте в две разные игры", en: "Play two different games", hy: "Խաղացեք երկու տարբեր խաղ" },
+  "achievements.daily1.title": { ru: "Первое задание", en: "First Task", hy: "Առաջին առաջադրանք" },
+  "achievements.daily1.desc": { ru: "Выполните задание дня", en: "Complete a daily task", hy: "Կատարեք օրվա առաջադրանքը" },
+  "achievements.daily7.title": { ru: "Неделя заданий", en: "A Week of Tasks", hy: "Առաջադրանքների շաբաթ" },
+  "achievements.daily7.desc": { ru: "Выполните 7 заданий дня", en: "Complete 7 daily tasks", hy: "Կատարեք 7 օրվա առաջադրանք" },
+  "achievements.daily30.title": { ru: "Мастер заданий", en: "Quest Master", hy: "Առաջադրանքների վարպետ" },
+  "achievements.daily30.desc": { ru: "Выполните 30 заданий дня", en: "Complete 30 daily tasks", hy: "Կատարեք 30 օրվա առաջադրանք" },
   "hub.rulesLinks": { ru: "Правила игр", en: "Game rules", hy: "Խաղերի կանոններ" },
   "hub.cardsSoon": { ru: "Скоро здесь появятся и другие карточные игры", en: "More card games are coming here soon", hy: "Շուտով այստեղ կհայտնվեն նաև այլ թղթախաղեր" },
   "durak.subtitle": { ru: "Подкидной и переводной · 2–6 игроков", en: "Classic and transfer · 2–6 players", hy: "Դասական և փոխանցովի · 2–6 խաղացող" },
@@ -3757,6 +3873,69 @@ function LeaveHint() {
       {text}
     </div>
   );
+}
+
+// The daily task on the Hub: today's task, its progress and the run of days.
+function DailyTaskCard({ dispatch }) {
+  const t = useT();
+  const state = useDailyTask();
+  const task = dailyTaskFor(state.day);
+  const streak = dailyStreakShown(state);
+  const target = task.game ? GAMES.find((g) => g.id === task.game) : null;
+  return (
+    <div className="mb-5 rounded-2xl border px-4 py-3.5 flex items-center gap-3" style={state.done ? { borderColor: "var(--border)", background: "var(--surface)" } : { borderColor: "rgba(232,181,69,.55)", background: "rgba(232,181,69,.08)" }}>
+      <div className="text-2xl shrink-0" aria-hidden="true">{state.done ? "✅" : "🎯"}</div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 text-[11px]">
+          <span className="uppercase tracking-[0.12em] text-[var(--text-faint)] whitespace-nowrap">{t("daily.title")}</span>
+          {streak > 0 && <span className="text-[var(--accent-strong)] font-semibold whitespace-nowrap">🔥 {t("daily.streak").replace("{n}", streak)}</span>}
+        </div>
+        <div className={"text-sm font-medium leading-snug mt-0.5 " + (state.done ? "text-[var(--text-dim)] line-through decoration-[var(--text-faint)]" : "")}>{t("daily.task." + task.id)}</div>
+        {state.done ? (
+          <div className="text-xs text-[var(--text-faint)] mt-0.5">{t("daily.tomorrow")}</div>
+        ) : (
+          task.need && <div className="text-xs text-[var(--text-dim)] mt-0.5">{t("daily.progress").replace("{n}", Math.min(state.games.length, task.need)).replace("{m}", task.need)}</div>
+        )}
+      </div>
+      {!state.done && target && (
+        <button onClick={() => dispatch({ type: target.openAction })} className="shrink-0 bg-[var(--accent)] text-[var(--accent-ink)] font-display text-base tracking-wide px-4 py-2 rounded-xl active:scale-95 transition-transform">
+          {t("daily.play")}
+        </button>
+      )}
+    </div>
+  );
+}
+// "Задание дня выполнено!" over whatever screen the game ended on, then any
+// achievement it unlocked.
+function DailyToast() {
+  const t = useT();
+  const [shown, setShown] = useState(null);
+  const [queue, setQueue] = useState([]);
+  useEffect(() => {
+    let timer = null;
+    const onDone = ({ streak, achievements }) => {
+      setShown(streak);
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        setShown(null);
+        if (achievements && achievements.length) setQueue((q) => q.concat(achievements));
+      }, 3500);
+    };
+    dailyDoneListeners.add(onDone);
+    return () => {
+      dailyDoneListeners.delete(onDone);
+      clearTimeout(timer);
+    };
+  }, []);
+  if (shown !== null) {
+    return (
+      <div className="pop fixed left-1/2 -translate-x-1/2 top-4 z-[70] max-w-[92vw] px-5 py-3 rounded-2xl bg-[var(--surface-3)] border border-[var(--accent)] shadow-lg text-center" role="status">
+        <div className="font-display text-lg text-[var(--accent-strong)]">🎯 {t("daily.doneToast")}</div>
+        {shown > 1 && <div className="text-xs text-[var(--text-dim)] mt-0.5">🔥 {t("daily.streak").replace("{n}", shown)}</div>}
+      </div>
+    );
+  }
+  return queue.length > 0 ? <AchievementUnlockToast achievement={queue[0]} onDone={() => setQueue((q) => q.slice(1))} /> : null;
 }
 
 let hatsitCurrentScreen = "hub";
@@ -4290,6 +4469,10 @@ const ACHIEVEMENTS = [
   { id: "streak_3", Icon: IconFlame, titleKey: "achievements.streak3.title", descKey: "achievements.streak3.desc", check: (p) => (p.streak_longest || 0) >= 3 },
   { id: "streak_7", Icon: IconFlame, titleKey: "achievements.streak7.title", descKey: "achievements.streak7.desc", check: (p) => (p.streak_longest || 0) >= 7 },
   { id: "streak_30", Icon: IconFlame, titleKey: "achievements.streak30.title", descKey: "achievements.streak30.desc", check: (p) => (p.streak_longest || 0) >= 30 },
+  // The daily task (any game counts, see DAILY_TASKS): how many days it was done.
+  { id: "daily_1", Icon: IconCheck, titleKey: "achievements.daily1.title", descKey: "achievements.daily1.desc", check: (p) => (p.daily_done || 0) >= 1 },
+  { id: "daily_7", Icon: IconFlame, titleKey: "achievements.daily7.title", descKey: "achievements.daily7.desc", check: (p) => (p.daily_done || 0) >= 7 },
+  { id: "daily_30", Icon: IconTrophy, titleKey: "achievements.daily30.title", descKey: "achievements.daily30.desc", check: (p) => (p.daily_done || 0) >= 30 },
   // Online Mafia. The numbers come from the server, which records each
   // game's facts itself (see mafia_claim_result in supabase/mafia_online.sql);
   // mafia_roles_mask bits: civilian 1, mafia 2, don 4, doctor 8, sheriff 16,
@@ -4379,6 +4562,7 @@ const PLAYER_TITLES = [
   { achievementId: "blot_win_50", color: "#f6cf72", icon: "♠️", rare: true, label: { ru: "Мастер блота", en: "Blot Master", hy: "Բլոտի վարպետ" } },
   { achievementId: "nardy_win_50", color: "#f6cf72", icon: "🎲", rare: true, label: { ru: "Мастер нард", en: "Nardy Master", hy: "Նարդու վարպետ" } },
   { achievementId: "streak_7", color: "#4bb8ac", icon: "🛡️", rare: false, label: { ru: "Преданный", en: "Devoted", hy: "Նվիրված" } },
+  { achievementId: "daily_30", color: "#e0954a", icon: "🎯", rare: false, label: { ru: "Мастер заданий", en: "Quest Master", hy: "Առաջադրանքների վարպետ" } },
   { achievementId: "durak_win_50", color: "#e8b545", icon: "🃏", rare: false, label: { ru: "Козырной туз", en: "Trump Ace", hy: "Կոզիր տուզ" } },
   { achievementId: "bj_chips_5000", color: "#8dd44c", icon: "💰", rare: false, label: { ru: "Хайроллер", en: "High Roller", hy: "Հայռոլեր" } },
   { achievementId: "nardy_mars_10", color: "#e2585a", icon: "👽", rare: false, label: { ru: "Марсианин", en: "Martian", hy: "Մարսեցի" } },
@@ -8351,6 +8535,8 @@ function Hub({ state, dispatch }) {
           </button>
         )}
       </div>
+
+      {!normalizedQuery && <DailyTaskCard dispatch={dispatch} />}
 
       {!normalizedQuery && (
         <div className="flex gap-1 p-1 mb-5 rounded-2xl bg-[var(--surface)] border border-[var(--border)]" role="tablist">
@@ -17241,7 +17427,16 @@ function useCardRoom(game, predict, sessionKey) {
   const sendingRef = useRef(false);
   const [pending, setPending] = useState([]);
   // Online end: the game over, or in Blackjack (endless rounds) the first scored round.
-  useTrackGameCompleted(!!view && (view.status === "ended" || (game === "blackjack" && view.phase === "score")), game, { mode: "online" });
+  // won: for the daily task («выиграйте в блот»).
+  const mySeat = view && view.players ? view.players.findIndex((p) => p.id === identity.id) : -1;
+  const wonOnline =
+    !view || mySeat < 0 ? false
+    : game === "durak" ? view.loser !== mySeat && !view.draw
+    : game === "blot" ? view.winner === mySeat % 2
+    : game === "nardy" ? view.winner === mySeat
+    : game === "blackjack" ? (view.players[mySeat].win || 0) > 0
+    : false;
+  useTrackGameCompleted(!!view && (view.status === "ended" || (game === "blackjack" && view.phase === "score")), game, { mode: "online", won: wonOnline });
 
   const accept = useCallback((data) => {
     if (!data || !data.ok || !data.view) return;
@@ -21653,6 +21848,7 @@ function App() {
     <>
       {ScreenComponent ? <ScreenComponent state={state} dispatch={dispatchWithTracking} /> : <Hub state={state} dispatch={dispatchWithTracking} />}
       <LeaveHint />
+      <DailyToast />
     </>
   );
 
