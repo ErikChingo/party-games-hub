@@ -17,6 +17,20 @@
       "permanent": true
     }
   ],
+  "rewrites": [
+    {
+      "source": "/hy",
+      "destination": "/seo/hy/index.html"
+    },
+    {
+      "source": "/hy/:slug(nardy|durak|blot|blackjack|mafia|shpion|alias|krokodil|bez-slov|obratnyj-otschet|isporchennyj-telefon|bunker|sud)",
+      "destination": "/seo/hy/:slug.html"
+    },
+    {
+      "source": "/:slug(nardy|durak|blot|blackjack|mafia|shpion|alias|krokodil|bez-slov|obratnyj-otschet|isporchennyj-telefon|bunker|sud)",
+      "destination": "/seo/:slug.html"
+    }
+  ],
   "functions": {
     "api/mafia-voice.js": {
       "maxDuration": 30

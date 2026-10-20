@@ -28,6 +28,7 @@ const fs = require("fs");
 const path = require("path");
 const ts = require("typescript");
 const esbuild = require("esbuild");
+const { buildSeoPages } = require("./seo/build-pages.js");
 
 const ROOT = __dirname;
 const OUT_DIR = path.join(ROOT, "dist");
@@ -113,7 +114,7 @@ function build() {
   // Everything else the deployed site needs as a real file. Icons and the
   // manifest are inlined as data: URIs inside index.html itself (see its
   // <head>), so they don't need copying here.
-  const staticFiles = ["og-image.png", "robots.txt", "sitemap.xml", "sw.js", "google9a30da4fd0ae13b5.html", "yandex_710e03779ae07f36.html", "yandex_b4c4100e443a202e.html"];
+  const staticFiles = ["og-image.png", "robots.txt", "sw.js", "google9a30da4fd0ae13b5.html", "yandex_710e03779ae07f36.html", "yandex_b4c4100e443a202e.html"];
   for (const name of staticFiles) {
     const src = path.join(ROOT, name);
     if (fs.existsSync(src)) {
@@ -122,6 +123,11 @@ function build() {
       console.warn(`build.js: expected static file "${name}" not found next to index.html, skipping`);
     }
   }
+
+  // The search pages (hatsit.org/nardy, hatsit.org/hy/nardy, ...) and
+  // sitemap.xml, built from seo/content.js and the rules in index.html.
+  const pages = buildSeoPages(source, OUT_DIR);
+  console.log(`build.js: wrote ${pages} search pages and sitemap.xml`);
 
   console.log(
     `build.js: wrote dist/index.html — JSX source ${(jsxCode.length / 1024).toFixed(0)} KB -> compiled ${(compiled.length / 1024).toFixed(0)} KB -> minified ${(minified.length / 1024).toFixed(0)} KB`

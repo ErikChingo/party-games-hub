@@ -88,7 +88,8 @@ const rpcAny = (fn, args) => Promise.resolve(fn === "cards_view" ? cardsView(arg
   eq(ended, 200, "200 bot games (2–6 players, both variants) all reach the end in the bundle");
 
   /* ---------- the Hub: two sections ---------- */
-  const hub = (local) => html(React.createElement(load({ react: React, local: { ...RU, ...local } }).C.Hub, { state: { feedbackPending: null }, dispatch: noop }));
+  // The game tiles only: the «Правила игр» links at the bottom name every game.
+  const hub = (local) => html(React.createElement(load({ react: React, local: { ...RU, ...local } }).C.Hub, { state: { feedbackPending: null }, dispatch: noop })).split('aria-label="Правила игр"')[0];
   let page = hub({});
   ok(page.includes("Для компании") && page.includes("Карты и нарды"), "the Hub shows the two section tabs");
   ok(page.includes("Шпион") && !page.includes("Дурак"), "«Для компании» is the default and has no card games");

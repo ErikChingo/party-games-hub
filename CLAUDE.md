@@ -38,7 +38,13 @@ HatSit на claude.ai (документы `claude/*.md`, переписка — 
 - **Supabase** (проект `zocoaqqcrxpbkyzlfzsf`, регион ap-southeast-1): профили и рейтинг, Мафия онлайн
   (функции `mafia_*`), Бункер/Суд (Realtime), открытые комнаты, карточные комнаты `card_rooms`, статистика сайта.
   Папка `supabase/` — записи того, что применено в базе (`cards.sql` — всё про карточные игры).
-- **`sw.js`** — service worker (офлайн-кеш оболочки). `manifest.json`, иконки, `robots.txt`, `sitemap.xml`.
+- **`sw.js`** — service worker (офлайн-кеш оболочки). `manifest.json`, иконки, `robots.txt`.
+- **`seo/`** — страницы для поисковиков: по одной на игру, русская `hatsit.org/<slug>` и армянская
+  `hatsit.org/hy/<slug>`, плюс армянская главная `hatsit.org/hy`. Тексты — `seo/content.js`, правила берутся из
+  `*_RULES` в `index.html`; `seo/build-pages.js` (вызывается из `build.js`) собирает их в `dist/seo/` и пишет
+  `sitemap.xml`. Короткие адреса — `rewrites` в `vercel.json`; ссылки внизу Hub — `GAME_PAGE_SLUGS`. Кнопка
+  «Играть» ведёт на `/?play=<id>` (+`&lang=hy`), сайт сразу открывает игру и пишет событие `seo_play` в статистику.
+  Новая игра → добавить её в `seo/content.js`, `GAME_PAGE_SLUGS` и `vercel.json` (тест `test_seo_pages` это проверяет).
 
 ### Важные места в `index.html` (искать по имени)
 
