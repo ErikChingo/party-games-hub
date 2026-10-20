@@ -34,7 +34,7 @@ HatSit на claude.ai (документы `claude/*.md`, переписка — 
     функционале его нужно дописывать.**
   - `support-ticket.js` (Discord), `health.js`.
   - Переменные окружения в Vercel: `GEMINI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (от интеграции Supabase),
-    `DISCORD_WEBHOOK_URL`, необязательные `GEMINI_*` для смены моделей.
+    `DISCORD_WEBHOOK_URL`, `TELEGRAM_BOT_TOKEN`, `CRON_SECRET`, необязательные `GEMINI_*` для смены моделей.
 - **Supabase** (проект `zocoaqqcrxpbkyzlfzsf`, регион ap-southeast-1): профили и рейтинг, Мафия онлайн
   (функции `mafia_*`), Бункер/Суд (Realtime), открытые комнаты, карточные комнаты `card_rooms`, статистика сайта.
   Папка `supabase/` — записи того, что применено в базе (`cards.sql` — всё про карточные игры).
@@ -58,6 +58,11 @@ HatSit на claude.ai (документы `claude/*.md`, переписка — 
   все выполнимы с ботом), засчитывает телефон по событиям `game_completed` (любые игры, с ботами тоже — решение
   Эрика), день отправляется в `record_daily_task` (`supabase/daily_task.sql`: серия, всего, достижения daily_1/7/30,
   титул «Мастер заданий»).
+- Уведомления в Telegram: `api/notify.js` (подписка, «кто-то ждёт», ежедневное напоминание по cron из `vercel.json`),
+  «твой ход» — в `api/cards.js` (`presence` + `turnPings`), тексты и проверка подписи Telegram — `api/_lib/telegram.js`,
+  база — `supabase/telegram_notify.sql`. В приложении: `NotifySettings` (Настройки), `NotifyPrompt` (Hub), `tellRoomOpen`.
+  Нужны переменные Vercel `TELEGRAM_BOT_TOKEN` и `CRON_SECRET`. Порядок заданий дня — `DAILY_ORDER` в telegram.js
+  совпадает с `DAILY_TASKS` (тест).
 - `useLeaveGuard`, `confirmLeave` — защита от случайного выхода из игры (двойное «назад»).
 - Онлайн-игры: `useMafiaRoom` (Мафия, RPC `mafia_*`), Бункер/Суд (Realtime, хост держит игру, передача хоста),
   `useCardRoom(game, predict, sessionKey)` (Дурак/Блот/Блэкджек через `/api/cards`; свой ход показывается сразу
@@ -124,6 +129,6 @@ node sync-engines.js   # после правок в api/_lib/*.js
 карточных игр в живой онлайн-партии двух телефонов.
 
 Статистика сайта (8 окт): за два дня сайт открыли 42 человека, игр начато мало. Предложенные следующие шаги
-(Эрик ещё не выбрал): уведомление «твой ход» в Telegram; доделки (Мафия на 5+, армянские тексты,
+(Эрик ещё не выбрал): доделки (Мафия на 5+, армянские тексты,
 сплит в Блэкджеке); продвижение (SEO-страницы с правилами, превью ссылок в Telegram).
 Кнопку «Играть сейчас» (быстрая игра одним нажатием) Эрик 11 окт отклонил — не подходит сайту, не предлагать.

@@ -15,7 +15,12 @@
 //
 // Actions: create, join, leave, settings, add_bot, remove_bot, start,
 // move (play / beat / transfer / take / pass), tick (somebody ran out of
-// time), rematch.
+// time), rematch, presence (the app went to the background or came back).
+//
+// «Your turn» in Telegram: when the game comes to wait for someone who has
+// the app in the background (presence) and lets @hatsit_games_bot write to
+// them, the bot tells them (supabase/telegram_notify.sql, at most once per 3
+// minutes).
 //
 // A player who leaves a running game, or lets the timer run out twice, is
 // replaced by a bot -- the game goes on for everyone else.
@@ -30,6 +35,7 @@ const Durak = require("./_lib/durak.js");
 const Blot = require("./_lib/blot.js");
 const Blackjack = require("./_lib/blackjack.js");
 const Nardy = require("./_lib/nardy.js");
+const tg = require("./_lib/telegram.js");
 
 // Every game here has the same shape: newGame(players, settings, random),
 // apply(state, seat, move), timeout(state), nextBotMove(state, isBot),
@@ -259,8 +265,16 @@ function act(state, body, me, now) {
       const result = engine.apply(state, idx, body.move || {});
       if (!result.ok) return { error: result.error };
       const players = result.state.players.slice();
-      players[idx] = { ...players[idx], afk: 0 };
+      players[idx] = { ...players[idx], afk: 0, away: false };
       return { state: stamp(runBots({ ...result.state, players }), now) };
+    }
+    case "presence": {
+      if (idx < 0) return { error: "not_in_room" };
+      const away = !!body.away;
+      if (!!state.players[idx].away === away) return { state };
+      const players = state.players.slice();
+      players[idx] = { ...players[idx], away };
+      return { state: { ...state, players } };
     }
     case "tick": {
       if (state.status !== "playing") return { state };
@@ -277,6 +291,42 @@ function act(state, body, me, now) {
     default:
       return { error: "bad_request" };
   }
+}
+
+// ---------- «your turn» in Telegram ----------
+// The seats the game is waiting for now.
+function awaitedSeats(state) {
+  if (!state || state.status !== "playing") return [];
+  if (state.game === "nardy") return state.turn === null || state.turn === undefined ? [] : [state.turn];
+  if (state.game === "blot") return state.phase === "bid" ? [state.bidding.turn] : state.phase === "play" && state.turn !== null ? [state.turn] : [];
+  if (state.game === "blackjack") return state.phase === "bet" ? Blackjack.waitingBets(state) : state.phase === "turns" && state.turn !== null ? [state.turn] : [];
+  if (state.game === "durak") {
+    if (!state.table || state.table.length === 0) return [state.attacker];
+    return Durak.uncovered(state) > 0 && !state.taking ? [state.defender] : [];
+  }
+  return [];
+}
+// People who just became the ones the game waits for, while away from it.
+function turnPings(prev, next) {
+  const before = new Set(awaitedSeats(prev));
+  return awaitedSeats(next)
+    .filter((i) => !before.has(i))
+    .map((i) => next.players[i])
+    .filter((p) => p && !p.bot && p.away && /^tg:\d{1,20}$/.test(p.profileId || ""));
+}
+async function notifyTurns(people, code, game) {
+  await Promise.all(
+    people.map(async (p) => {
+      try {
+        const tgId = Number(p.profileId.slice(3));
+        const res = await db("rpc/tg_claim_turn", { method: "POST", body: JSON.stringify({ p_tg: tgId }) });
+        const rows = res.ok ? await res.json() : [];
+        if (!rows || !rows.length) return;
+        const t = tg.textFor(rows[0].lang);
+        await tg.sendMessage(tgId, t.turn.replace("{game}", t.gamesIn[game] || game), { text: t.back, url: tg.roomUrl(game, code) });
+      } catch (e) {}
+    })
+  );
 }
 
 // ---------- statistics ----------
@@ -401,8 +451,10 @@ module.exports = async function handler(req, res) {
       if (result.error) return fail(res, 409, result.error);
       if (result.state === row.state) return send(res, code, row.version, row.state, playerId);
       const events = statsEvents(row.state, result.state);
+      const pings = turnPings(row.state, result.state);
       if (await saveRoom(code, row.version, result.state)) {
         if (events.length) await recordStats(events);
+        if (pings.length) await notifyTurns(pings, code, result.state.game);
         return send(res, code, row.version + 1, result.state, playerId);
       }
       // Someone else moved first: read again and re-apply.
@@ -418,4 +470,4 @@ function send(res, code, version, state, playerId) {
   res.status(200).json({ ok: true, code, version, view: gameOf(state).engine.viewFor(state, playerId) });
 }
 
-module.exports._internals = { act, runBots, deal, hash, statsEvents, TURN_MS, SCORE_MS, GAMES };
+module.exports._internals = { act, runBots, deal, hash, statsEvents, awaitedSeats, turnPings, TURN_MS, SCORE_MS, GAMES };

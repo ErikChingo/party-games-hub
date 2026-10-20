@@ -1568,6 +1568,75 @@ async function closeOpenRoom(game) {
     await supabaseClient.rpc("open_room_close", { p_game: game, p_owner_id: identity.id, p_secret: identity.secret });
   } catch (e) {}
 }
+// ---------- Telegram notifications from the bot (api/notify.js) ----------
+// Only inside Telegram: the server checks who is asking from Telegram's signed
+// initData, and only people who let the bot write to them get messages.
+function tgInitData() {
+  try {
+    const telegram = tg();
+    return isInsideTelegram() && telegram.initData ? telegram.initData : "";
+  } catch (e) {
+    return "";
+  }
+}
+async function notifyApi(action, extra) {
+  try {
+    const res = await fetch("/api/notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, initData: tgInitData(), ...(extra || {}) }),
+    });
+    return await res.json().catch(() => null);
+  } catch (e) {
+    return null;
+  }
+}
+// A room just went on the open list: the bot tells subscribers someone is
+// waiting (the server sends it once per room and rations it per person).
+const toldOpenRooms = new Set();
+function tellRoomOpen(game, code) {
+  const key = game + ":" + code;
+  if (toldOpenRooms.has(key)) return;
+  toldOpenRooms.add(key);
+  notifyApi("room_open", { game, code });
+}
+// Telegram's own "allow the bot to message you?" prompt, then the
+// subscription. Resolves to { subscribed, prefs } or null.
+function enableTelegramNotifications() {
+  return new Promise((resolve) => {
+    const subscribe = async () => {
+      const r = await notifyApi("subscribe", { lang: hatsitSettings.language });
+      resolve(r && r.ok ? r : null);
+    };
+    try {
+      const telegram = tg();
+      if (telegram && typeof telegram.requestWriteAccess === "function" && (!telegram.isVersionAtLeast || telegram.isVersionAtLeast("6.9"))) {
+        telegram.requestWriteAccess((granted) => (granted ? subscribe() : resolve(null)));
+      } else subscribe();
+    } catch (e) {
+      subscribe();
+    }
+  });
+}
+// [status, setStatus, inTelegram]; status = { subscribed, prefs } once known.
+let tgNotifyStatus = null;
+const tgNotifyListeners = new Set();
+function setTgNotifyStatus(next) {
+  tgNotifyStatus = next;
+  tgNotifyListeners.forEach((fn) => fn(next));
+}
+function useTelegramNotifications() {
+  const inTelegram = isInsideTelegram();
+  const [status, setStatus] = useState(tgNotifyStatus);
+  useEffect(() => {
+    if (!inTelegram) return undefined;
+    tgNotifyListeners.add(setStatus);
+    if (!tgNotifyStatus) notifyApi("status").then((r) => r && r.ok && setTgNotifyStatus({ subscribed: r.subscribed, prefs: r.prefs }));
+    return () => tgNotifyListeners.delete(setStatus);
+  }, []);
+  return [inTelegram ? status : null, setTgNotifyStatus, inTelegram];
+}
+
 // game = null asks for every game at once (the Hub only counts them).
 async function fetchOpenRooms(game) {
   try {
@@ -1588,7 +1657,7 @@ function useOpenRoomBeacon({ game, code, active, name, players, max }) {
     const beat = () => {
       const now = latest.current;
       sentPlayersRef.current = now.players;
-      announceOpenRoom(game, now.code, now.name, now.players, now.max);
+      announceOpenRoom(game, now.code, now.name, now.players, now.max).then((listed) => listed && tellRoomOpen(game, now.code));
     };
     beat();
     const timer = setInterval(beat, OPEN_ROOM_BEAT_MS);
@@ -3428,6 +3497,16 @@ const I18N = {
   "hub.durakSubtitle": { ru: "2–6 игроков · с ботами или онлайн", en: "2–6 players · with bots or online", hy: "2–6 խաղացող · բոտերի հետ կամ օնլայն" },
   "hub.sectionParty": { ru: "Для компании", en: "Party games", hy: "Ընկերության համար" },
   "hub.sectionCards": { ru: "Карты и нарды", en: "Cards & nardy", hy: "Թղթեր և նարդի" },
+  "notify.title": { ru: "Уведомления от бота", en: "Messages from the bot", hy: "Ծանուցումներ բոտից" },
+  "notify.titleDesc": { ru: "Бот @hatsit_games_bot напишет вам в Telegram", en: "@hatsit_games_bot will message you in Telegram", hy: "@hatsit_games_bot-ը կգրի ձեզ Telegram-ում" },
+  "notify.daily": { ru: "Задание дня", en: "Daily task", hy: "Օրվա առաջադրանք" },
+  "notify.dailyDesc": { ru: "Вечером, если задание ещё не выполнено", en: "In the evening, if it is not done yet", hy: "Երեկոյան, եթե առաջադրանքը դեռ կատարված չէ" },
+  "notify.rooms": { ru: "Кто-то ждёт соперника", en: "Someone is waiting", hy: "Ինչ-որ մեկը մրցակից է սպասում" },
+  "notify.roomsDesc": { ru: "Когда кто-то открывает открытую комнату — не чаще раза в 3 часа", en: "When someone opens a public room — at most once every 3 hours", hy: "Երբ բաց սենյակ են ստեղծում՝ 3 ժամում ոչ ավելի, քան մեկ անգամ" },
+  "notify.turns": { ru: "Ваш ход", en: "Your turn", hy: "Ձեր քայլը" },
+  "notify.turnsDesc": { ru: "В онлайн-партии, если вы свернули приложение", en: "In an online game, if the app is in the background", hy: "Օնլայն պարտիայում, եթե հավելվածը ծալված է" },
+  "notify.prompt": { ru: "Напоминать о задании дня и звать, когда кто-то ждёт соперника?", en: "Get a reminder of the daily task and a call when someone is waiting for an opponent?", hy: "Հիշեցնե՞լ օրվա առաջադրանքի մասին և կանչել, երբ ինչ-որ մեկը մրցակից է սպասում" },
+  "notify.enable": { ru: "Включить", en: "Turn on", hy: "Միացնել" },
   "daily.title": { ru: "Задание дня", en: "Daily task", hy: "Օրվա առաջադրանք" },
   "daily.streak": { ru: "{n} дн. подряд", en: "{n} days in a row", hy: "{n} օր անընդմեջ" },
   "daily.play": { ru: "Играть", en: "Play", hy: "Խաղալ" },
@@ -4344,6 +4423,7 @@ const IconDownload = (p) => <Ic {...p}><path d="M12 3v12" /><path d="M7 10l5 5 5
 const IconAlertTriangle = (p) => <Ic {...p}><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></Ic>;
 const IconGlasses = (p) => <Ic {...p}><circle cx="6" cy="14" r="3.2" /><circle cx="18" cy="14" r="3.2" /><path d="M9.2 14h5.6" /><path d="M2 13c0-4 1.5-7 4-8" /><path d="M22 13c0-4-1.5-7-4-8" /></Ic>;
 const IconMessageCircle = (p) => <Ic {...p}><path d="M21 11.5a8.4 8.4 0 0 1-8.9 8.4 8.7 8.7 0 0 1-3.8-.9L3 20l1.1-4.2A8.4 8.4 0 1 1 21 11.5Z" /></Ic>;
+const IconBell = (p) => <Ic {...p}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></Ic>;
 const IconSend = (p) => <Ic {...p}><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4Z" /></Ic>;
 const IconInstagram = (p) => <Ic {...p}><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><path d="M17.5 6.5h.01" /></Ic>;
 const IconQrCode = (p) => <Ic {...p}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="15" y="15" width="3" height="3" /><path d="M19 15v2.5" /><path d="M15 19h2.5" /><path d="M19 19h2" /></Ic>;
@@ -6650,6 +6730,7 @@ function SettingsPanel({ onClose }) {
             </button>
           </div>
           <div className="flex flex-col gap-2.5">
+            <NotifySettings />
             <RoleToggle
               Icon={settings.sound ? IconVolume2 : IconVolumeX}
               color="var(--accent-strong)"
@@ -6711,6 +6792,95 @@ function SettingsPanel({ onClose }) {
       </FadeIn>
     </div>
     </ModalPortal>
+  );
+}
+
+// «Уведомления от бота» in Settings (inside Telegram only): one switch that
+// asks Telegram's permission, then a switch for each kind of message.
+function NotifySettings() {
+  const t = useT();
+  const [status, setStatus, inTelegram] = useTelegramNotifications();
+  const [busy, setBusy] = useState(false);
+  if (!inTelegram) return null;
+  const prefs = status && status.subscribed && status.prefs ? status.prefs : null;
+  const savePrefs = async (next) => {
+    setBusy(true);
+    const r = await notifyApi("prefs", { prefs: next, lang: hatsitSettings.language });
+    setBusy(false);
+    if (r && r.ok) setStatus({ subscribed: r.subscribed, prefs: r.prefs });
+  };
+  const toggleAll = async (on) => {
+    if (busy) return;
+    if (!on) return savePrefs({ daily: false, rooms: false, turns: false });
+    setBusy(true);
+    const r = await enableTelegramNotifications();
+    setBusy(false);
+    if (r) setStatus({ subscribed: r.subscribed, prefs: r.prefs });
+  };
+  const kinds = [
+    ["daily", "notify.daily", "notify.dailyDesc"],
+    ["rooms", "notify.rooms", "notify.roomsDesc"],
+    ["turns", "notify.turns", "notify.turnsDesc"],
+  ];
+  return (
+    <>
+      <RoleToggle Icon={IconBell} color="var(--accent-strong)" bg="rgba(232,181,69,.14)" title={t("notify.title")} description={t("notify.titleDesc")} checked={!!prefs} onChange={toggleAll} />
+      {prefs && (
+        <div className="bg-[var(--surface-2)] rounded-2xl px-4 py-2 flex flex-col">
+          {kinds.map(([key, titleKey, descKey]) => (
+            <label key={key} className="flex items-center gap-3 py-2 cursor-pointer">
+              <input type="checkbox" className="w-4 h-4 shrink-0" style={{ accentColor: "var(--accent)" }} checked={!!prefs[key]} disabled={busy} onChange={(e) => savePrefs({ ...prefs, [key]: e.target.checked })} />
+              <span className="min-w-0">
+                <span className="block text-sm">{t(titleKey)}</span>
+                <span className="block text-xs text-[var(--text-dim)]">{t(descKey)}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+// On the Hub inside Telegram, until notifications are on or the card is closed.
+const NOTIFY_PROMPT_KEY = "hatsit_notify_prompt_v1";
+function NotifyPrompt() {
+  const t = useT();
+  const [status, setStatus, inTelegram] = useTelegramNotifications();
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return localStorage.getItem(NOTIFY_PROMPT_KEY) === "closed";
+    } catch (e) {
+      return false;
+    }
+  });
+  const [busy, setBusy] = useState(false);
+  if (!inTelegram || hidden || !status || status.subscribed) return null;
+  const close = () => {
+    setHidden(true);
+    try {
+      localStorage.setItem(NOTIFY_PROMPT_KEY, "closed");
+    } catch (e) {}
+  };
+  return (
+    <div className="mb-5 -mt-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 flex items-center gap-3">
+      <IconBell size={20} className="shrink-0 text-[var(--accent-strong)]" />
+      <div className="min-w-0 flex-1 text-xs text-[var(--text-dim)] leading-snug">{t("notify.prompt")}</div>
+      <button
+        onClick={async () => {
+          setBusy(true);
+          const r = await enableTelegramNotifications();
+          setBusy(false);
+          if (r) setStatus({ subscribed: r.subscribed, prefs: r.prefs });
+        }}
+        disabled={busy}
+        className="shrink-0 bg-[var(--accent)] text-[var(--accent-ink)] text-sm font-semibold px-3 py-1.5 rounded-xl disabled:opacity-50"
+      >
+        {t("notify.enable")}
+      </button>
+      <button onClick={close} className="shrink-0 text-[var(--text-faint)]" aria-label={t("common.close")}>
+        <IconX size={16} />
+      </button>
+    </div>
   );
 }
 
@@ -8537,6 +8707,7 @@ function Hub({ state, dispatch }) {
       </div>
 
       {!normalizedQuery && <DailyTaskCard dispatch={dispatch} />}
+      {!normalizedQuery && <NotifyPrompt />}
 
       {!normalizedQuery && (
         <div className="flex gap-1 p-1 mb-5 rounded-2xl bg-[var(--surface)] border border-[var(--border)]" role="tablist">
@@ -17583,6 +17754,37 @@ function useCardRoom(game, predict, sessionKey) {
       channelRef.current = null;
     };
   }, [code, refresh]);
+  // In Telegram: tell the referee when the app goes to the background and
+  // back, so the bot can say «your turn» only to someone who is away.
+  useEffect(() => {
+    if (!code || !isInsideTelegram()) return undefined;
+    const send = (away) => {
+      try {
+        fetch("/api/cards", {
+          method: "POST",
+          keepalive: true,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "presence", away, playerId: identity.id, secret: identity.secret, code }),
+        });
+      } catch (e) {}
+    };
+    const onVisibility = () => send(document.visibilityState === "hidden");
+    const away = () => send(true);
+    const back = () => send(false);
+    document.addEventListener("visibilitychange", onVisibility);
+    const telegram = tg();
+    try {
+      telegram.onEvent("deactivated", away);
+      telegram.onEvent("activated", back);
+    } catch (e) {}
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      try {
+        telegram.offEvent("deactivated", away);
+        telegram.offEvent("activated", back);
+      } catch (e) {}
+    };
+  }, [code]);
   // Out of time: ask the referee to move on (the host first, others a bit later).
   const meIndex = view ? view.players.findIndex((p) => p.id === identity.id) : -1;
   const shown = useMemo(() => (view && pending.length ? pending.reduce((v, m) => predict(v, meIndex, m), view) : view), [view, pending, meIndex]);

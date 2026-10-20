@@ -41,5 +41,11 @@
     "api/cards.js": {
       "maxDuration": 15
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/notify?task=daily",
+      "schedule": "0 15 * * *"
+    }
+  ]
 }
