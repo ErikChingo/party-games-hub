@@ -1037,8 +1037,22 @@ function trackEvent(name, data) {
 // only through the log_event function) so the owner's statistics page
 // (?stats=1) can show which games people actually play. Fire-and-forget:
 // a failed or blocked request never affects the app.
+// Robots (search engines rendering the page, link previews, automated
+// browsers) are not written at all: each one looks like a brand-new person
+// who opened the site once, which made the statistics lie after the domain
+// change on 19 Oct.
+const ROBOT_USER_AGENT = /bot\/|bot\)|bot;|\bbot\b|crawl|spider|slurp|headless|lighthouse|pagespeed|preview|facebookexternalhit|embedly|vercel|phantomjs|puppeteer|playwright|selenium/i;
+function looksLikeRobot() {
+  try {
+    if (navigator.webdriver) return true;
+    return ROBOT_USER_AGENT.test(String(navigator.userAgent || ""));
+  } catch (e) {
+    return false;
+  }
+}
 function logAppEvent(name, data) {
   try {
+    if (looksLikeRobot()) return;
     const { game, ...rest } = data || {};
     let platform = "web";
     if (isInsideTelegram()) platform = "telegram";
