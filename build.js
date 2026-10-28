@@ -111,10 +111,10 @@ function build() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   fs.writeFileSync(path.join(OUT_DIR, "index.html"), html);
 
-  // Everything else the deployed site needs as a real file. Icons and the
-  // manifest are inlined as data: URIs inside index.html itself (see its
-  // <head>), so they don't need copying here.
-  const staticFiles = ["og-image.png", "robots.txt", "sw.js", "google9a30da4fd0ae13b5.html", "yandex_710e03779ae07f36.html", "yandex_b4c4100e443a202e.html"];
+  // Everything else the deployed site needs as a real file. The manifest is
+  // inlined as a data: URI inside index.html itself (see its <head>); icons
+  // are files, drawn by dev/make-icons.js, because Google ignores data: icons.
+  const staticFiles = ["og-image.png", "favicon.ico", "favicon.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png", "robots.txt", "sw.js", "google9a30da4fd0ae13b5.html", "yandex_710e03779ae07f36.html", "yandex_b4c4100e443a202e.html"];
   for (const name of staticFiles) {
     const src = path.join(ROOT, name);
     if (fs.existsSync(src)) {

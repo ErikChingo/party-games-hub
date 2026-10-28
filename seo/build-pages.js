@@ -77,7 +77,10 @@ ${alternates.map(([hl, href]) => `<link rel="alternate" hreflang="${hl}" href="$
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:image" content="${ORIGIN}/og-image.png">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='40' fill='%230f172a'/><text x='96' y='134' font-family='Arial' font-size='120' font-weight='900' text-anchor='middle' fill='%23e8b545'>H</text></svg>">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>${STYLE}</style>
 <script type="application/ld+json">${JSON.stringify(jsonLd)}</script>
 </head>
