@@ -18010,6 +18010,7 @@ function DurakApp({ dispatch }) {
   // Called once, up here: a hook must run on every render, whatever is on screen.
   const rules = useRules(DURAK_RULES);
   const view = room.view;
+  const tableView = useBlotPacedView(view, room.meIndex);
   const achievementToast = useCardAchievements(view);
   const onlinePlaying = !!(view && view.status !== "lobby");
   const meOnline = view && room.meIndex >= 0 ? view.players[room.meIndex] : null;
@@ -18917,6 +18918,169 @@ function blotPredict(view, i, m) {
   }
 }
 
+// Online, the referee answers with everything the bots did at once (they
+// move on the server in one go). To make it look like the game with bots,
+// the phone shows those moves one at a time: from the table now on screen
+// ("cur") to the referee's answer ("final") it builds the in-between tables
+// -- each bid, each card -- with how long to wait before each. Nothing hidden
+// is needed: bids are in bidding.calls, cards in the log. Returns null when
+// it cannot tell (a gap in the log, a rejected move, a new deal mid-play...):
+// then the answer is simply shown at once.
+function blotPaceFrames(cur, final, meIndex, delayMs, trickMs) {
+  if (!cur || !final || meIndex < 0) return null;
+  if (cur.status !== "playing" || final.status === "lobby" || !final.players || !final.log) return null;
+  if (!cur.players[meIndex] || !final.players[meIndex] || cur.players[meIndex].id !== final.players[meIndex].id) return null;
+  if (final.deals < cur.deals || final.seq < cur.seq) return null;
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+  const isBot = (seat) => !!(final.players[seat] && final.players[seat].bot);
+  const newDeal = final.deals !== cur.deals;
+  const frames = [];
+  let afterTrick = false;
+  const push = (view, seat) => {
+    // My own moves and the first move of a living player show at once;
+    // bots take their time, and wait longer after a taken trick.
+    let delay = seat === meIndex || (seat !== null && !isBot(seat) && frames.length === 0) ? 0 : delayMs;
+    if (afterTrick) delay += trickMs;
+    afterTrick = false;
+    frames.push({ view, delay });
+  };
+  // Everything that changes only when a deal ends stays as it was on screen.
+  const base = (scores) => {
+    const v = clone(final);
+    v.status = "playing";
+    v.winner = null;
+    v.result = null;
+    v.scores = scores;
+    return v;
+  };
+  let state;
+  if (newDeal) {
+    // Fresh cards, before anyone has spoken. (A new deal that is already
+    // being played out is shown at once.)
+    if (final.phase !== "bid" || final.deals !== cur.deals + 1) return null;
+    state = base(final.scores);
+    state.bidding = { ...final.bidding, turn: (final.dealer + 1) % 4, calls: [], high: null, passes: 0, contra: 0, contraBy: null };
+    push(clone(state), meIndex);
+  } else {
+    state = clone(cur);
+    // My own count comes from my cards (a predicted move leaves it stale).
+    state.players.forEach((p) => {
+      if (p.hand) p.handCount = p.hand.length;
+    });
+  }
+  // Bids, passes, контра.
+  if (state.phase === "bid") {
+    const have = state.bidding.calls.length;
+    const all = final.bidding ? final.bidding.calls : [];
+    if (all.length < have) return null;
+    for (let i = 0; i < have; i++) if (JSON.stringify(all[i]) !== JSON.stringify(state.bidding.calls[i])) return null;
+    for (let i = have; i < all.length; i++) {
+      const call = all[i];
+      state.bidding = { ...state.bidding, calls: all.slice(0, i + 1), turn: (call.seat + 1) % 4 };
+      if (call.t === "contra") state.bidding.contra = 1;
+      if (call.t === "recontra") state.bidding.contra = 2;
+      push(clone(state), call.seat);
+    }
+    if (final.phase === "bid") {
+      if (!frames.length) return null;
+      frames[frames.length - 1].view = final;
+      return frames;
+    }
+    // The bidding closed: the table as play starts, shown with the last call.
+    const k = final.log.map((e) => e.t).lastIndexOf("contract");
+    if (k < 0) return null;
+    const start = base(state.scores);
+    start.phase = "play";
+    start.trick = [];
+    start.tricks = [0, 0];
+    start.points = [0, 0];
+    start.lastTrick = null;
+    start.turn = final.leader;
+    start.combosShown = false;
+    if (start.belot) start.belot.shown = false;
+    start.players.forEach((p) => (p.handCount = BlotEngine.HAND));
+    const mine = start.players[meIndex];
+    if (mine.hand) final.log.slice(k + 1).forEach((e) => e.t === "play" && e.p === meIndex && mine.hand.push(e.c));
+    start.seq = final.log[k].seq;
+    if (frames.length && all.length > have) frames[frames.length - 1].view = clone(start);
+    else push(clone(start), null);
+    state = start;
+  } else if (state.phase !== "play" || final.phase === "bid") {
+    return null;
+  }
+  // Cards and taken tricks.
+  const entries = final.log.filter((e) => e.seq > state.seq);
+  if (entries.length && entries[0].seq !== state.seq + 1) return null;
+  for (const e of entries) {
+    if (e.t === "play") {
+      state.trick = state.trick.concat([{ seat: e.p, card: e.c }]);
+      const p = state.players[e.p];
+      p.handCount = Math.max(0, (p.handCount || 0) - 1);
+      if (e.p === meIndex && p.hand) p.hand = p.hand.filter((c) => c !== e.c);
+      state.combosShown = true;
+      if (state.belot && state.belot.seat === e.p && BlotEngine.suit(e.c) === state.trump && (BlotEngine.rank(e.c) === 12 || BlotEngine.rank(e.c) === 13)) state.belot.shown = true;
+      state.turn = (e.p + 1) % 4;
+      state.seq = e.seq;
+      push(clone(state), e.p);
+    } else if (e.t === "trick") {
+      // Taken together with the card that closed it.
+      if (!frames.length || state.trick.length !== 4) return null;
+      const w = BlotEngine.team(e.p);
+      state.lastTrick = { cards: state.trick, winner: e.p, seq: e.seq };
+      state.tricks = state.tricks.slice();
+      state.tricks[w] += 1;
+      state.points = state.points.slice();
+      state.points[w] += e.n;
+      state.trick = [];
+      state.turn = e.p;
+      state.seq = e.seq;
+      frames[frames.length - 1].view = clone(state);
+      afterTrick = true;
+    } else if (e.t !== "score" && e.t !== "end") {
+      return null;
+    }
+  }
+  if (!frames.length) return null;
+  // The last step is the referee's own table (deal result, timer and all).
+  frames[frames.length - 1].view = final;
+  return frames;
+}
+// What the online table shows: the referee's answer, its moves one by one.
+function useBlotPacedView(view, meIndex) {
+  const [shown, setShown] = useState(view);
+  const shownRef = useRef(view);
+  const timerRef = useRef(null);
+  useEffect(() => {
+    clearTimeout(timerRef.current);
+    const show = (v) => {
+      shownRef.current = v;
+      setShown(v);
+    };
+    let frames = null;
+    try {
+      frames = blotPaceFrames(shownRef.current, view, meIndex, BLOT_BOT_DELAY_MS, BLOT_TRICK_SHOW_MS);
+    } catch (e) {
+      frames = null;
+    }
+    if (!frames) {
+      show(view);
+      return undefined;
+    }
+    let k = 0;
+    const step = () => {
+      while (k < frames.length && frames[k].delay === 0) show(frames[k++].view);
+      if (k >= frames.length) return;
+      timerRef.current = setTimeout(() => {
+        show(frames[k++].view);
+        step();
+      }, frames[k].delay);
+    };
+    step();
+    return () => clearTimeout(timerRef.current);
+  }, [view, meIndex]);
+  return shown;
+}
+
 // The table. Seats go round: me at the bottom, then left, top (partner),
 // right -- the order cards are played in.
 function BlotTable({ view, meIndex, onMove, deadline, onNext, nextLabel }) {
@@ -19427,8 +19591,8 @@ function BlotApp({ dispatch }) {
   if (view && onlinePlaying) {
     body = (
       <div className="relative flex-1 min-h-0 flex flex-col">
-        <BlotTable view={view} meIndex={room.meIndex} onMove={room.move} deadline={view.deadline} onNext={() => room.move({ type: "next" })} />
-        {view.status === "ended" && (
+        <BlotTable view={tableView || view} meIndex={room.meIndex} onMove={room.move} deadline={view.deadline} onNext={() => room.move({ type: "next" })} />
+        {view.status === "ended" && (!tableView || tableView.status === "ended") && (
           <BlotGameOver
             view={view}
             meIndex={room.meIndex}
