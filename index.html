@@ -18872,6 +18872,33 @@ function blotComboLabel(t, lang, c) {
   return t("blot.seq").replace("{name}", name).replace("{card}", durakRankLabel(c.top, lang) + DURAK_SUIT_SYMBOL[c.suit]);
 }
 
+// Short name for the bubble over a player: "Терц ♠", "50 ♥", "Четыре валета".
+function blotComboShort(t, c) {
+  if (c.kind === "quad") return t("blot.quad_" + c.rank);
+  return (c.len >= 5 ? "100" : c.len === 4 ? "50" : t("blot.terz")) + " " + DURAK_SUIT_SYMBOL[c.suit];
+}
+// A speech bubble over (or under) a player with what they announced.
+// Gold = it scores; grey and struck out = the other pair had a better one.
+// side: "left"/"right" keeps it from running off the screen edge.
+function BlotSayBubble({ lines, below, side }) {
+  if (!lines.length) return null;
+  const counts = lines.some((x) => !x.off);
+  const colour = counts ? "bg-[var(--accent)] text-[var(--accent-ink)]" : "bg-[var(--surface-3)] text-[var(--text-dim)]";
+  const tail = counts ? "bg-[var(--accent)]" : "bg-[var(--surface-3)]";
+  const box = side === "left" ? "left-0" : side === "right" ? "right-0" : "left-1/2 -translate-x-1/2";
+  const tailAt = side === "left" ? "left-5" : side === "right" ? "right-5" : "left-1/2 -translate-x-1/2";
+  return (
+    <div className={"absolute z-20 pointer-events-none " + box + " " + (below ? "top-full mt-2" : "bottom-full mb-2")}>
+      <div className={"pop relative rounded-xl px-2.5 py-1 text-[13px] font-semibold leading-tight whitespace-nowrap shadow-lg text-center " + colour}>
+        {lines.map((x, k) => (
+          <div key={k} className={x.off && counts ? "opacity-60 line-through" : x.off ? "line-through" : ""}>{x.text}</div>
+        ))}
+        <span className={"absolute w-2.5 h-2.5 rotate-45 " + tail + " " + tailAt + " " + (below ? "-top-1" : "-bottom-1")} />
+      </div>
+    </div>
+  );
+}
+
 // My own move, shown before the referee answers (online). Anything that
 // needs cards I cannot see (a new deal, everyone's combinations when the
 // bidding closes) simply arrives with the referee's answer.
@@ -18937,13 +18964,23 @@ function BlotTable({ view, meIndex, onMove, deadline, onNext, nextLabel }) {
     if (c.t === "bid") return blotBidLabel(t, c.level, c.suit);
     return t("blot.call_" + c.t);
   };
+  // Combinations stay over their owners through the first trick; "Блот"
+  // stays from the moment it is shown until the deal ends.
+  const tricksDone = inPlay ? view.tricks[0] + view.tricks[1] : 0;
+  const comboTime = inPlay && (tricksDone === 0 || (tricksDone === 1 && !!shownTrick));
+  const sayLines = (seat) => {
+    const out = [];
+    if (comboTime && view.combos) view.combos.filter((x) => x.seat === seat).forEach((x) => out.push({ text: blotComboShort(t, x), off: !x.counts }));
+    if (inPlay && view.belot && view.belot.shown && view.belot.seat === seat) out.push({ text: t("blot.belot") + "!" });
+    return out;
+  };
   const seatBox = (seat) => {
     const p = view.players[seat];
     const waiting = playing && ((bidding && view.bidding.turn === seat) || (inPlay && view.turn === seat));
     const partner = seat !== meIndex && BlotEngine.team(seat) === myTeam;
     const call = lastCall(seat);
     return (
-      <div className={"rounded-2xl border px-2 py-1.5 min-w-[76px] max-w-[96px] text-center transition-colors duration-300 " + (waiting ? "durak-turn border-[var(--accent)] bg-[var(--accent)]/10" : "border-[var(--border)] bg-[var(--surface)]")}>
+      <div className={"relative rounded-2xl border px-2 py-1.5 min-w-[76px] max-w-[96px] text-center transition-colors duration-300 " + (waiting ? "durak-turn border-[var(--accent)] bg-[var(--accent)]/10" : "border-[var(--border)] bg-[var(--surface)]")}>
         <div className="text-xs font-medium truncate">{nameOf(seat)}</div>
         <div className="text-[10px] uppercase tracking-wide text-[var(--text-faint)] truncate">
           {partner ? t("blot.partner") : t("blot.opponent")}
@@ -18955,12 +18992,12 @@ function BlotTable({ view, meIndex, onMove, deadline, onNext, nextLabel }) {
         </div>
         {call && <div className="pop text-[11px] font-medium mt-0.5 text-[var(--accent-strong)]">{call}</div>}
         {p.left && <div className="text-[10px] text-[var(--text-faint)]">{t("durak.tagLeft")}</div>}
+        <BlotSayBubble lines={sayLines(seat)} below={place(seat) === "top"} side={place(seat) === "left" || place(seat) === "right" ? place(seat) : null} />
       </div>
     );
   };
 
   const c = view.contract;
-  const showCombos = inPlay && view.combos && view.combos.length > 0 && view.tricks[0] + view.tricks[1] === 0;
   const lastNote = view.log && view.log.length ? view.log[view.log.length - 1] : null;
   const redealt = bidding && view.bidding.calls.length === 0 && lastNote && lastNote.t === "redeal";
   let status = "";
@@ -19000,20 +19037,9 @@ function BlotTable({ view, meIndex, onMove, deadline, onNext, nextLabel }) {
             </div>
           ))}
         </div>
-        {showCombos && (
-          <div className="pop absolute left-1/2 -translate-x-1/2 bottom-1 w-[92%] max-w-sm rounded-2xl bg-[var(--surface-2)] border border-[var(--border-strong)] px-3 py-2 text-[11px] leading-snug">
-            {view.combos.map((x, k) => (
-              <div key={k} className={x.counts ? "" : "opacity-50 line-through"}>
-                {nameOf(x.seat)}: {blotComboLabel(t, lang, x)} ({x.value})
-              </div>
-            ))}
-          </div>
-        )}
-        {inPlay && view.belot && view.belot.shown && view.tricks[0] + view.tricks[1] < 8 && (
-          <div key={"belot" + view.belot.seat} className="pop absolute right-2 bottom-1 text-xs px-2 py-1 rounded-full bg-[var(--accent)] text-[var(--accent-ink)] font-medium">
-            {t("blot.belot")} · {nameOf(view.belot.seat)}
-          </div>
-        )}
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-0 h-0">
+          <BlotSayBubble lines={sayLines(meIndex)} />
+        </div>
       </div>
 
       <div className="shrink-0 px-3 pt-2 pb-4 border-t border-[var(--border)] bg-[var(--bg)]">
